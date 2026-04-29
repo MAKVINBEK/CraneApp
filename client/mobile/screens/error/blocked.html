@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CraneApp — Доступ заблокирован</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root { --accent: #FF007F; --accent2: #9D00FF; }
+  body {
+    min-height: 100vh; background: #0a0a0a; color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 24px; overflow: hidden;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background: radial-gradient(ellipse 60% 40% at 30% 40%, rgba(255,75,75,0.10) 0%, transparent 60%),
+                radial-gradient(ellipse 50% 35% at 70% 60%, rgba(255,0,127,0.07) 0%, transparent 60%);
+    animation: bgPulse 4s ease-in-out infinite alternate; pointer-events: none;
+  }
+  @keyframes bgPulse { from{opacity:0.6} to{opacity:1} }
+  .card {
+    position: relative; background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08); border-radius: 28px;
+    padding: 48px 40px; max-width: 420px; width: 100%; text-align: center;
+    backdrop-filter: blur(20px); box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+    animation: cardIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both;
+  }
+  @keyframes cardIn { from{opacity:0;transform:translateY(32px) scale(0.92)} to{opacity:1;transform:translateY(0) scale(1)} }
+  .emoji-wrap { font-size: 72px; line-height: 1; margin-bottom: 8px; display: block; }
+  .status-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(255,75,75,0.12); border: 1px solid rgba(255,75,75,0.3);
+    border-radius: 20px; padding: 4px 12px; font-size: 12px; font-weight: 600;
+    color: #FF6B6B; letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 20px;
+  }
+  .status-dot { width:7px; height:7px; border-radius:50%; background:#FF6B6B; animation:blink 1s ease-in-out infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+  h1 { font-size:26px; font-weight:700; letter-spacing:-0.03em; margin-bottom:12px;
+    background:linear-gradient(135deg,#fff 0%,rgba(255,255,255,0.7) 100%);
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+  p { font-size:15px; color:rgba(255,255,255,0.55); line-height:1.6; margin-bottom:28px; }
+  .timer-wrap { display:flex; flex-direction:column; align-items:center; gap:8px; margin-bottom:28px; }
+  .timer-ring { position:relative; width:100px; height:100px; }
+  .timer-ring svg { transform:rotate(-90deg); }
+  .timer-ring circle { fill:none; stroke-width:6; stroke-linecap:round; }
+  .ring-bg { stroke:rgba(255,255,255,0.08); }
+  .ring-bar { stroke:#FF6B6B; transition:stroke-dashoffset 1s linear; }
+  .timer-num { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:700; letter-spacing:-0.03em; }
+  .timer-label { font-size:13px; color:rgba(255,255,255,0.4); }
+  .btn {
+    width:100%; padding:16px; border-radius:16px; border:none;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    color:#fff; font-size:16px; font-weight:600; cursor:pointer;
+    box-shadow:0 8px 32px rgba(255,0,127,0.35);
+    transition:transform 0.15s cubic-bezier(0.34,1.56,0.64,1);
+    display:flex; align-items:center; justify-content:center; gap:8px;
+  }
+  .btn:disabled { opacity:0.4; cursor:not-allowed; }
+  .btn:not(:disabled):active { transform:scale(0.96); }
+  .logo { position:absolute; top:24px; left:50%; transform:translateX(-50%);
+    font-size:13px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:rgba(255,255,255,0.2); }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">CraneApp</div>
+  <span class="emoji-wrap">🚫</span>
+  <div class="status-badge"><div class="status-dot"></div><span id="badgeText">Заблокировано</span></div>
+  <h1 id="title">Доступ временно закрыт</h1>
+  <p id="desc">Твой IP был временно заблокирован из-за подозрительной активности. Подожди немного.</p>
+  <div class="timer-wrap" id="timerWrap">
+    <div class="timer-ring">
+      <svg width="100" height="100" viewBox="0 0 100 100">
+        <circle class="ring-bg" cx="50" cy="50" r="44"/>
+        <circle class="ring-bar" id="ringBar" cx="50" cy="50" r="44" stroke-dasharray="276.46" stroke-dashoffset="0"/>
+      </svg>
+      <div class="timer-num" id="timerNum">—</div>
+    </div>
+    <div class="timer-label" id="timerLabel">секунд до разблокировки</div>
+  </div>
+  <button class="btn" id="btn" onclick="goBack()" disabled>Вернуться назад</button>
+</div>
+<script>
+  const params = new URLSearchParams(location.search);
+  const retryMin = parseInt(params.get('retry') || '0', 10);
+  const msg = params.get('msg') || '';
+  const code = params.get('code') || '403';
+
+  // Объявляем все элементы
+  const badgeText = document.getElementById('badgeText');
+  const title = document.getElementById('title');
+  const desc = document.getElementById('desc');
+  const timerWrap = document.getElementById('timerWrap');
+  const btnEl = document.getElementById('btn');
+  const numEl = document.getElementById('timerNum');
+  const barEl = document.getElementById('ringBar');
+
+  // Настраиваем текст под код ошибки
+  if (code === '429') {
+    badgeText.textContent = 'Лимит запросов';
+    title.textContent = 'Притормози немного';
+    desc.textContent = 'Ты отправляешь запросы слишком быстро. Подожди — и всё заработает снова.';
+    document.querySelector('.ring-bar').style.stroke = '#FFA500';
+    document.querySelector('.status-dot').style.background = '#FFA500';
+    document.querySelector('.status-badge').style.background = 'rgba(255,165,0,0.12)';
+    document.querySelector('.status-badge').style.borderColor = 'rgba(255,165,0,0.3)';
+    document.querySelector('.status-badge').style.color = '#FFA500';
+    document.querySelector('.emoji-wrap').textContent = '🚦';
+  } else if (code === '403' && retryMin > 0) {
+    // Временный бан IP
+    badgeText.textContent = 'Временная блокировка';
+    title.textContent = 'Доступ временно закрыт';
+    desc.textContent = msg || 'Твой IP был временно заблокирован из-за подозрительной активности.';
+  } else if (code === '403') {
+    // Перманентный бан аккаунта
+    badgeText.textContent = 'Аккаунт заблокирован';
+    title.textContent = 'Аккаунт заблокирован';
+    desc.textContent = msg || 'Ваш аккаунт был заблокирован администратором. Обратитесь в поддержку для уточнения деталей.';
+    timerWrap.style.display = 'none';
+    btnEl.disabled = false;
+    btnEl.textContent = 'Выйти из аккаунта';
+    btnEl.onclick = logout;
+  }
+  if (msg && code !== '403') desc.textContent = msg;
+
+  const CIRCUMFERENCE = 276.46;
+  const totalSec = retryMin * 60;
+  let remaining = totalSec;
+
+  if (totalSec <= 0) {
+    timerWrap.style.display = 'none';
+    btnEl.disabled = false;
+  } else {
+    function tick() {
+      const m = Math.floor(remaining / 60);
+      const s = remaining % 60;
+      numEl.textContent = m > 0 ? m + ':' + String(s).padStart(2,'0') : s;
+      document.getElementById('timerLabel').textContent = m > 0 ? 'минут до разблокировки' : 'секунд до разблокировки';
+      barEl.style.strokeDashoffset = CIRCUMFERENCE * (1 - remaining / totalSec);
+      if (remaining <= 0) {
+        numEl.textContent = '✓'; barEl.style.stroke = '#00E676';
+        btnEl.disabled = false; return;
+      }
+      remaining--;
+      setTimeout(tick, 1000);
+    }
+    tick();
+  }
+
+  function goBack() {
+    const prev = sessionStorage.getItem('crane_pre_error_url');
+    if (prev) window.location.href = prev; else history.back();
+  }
+
+  function logout() {
+    localStorage.removeItem('craneapp_auth_token');
+    localStorage.removeItem('craneapp_user_data');
+    localStorage.removeItem('craneapp_settings');
+    window.location.href = '/client/mobile/screens/auth/login.html';
+  }
+
+  if (document.referrer && !document.referrer.includes('/error/')) {
+    sessionStorage.setItem('crane_pre_error_url', document.referrer);
+  }
+</script>
+</body>
+</html>

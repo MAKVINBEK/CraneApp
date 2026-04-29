@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ru">
+<!-- ТЕМА И НАСТРОЙКИ -->
+<script src="../scripts/theme.js"></script>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Профиль - CraneApp</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background-color: #000000; color: #FFFFFF; font-family: system-ui, -apple-system, sans-serif; min-height: 100vh; display: flex; justify-content: center; }
+        .app-wrapper { width: 100%; display: flex; flex-direction: column; padding-bottom: 80px; }
+        @media (min-width: 768px) {
+            .app-wrapper { border-left: 1px solid #1E1E1E; border-right: 1px solid #1E1E1E; background: #000000; }
+        }
+        .header { padding: 16px; background: #121212; border-bottom: 1px solid #1E1E1E; display: flex; align-items: center; gap: 12px; }
+        .back-btn { background: none; border: none; color: #FFFFFF; font-size: 24px; cursor: pointer; }
+        .profile-header { padding: 32px 16px; text-align: center; background: linear-gradient(180deg, rgba(255,0,127,0.1) 0%, transparent 100%); }
+        .avatar { width: 120px; height: 120px; border-radius: 60px; background: linear-gradient(135deg, #FF007F, #9D00FF); display: flex; align-items: center; justify-content: center; font-size: 48px; margin: 0 auto 16px; }
+        .name { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+        .username { font-size: 15px; color: #B0B0B0; margin-bottom: 8px; }
+        .status { font-size: 14px; color: #00FF00; }
+        .actions { display: flex; gap: 12px; padding: 16px; justify-content: center; }
+        .action-btn { padding: 12px 24px; border-radius: 12px; border: none; cursor: pointer; font-size: 14px; font-weight: 600; }
+        .btn-primary { background: linear-gradient(135deg, #FF007F, #9D00FF); color: #FFFFFF; }
+        .btn-secondary { background: #1E1E1E; color: #FFFFFF; border: 1px solid #333; }
+        .info-section { background: #121212; margin: 16px; border-radius: 16px; overflow: hidden; }
+        .info-item { display: flex; padding: 16px; border-bottom: 1px solid #1E1E1E; cursor: pointer; }
+        .info-item:last-child { border-bottom: none; }
+        .info-item:hover { background: #1E1E1E; }
+        .info-label { flex: 1; font-size: 15px; }
+        .info-value { color: #B0B0B0; font-size: 14px; }
+        .arrow { color: #666666; margin-left: 8px; }
+    </style>
+</head>
+<body>
+    <div class="app-wrapper">
+        <div class="header">
+            <button class="back-btn" onclick="history.back()">←</button>
+            <span style="font-weight: 600; font-size: 18px;">Профиль</span>
+        </div>
+        <div class="profile-header">
+            <div class="avatar" id="avatar">👤</div>
+            <div class="name" id="name">Загрузка...</div>
+            <div class="username" id="username">@username</div>
+            <div class="status" id="status">онлайн</div>
+        </div>
+        <div class="actions">
+            <button class="action-btn btn-primary" onclick="window.location.href='../chats/chat.html?id=new'">💬 Сообщение</button>
+            <button class="action-btn btn-secondary" onclick="alert('Звонок')">📞 Звонок</button>
+        </div>
+        <div class="info-section">
+            <div class="info-item"><span class="info-label">Имя</span><span class="info-value" id="displayName">-</span></div>
+            <div class="info-item"><span class="info-label">О себе</span><span class="info-value" id="bio">Нет информации</span></div>
+            <div class="info-item" onclick="location.href('./editProfile.html')"><span class="info-label">Изменить профиль</span><span class="arrow">›</span></div>
+        </div>
+        <div class="info-section">
+            <div class="info-item" onclick="location.href('../settings/privacy.html')"><span class="info-label">Конфиденциальность</span><span class="arrow">›</span></div>
+            <div class="info-item" onclick="alert('Уведомления')"><span class="info-label">Уведомления</span><span class="arrow">›</span></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { router } from '../../app/router.js';
+        import { authStore } from '../../store/authStore.js';
+        router.init();
+
+        const user = authStore.getUser();
+        if (user) {
+            document.getElementById('name').textContent = user.firstName || 'User';
+            document.getElementById('displayName').textContent = user.firstName || 'User';
+            document.getElementById('username').textContent = user.username ? '@' + user.username : '@username';
+            document.getElementById('bio').textContent = user.bio || 'Нет информации';
+            const firstLetter = (user.firstName || 'U')[0].toUpperCase();
+            document.getElementById('avatar').textContent = firstLetter;
+        }
+    </script>
+</body>
+</html>

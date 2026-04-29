@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CraneApp - Чат</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background-color: #000000; color: #FFFFFF; font-family: system-ui, -apple-system, sans-serif; height: 100vh; overflow: hidden; display: flex; justify-content: center; }
+        .app-wrapper { width: 100%; height: 100%; display: flex; flex-direction: column; }
+        @media (min-width: 768px) {
+            .app-wrapper { border-left: 1px solid #1E1E1E; border-right: 1px solid #1E1E1E; background: #000000; }
+        }
+        .header { padding: 12px 16px; background: #121212; border-bottom: 1px solid #1E1E1E; display: flex; align-items: center; gap: 12px; }
+        .back-btn { background: none; border: none; color: #FFFFFF; font-size: 24px; cursor: pointer; }
+        .chat-avatar { width: 40px; height: 40px; border-radius: 20px; background: linear-gradient(135deg, #FF007F, #9D00FF); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+        .chat-info { flex: 1; }
+        .chat-name { font-weight: 600; font-size: 16px; }
+        .chat-status { font-size: 12px; color: #00FF00; }
+        .messages-area { flex: 1; overflow-y: auto; padding: 16px; background: #000000; background-image: radial-gradient(#1E1E1E 1px, transparent 1px); background-size: 20px 20px; }
+        .message { max-width: 75%; padding: 10px 14px; border-radius: 16px; margin-bottom: 8px; font-size: 15px; line-height: 1.4; }
+        .message.incoming { background: #1E1E1E; border-bottom-left-radius: 4px; }
+        .message.outgoing { background: linear-gradient(135deg, #FF007F, #9D00FF); color: white; border-bottom-right-radius: 4px; margin-left: auto; }
+        .msg-time { font-size: 11px; opacity: 0.7; text-align: right; margin-top: 4px; }
+        .input-area { padding: 12px; background: #121212; display: flex; gap: 10px; align-items: center; }
+        .msg-input { flex: 1; height: 44px; border-radius: 22px; border: 1px solid #333; background: #1E1E1E; color: white; padding: 0 16px; font-size: 15px; outline: none; }
+        .msg-input:focus { border-color: #FF007F; }
+        .send-btn { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, #FF007F, #9D00FF); border: none; color: white; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    </style>
+</head>
+<body>
+    <div class="app-wrapper">
+        <div class="header">
+            <button class="back-btn" onclick="history.back()">←</button>
+            <div class="chat-avatar" id="chatAvatar">🤖</div>
+            <div class="chat-info">
+                <div class="chat-name" id="chatName">Загрузка...</div>
+                <div class="chat-status">онлайн</div>
+            </div>
+        </div>
+        <div class="messages-area" id="messages"></div>
+        <div class="input-area">
+            <button style="background:none;border:none;font-size:20px;cursor:pointer;">📎</button>
+            <input type="text" class="msg-input" placeholder="Сообщение..." id="msgInput">
+            <button class="send-btn" onclick="sendMessage()">➤</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { router } from '../../app/router.js';
+        router.init();
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const chatId = urlParams.get('id') || 'craneapp_bot';
+        
+        const chats = {
+            'craneapp_bot': { name: 'CraneApp Bot', av: '🤖' },
+            'support': { name: 'Поддержка', av: '🎧' },
+            'news': { name: 'Новости', av: '📢' },
+            'admin': { name: 'Администратор', av: '👤' }
+        };
+
+        const chat = chats[chatId] || { name: 'Чат', av: '💬' };
+        document.getElementById('chatName').textContent = chat.name;
+        document.getElementById('chatAvatar').textContent = chat.av;
+
+        const messages = document.getElementById('messages');
+        const input = document.getElementById('msgInput');
+
+        const demoMessages = [
+            { text: 'Привет! Я CraneApp Bot — официальный бот.', incoming: true, time: '10:00' },
+            { text: 'Как настроить тему?', incoming: false, time: '10:01' },
+            { text: 'Зайди в Настройки → Оформление!', incoming: true, time: '10:02' }
+        ];
+
+        demoMessages.forEach(m => {
+            const div = document.createElement('div');
+            div.className = 'message' + (m.incoming ? ' incoming' : ' outgoing');
+            div.innerHTML = `${m.text}<div class="msg-time">${m.time}</div>`;
+            messages.appendChild(div);
+        });
+        messages.scrollTop = messages.scrollHeight;
+
+        input.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
+
+        function sendMessage() {
+            const text = input.value.trim();
+            if (!text) return;
+            const div = document.createElement('div');
+            div.className = 'message outgoing';
+            div.innerHTML = `${text}<div class="msg-time">${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>`;
+            messages.appendChild(div);
+            input.value = '';
+            messages.scrollTop = messages.scrollHeight;
+            setTimeout(() => {
+                const reply = document.createElement('div');
+                reply.className = 'message incoming';
+                reply.innerHTML = `Получил: "${text}"<div class="msg-time">${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>`;
+                messages.appendChild(reply);
+                messages.scrollTop = messages.scrollHeight;
+            }, 1000);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CraneApp — Слишком много запросов</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root { --accent: #FF007F; --accent2: #9D00FF; }
+
+  body {
+    min-height: 100vh;
+    background: #0a0a0a;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 24px; overflow: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse 60% 40% at 30% 40%, rgba(255,165,0,0.10) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 35% at 70% 60%, rgba(255,0,127,0.08) 0%, transparent 60%);
+    animation: bgPulse 4s ease-in-out infinite alternate;
+    pointer-events: none;
+  }
+  @keyframes bgPulse { from{opacity:0.6} to{opacity:1} }
+
+  .card {
+    position: relative;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 28px;
+    padding: 48px 40px;
+    max-width: 420px; width: 100%;
+    text-align: center;
+    backdrop-filter: blur(20px);
+    box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+    animation: cardIn 0.5s cubic-bezier(0.34,1.56,0.64,1) both;
+  }
+  @keyframes cardIn {
+    from { opacity:0; transform:translateY(32px) scale(0.92); }
+    to   { opacity:1; transform:translateY(0) scale(1); }
+  }
+
+  .emoji-wrap {
+    font-size: 72px; line-height: 1;
+    margin-bottom: 8px; display: block;
+    animation: bounce 1.5s ease-in-out infinite;
+  }
+  @keyframes bounce {
+    0%,100% { transform: translateY(0); }
+    50%      { transform: translateY(-10px); }
+  }
+
+  .status-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(255,165,0,0.12);
+    border: 1px solid rgba(255,165,0,0.3);
+    border-radius: 20px; padding: 4px 12px;
+    font-size: 12px; font-weight: 600;
+    color: #FFA500;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .status-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #FFA500;
+    animation: blink 1s ease-in-out infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+  h1 {
+    font-size: 26px; font-weight: 700;
+    letter-spacing: -0.03em; margin-bottom: 12px;
+    background: linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.7) 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  p {
+    font-size: 15px; color: rgba(255,255,255,0.55);
+    line-height: 1.6; margin-bottom: 28px;
+  }
+
+  /* Круговой таймер */
+  .timer-wrap {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 8px; margin-bottom: 28px;
+  }
+  .timer-ring { position: relative; width: 100px; height: 100px; }
+  .timer-ring svg { transform: rotate(-90deg); }
+  .timer-ring circle {
+    fill: none; stroke-width: 6;
+    stroke-linecap: round;
+  }
+  .ring-bg  { stroke: rgba(255,255,255,0.08); }
+  .ring-bar { stroke: #FFA500; transition: stroke-dashoffset 1s linear; }
+  .timer-num {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px; font-weight: 700; letter-spacing: -0.03em;
+  }
+  .timer-label { font-size: 13px; color: rgba(255,255,255,0.4); }
+
+  .retry-btn {
+    width: 100%; padding: 16px; border-radius: 16px;
+    border: none; background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #fff; font-size: 16px; font-weight: 600;
+    cursor: pointer; letter-spacing: -0.01em;
+    box-shadow: 0 8px 32px rgba(255,0,127,0.35);
+    transition: transform 0.15s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.15s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .retry-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+  .retry-btn:not(:disabled):active { transform: scale(0.96); }
+
+  .logo {
+    position: absolute; top: 24px; left: 50%; transform: translateX(-50%);
+    font-size: 13px; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; color: rgba(255,255,255,0.2);
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">CraneApp</div>
+
+  <span class="emoji-wrap">🚦</span>
+
+  <div class="status-badge">
+    <div class="status-dot"></div>
+    Лимит запросов
+  </div>
+
+  <h1>Притормози немного</h1>
+  <p>Ты отправляешь запросы слишком быстро. Подожди немного — и всё заработает снова.</p>
+
+  <div class="timer-wrap">
+    <div class="timer-ring">
+      <svg width="100" height="100" viewBox="0 0 100 100">
+        <circle class="ring-bg" cx="50" cy="50" r="44"/>
+        <circle class="ring-bar" id="ringBar" cx="50" cy="50" r="44"
+          stroke-dasharray="276.46" stroke-dashoffset="0"/>
+      </svg>
+      <div class="timer-num" id="timerNum">60</div>
+    </div>
+    <div class="timer-label">секунд до разблокировки</div>
+  </div>
+
+  <button class="retry-btn" id="retryBtn" onclick="goBack()" disabled>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    Вернуться назад
+  </button>
+</div>
+
+<script>
+  const CIRCUMFERENCE = 2 * Math.PI * 44; // 276.46
+  const params = new URLSearchParams(location.search);
+  const retryAfter = parseInt(params.get('retry') || '60', 10);
+  let remaining = retryAfter;
+
+  const numEl  = document.getElementById('timerNum');
+  const barEl  = document.getElementById('ringBar');
+  const btnEl  = document.getElementById('retryBtn');
+
+  barEl.style.strokeDasharray = CIRCUMFERENCE;
+
+  function tick() {
+    numEl.textContent = remaining;
+    const progress = remaining / retryAfter;
+    barEl.style.strokeDashoffset = CIRCUMFERENCE * (1 - progress);
+
+    if (remaining <= 0) {
+      numEl.textContent = '✓';
+      barEl.style.stroke = '#00E676';
+      btnEl.disabled = false;
+      btnEl.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg> Вернуться назад';
+      return;
+    }
+    remaining--;
+    setTimeout(tick, 1000);
+  }
+
+  tick();
+
+  function goBack() {
+    const prev = sessionStorage.getItem('crane_pre_ratelimit_url');
+    if (prev) window.location.href = prev;
+    else history.back();
+  }
+
+  // Сохраняем откуда пришли
+  if (document.referrer && !document.referrer.includes('rate-limit')) {
+    sessionStorage.setItem('crane_pre_ratelimit_url', document.referrer);
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ru">
+<!-- ТЕМА И НАСТРОЙКИ -->
+<script src="../scripts/theme.js"></script>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Канал - CraneApp</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background-color: #000000; color: #FFFFFF; font-family: system-ui, -apple-system, sans-serif; min-height: 100vh; display: flex; justify-content: center; }
+        .app-wrapper { width: 100%; display: flex; flex-direction: column; }
+        @media (min-width: 768px) {
+            .app-wrapper { border-left: 1px solid #1E1E1E; border-right: 1px solid #1E1E1E; background: #000000; }
+        }
+        .header { padding: 12px 16px; background: #121212; border-bottom: 1px solid #1E1E1E; display: flex; align-items: center; gap: 12px; }
+        .back-btn { background: none; border: none; color: #FFFFFF; font-size: 24px; cursor: pointer; }
+        .channel-info { flex: 1; }
+        .channel-name { font-weight: 600; font-size: 16px; }
+        .channel-subs { font-size: 12px; color: #B0B0B0; }
+        .posts-feed { flex: 1; overflow-y: auto; padding: 16px; background: #000000; }
+        .post { background: #121212; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+        .post-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+        .post-avatar { width: 40px; height: 40px; border-radius: 20px; background: linear-gradient(135deg, #FF007F, #9D00FF); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+        .post-title { font-weight: 600; font-size: 14px; }
+        .post-date { font-size: 12px; color: #666666; }
+        .post-content { font-size: 15px; line-height: 1.5; margin-bottom: 12px; }
+        .post-reactions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .reaction { background: #1E1E1E; padding: 4px 10px; border-radius: 12px; font-size: 13px; cursor: pointer; }
+        .subscribe-btn { width: calc(100% - 32px); margin: 16px; padding: 14px; border-radius: 12px; border: none; background: linear-gradient(135deg, #FF007F, #9D00FF); color: #FFFFFF; font-weight: 600; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="app-wrapper">
+        <div class="header">
+            <button class="back-btn" onclick="history.back()">←</button>
+            <div class="channel-info">
+                <div class="channel-name" id="channelName">Загрузка...</div>
+                <div class="channel-subs" id="channelSubs">0 подписчиков</div>
+            </div>
+        </div>
+        <div class="posts-feed" id="postsFeed"></div>
+        <button class="subscribe-btn" id="subscribeBtn">Подписаться</button>
+    </div>
+
+    <script type="module">
+        import { router } from '../../app/router.js';
+        router.init();
+
+        const samplePosts = [
+            { title: 'Новости CraneApp', content: 'Мы запустили новую версию! 🚀', date: 'Сегодня, 10:00', reactions: ['❤️ 42', '🔥 15'] },
+            { title: 'Обновление безопасности', content: 'Улучшили шифрование сообщений.', date: 'Вчера, 15:30', reactions: ['👍 28'] },
+            { title: 'Новые эмодзи', content: 'Добавили 50+ новых реакций!', date: '10 марта', reactions: ['😍 67', '🎉 34'] }
+        ];
+
+        document.getElementById('channelName').textContent = 'CraneApp Новости';
+        document.getElementById('channelSubs').textContent = '1,234 подписчика';
+
+        function renderPosts() {
+            const container = document.getElementById('postsFeed');
+            container.innerHTML = '';
+            samplePosts.forEach(post => {
+                const div = document.createElement('div');
+                div.className = 'post';
+                div.innerHTML = `
+                    <div class="post-header">
+                        <div class="post-avatar">📢</div>
+                        <div>
+                            <div class="post-title">${post.title}</div>
+                            <div class="post-date">${post.date}</div>
+                        </div>
+                    </div>
+                    <div class="post-content">${post.content}</div>
+                    <div class="post-reactions">${post.reactions.map(r => `<span class="reaction">${r}</span>`).join('')}</div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        document.getElementById('subscribeBtn').onclick = function() {
+            this.textContent = 'Вы подписаны ✓';
+            this.disabled = true;
+            this.style.opacity = '0.7';
+        };
+
+        renderPosts();
+    </script>
+</body>
+</html>
