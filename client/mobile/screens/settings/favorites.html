@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Избранное - CraneApp</title>
+    <script src="../../scripts/theme.js"></script>
+    <style>
+        :root {
+            --bg-primary: #000000; --bg-secondary: #121212; --bg-tertiary: #1E1E1E;
+            --text-primary: #FFFFFF; --text-secondary: #B0B0B0; --text-muted: #666666;
+            --border-color: #1E1E1E; --accent-color: #FF007F;
+            --accent-gradient: linear-gradient(135deg, #FF007F, #9D00FF);
+            --safe-area-top: env(safe-area-inset-top, 0px);
+            --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+        }
+        [data-theme="light"] {
+            --bg-primary: #FFFFFF; --bg-secondary: #F5F5F5; --bg-tertiary: #EEEEEE;
+            --text-primary: #000000; --text-secondary: #666666; --text-muted: #999999;
+            --border-color: #DDDDDD;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html, body { height: 100%; background: var(--bg-primary); }
+        body { color: var(--text-primary); font-family: system-ui, sans-serif; padding-top: var(--safe-area-top); }
+        .header { padding: 12px 16px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 100; }
+        .back-btn { background: none; border: none; color: var(--text-primary); font-size: 22px; cursor: pointer; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+        .back-btn:active { background: rgba(255,255,255,0.1); }
+        .header-title { font-size: 17px; font-weight: 700; flex: 1; }
+        .header-count { font-size: 13px; color: var(--text-muted); }
+        .content { padding: 8px 0; padding-bottom: calc(20px + var(--safe-area-bottom)); }
+        .empty-state { padding: 80px 20px; text-align: center; color: var(--text-muted); }
+        .empty-icon { font-size: 64px; margin-bottom: 16px; opacity: 0.4; }
+        .empty-title { font-size: 17px; font-weight: 600; margin-bottom: 8px; color: var(--text-secondary); }
+        .empty-desc { font-size: 14px; line-height: 1.5; }
+        .spinner-wrap { padding: 60px; text-align: center; }
+        .spinner { width: 28px; height: 28px; border: 2px solid var(--border-color); border-top-color: var(--accent-color); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .fav-item { display: flex; align-items: flex-start; padding: 12px 16px; border-bottom: 1px solid var(--border-color); gap: 12px; cursor: pointer; transition: background 0.15s; }
+        .fav-item:active { background: var(--bg-secondary); }
+        .fav-avatar { width: 44px; height: 44px; border-radius: 50%; background: var(--accent-gradient); display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; color: #fff; flex-shrink: 0; overflow: hidden; }
+        .fav-avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .fav-body { flex: 1; min-width: 0; }
+        .fav-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+        .fav-sender { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%; }
+        .fav-time { font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
+        .fav-chat { font-size: 12px; color: var(--accent-color); margin-bottom: 3px; }
+        .fav-text { font-size: 14px; color: var(--text-secondary); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.4; }
+        .fav-media { font-size: 13px; color: var(--text-muted); }
+        .fav-actions { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+        .unfav-btn { background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; padding: 4px; border-radius: 50%; }
+        .unfav-btn:active { color: #FF4B4B; background: rgba(255,75,75,0.1); }
+        .toast-container { position: fixed; bottom: calc(20px + var(--safe-area-bottom)); left: 12px; right: 12px; z-index: 9999; pointer-events: none; }
+        .toast { padding: 10px 14px; background: var(--bg-secondary); border-radius: 10px; display: flex; align-items: center; gap: 8px; animation: slideUp 0.3s ease; border-left: 4px solid #00FF88; box-shadow: 0 4px 20px rgba(0,0,0,0.3); font-size: 13px; margin-top: 6px; }
+        .toast.error { border-left-color: #FF4B4B; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+    <div class="toast-container" id="toastContainer"></div>
+    <div class="header">
+        <button class="back-btn" onclick="history.back()">←</button>
+        <span class="header-title">Избранное</span>
+        <span class="header-count" id="favCount"></span>
+    </div>
+    <div class="content" id="content">
+        <div class="spinner-wrap"><div class="spinner"></div></div>
+    </div>
+
+    <script>
+        const token = localStorage.getItem('craneapp_auth_token');
+        if (!token) window.location.href = '../auth/login.html';
+
+        let favorites = [];
+
+        async function load() {
+            try {
+                const res = await fetch('/api/v1/messages/favorites', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) throw new Error();
+                const data = await res.json();
+                favorites = data.favorites || [];
+                render();
+            } catch (e) {
+                // Fallback: читаем из localStorage
+                favorites = JSON.parse(localStorage.getItem('craneapp_favorites') || '[]');
+                render();
+            }
+        }
+
+        function render() {
+            const el = document.getElementById('content');
+            const countEl = document.getElementById('favCount');
+
+            if (favorites.length === 0) {
+                countEl.textContent = '';
+                el.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">⭐</div>
+                        <div class="empty-title">Нет избранных</div>
+                        <div class="empty-desc">Удерживайте сообщение в чате и выберите «В избранное»</div>
+                    </div>`;
+                return;
+            }
+
+            countEl.textContent = favorites.length;
+            el.innerHTML = favorites.map((m, i) => {
+                const sender = m.senderFirstName || m.senderUsername || 'Пользователь';
+                const initial = sender[0].toUpperCase();
+                const avatar = m.senderAvatarUrl
+                    ? `<img src="${m.senderAvatarUrl}" alt="">`
+                    : initial;
+                const time = formatTime(m.savedAt || m.createdAt);
+                const chatName = m.chatTitle || m.chatName || 'Чат';
+                let body = '';
+                if (m.type === 'text' || !m.type) {
+                    body = `<div class="fav-text">${escHtml(m.content || '')}</div>`;
+                } else {
+                    const icons = { image: '🖼 Фото', video: '🎥 Видео', audio: '🎵 Аудио', voice: '🎤 Голосовое', file: '📎 Файл', sticker: '🎭 Стикер' };
+                    body = `<div class="fav-media">${icons[m.type] || m.type}</div>`;
+                }
+                return `
+                    <div class="fav-item" onclick="openChat('${m.chatId}')">
+                        <div class="fav-avatar">${avatar}</div>
+                        <div class="fav-body">
+                            <div class="fav-header">
+                                <span class="fav-sender">${escHtml(sender)}</span>
+                                <span class="fav-time">${time}</span>
+                            </div>
+                            <div class="fav-chat">из «${escHtml(chatName)}»</div>
+                            ${body}
+                        </div>
+                        <div class="fav-actions">
+                            <button class="unfav-btn" onclick="event.stopPropagation(); removeFav('${m.id}', ${i})" title="Убрать из избранного">★</button>
+                        </div>
+                    </div>`;
+            }).join('');
+        }
+
+        async function removeFav(messageId, idx) {
+            try {
+                await fetch('/api/v1/messages/' + messageId + '/favorite', {
+                    method: 'DELETE',
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+            } catch (e) {}
+            favorites.splice(idx, 1);
+            // Обновляем localStorage
+            const local = JSON.parse(localStorage.getItem('craneapp_favorites') || '[]');
+            const updated = local.filter(m => m.id !== messageId);
+            localStorage.setItem('craneapp_favorites', JSON.stringify(updated));
+            render();
+            showToast('Убрано из избранного', '★');
+        }
+
+        function openChat(chatId) {
+            if (chatId) window.location.href = '../chats/chats.html?chat=' + chatId;
+        }
+
+        function formatTime(dateStr) {
+            if (!dateStr) return '';
+            const d = new Date(dateStr);
+            const now = new Date();
+            const diff = now - d;
+            if (diff < 86400000 && d.getDate() === now.getDate()) {
+                return d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
+            }
+            if (diff < 7 * 86400000) {
+                return d.toLocaleDateString('ru', { weekday: 'short' });
+            }
+            return d.toLocaleDateString('ru', { day: 'numeric', month: 'short' });
+        }
+
+        function escHtml(s) {
+            return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        function showToast(msg, icon) {
+            const t = document.createElement('div');
+            t.className = 'toast';
+            t.innerHTML = `<span>${icon}</span><span>${msg}</span>`;
+            document.getElementById('toastContainer').appendChild(t);
+            setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity 0.3s'; setTimeout(() => t.remove(), 300); }, 2000);
+        }
+
+        load();
+    </script>
+</body>
+</html>

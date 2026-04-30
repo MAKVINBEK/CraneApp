@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Язык - CraneApp</title>
+    <script src="../../scripts/theme.js"></script>
+    <style>
+        :root {
+            --bg-primary: #000000; --bg-secondary: #121212; --bg-tertiary: #1E1E1E;
+            --text-primary: #FFFFFF; --text-secondary: #B0B0B0; --text-muted: #666666;
+            --border-color: #1E1E1E; --accent-color: #FF007F;
+            --accent-gradient: linear-gradient(135deg, #FF007F, #9D00FF);
+            --safe-area-top: env(safe-area-inset-top, 0px);
+            --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+        }
+        [data-theme="light"] {
+            --bg-primary: #FFFFFF; --bg-secondary: #F5F5F5; --bg-tertiary: #EEEEEE;
+            --text-primary: #000000; --text-secondary: #666666; --text-muted: #999999;
+            --border-color: #DDDDDD;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html, body { height: 100%; overflow-x: hidden; }
+        body { background: var(--bg-primary); color: var(--text-primary); font-family: system-ui, -apple-system, sans-serif; min-height: 100vh; padding-top: var(--safe-area-top); -webkit-user-select: none; user-select: none; }
+
+        .header { padding: 12px 16px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 100; }
+        .back-btn { background: none; border: none; color: var(--text-primary); font-size: 22px; cursor: pointer; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+        .back-btn:active { background: rgba(255,255,255,0.1); }
+        .header-title { font-size: 17px; font-weight: 700; }
+
+        .search-bar { padding: 10px 12px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); position: sticky; top: 57px; z-index: 99; }
+        .search-inner { position: relative; }
+        .search-inner svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; }
+        .search-input { width: 100%; padding: 9px 12px; border-radius: 10px; border: none; background: var(--bg-tertiary); color: var(--text-primary); font-size: 15px; outline: none; -webkit-user-select: text; user-select: text; }
+        .search-input::placeholder { color: var(--text-muted); }
+        .content { padding-bottom: calc(20px + var(--safe-area-bottom)); }
+        .section-label { padding: 14px 16px 8px; font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .section { background: var(--bg-secondary); }
+
+        .lang-item { padding: 13px 16px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 14px; cursor: pointer; transition: background 0.12s; }
+        .lang-item:last-child { border-bottom: none; }
+        .lang-item:active { background: var(--bg-tertiary); }
+        .lang-item.selected { background: rgba(255,0,127,0.08); }
+
+        .flag-wrap { width: 38px; height: 28px; border-radius: 5px; overflow: hidden; flex-shrink: 0; display: flex; flex-direction: column; }
+        /* CSS флаги */
+        .flag-ru { background: linear-gradient(to bottom, #fff 33.3%, #0039A6 33.3%, #0039A6 66.6%, #D52B1E 66.6%); }
+        .flag-de { background: linear-gradient(to bottom, #000 33.3%, #D00 33.3%, #D00 66.6%, #FFCE00 66.6%); }
+        .flag-fr { background: linear-gradient(to right, #002395 33.3%, #fff 33.3%, #fff 66.6%, #ED2939 66.6%); }
+        .flag-es { background: linear-gradient(to bottom, #c60b1e 25%, #f1bf00 25%, #f1bf00 75%, #c60b1e 75%); }
+        .flag-it { background: linear-gradient(to right, #009246 33.3%, #fff 33.3%, #fff 66.6%, #ce2b37 66.6%); }
+        .flag-pl { background: linear-gradient(to bottom, #fff 50%, #DC143C 50%); }
+        .flag-ua { background: linear-gradient(to bottom, #005BBB 50%, #FFD500 50%); }
+
+        .lang-info { flex: 1; }
+        .lang-name { font-size: 15px; font-weight: 500; }
+        .lang-sub { font-size: 12px; color: var(--text-secondary); margin-top: 1px; }
+        .lang-check { color: var(--accent-color); font-size: 20px; font-weight: 700; flex-shrink: 0; }
+
+        .no-results { padding: 48px 20px; text-align: center; color: var(--text-muted); font-size: 14px; }
+
+        .toast-container { position: fixed; bottom: calc(20px + var(--safe-area-bottom)); left: 12px; right: 12px; z-index: 9999; pointer-events: none; }
+        .toast { padding: 10px 14px; background: var(--bg-secondary); border-radius: 10px; display: flex; align-items: center; gap: 8px; animation: up 0.3s ease; border-left: 4px solid #00FF88; box-shadow: 0 4px 20px rgba(0,0,0,0.3); font-size: 13px; margin-top: 6px; }
+        @keyframes up { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+    </style>
+</head>
+<body>
+    <div class="toast-container" id="toastContainer"></div>
+
+    <div class="header">
+        <button class="back-btn" onclick="history.back()">←</button>
+        <span class="header-title">Язык</span>
+    </div>
+
+    <div class="search-bar">
+        <div class="search-inner">
+            <input class="search-input" type="search" placeholder="Поиск языка..." id="searchInput" oninput="render(this.value)" autocomplete="off">
+        </div>
+    </div>
+
+    <div class="content" id="content"></div>
+
+    <script>
+        const token = localStorage.getItem('craneapp_auth_token');
+
+        // Только переведённые языки
+        const PINNED = ['ru', 'en'];
+        const LANGUAGES = [
+            { code: 'ru', name: 'Русский',    sub: 'Russian'     },
+            { code: 'en', name: 'English',     sub: 'English'     },
+            { code: 'de', name: 'Deutsch',     sub: 'German'      },
+            { code: 'fr', name: 'Français',    sub: 'French'      },
+            { code: 'es', name: 'Español',     sub: 'Spanish'     },
+            { code: 'it', name: 'Italiano',    sub: 'Italian'     },
+            { code: 'pt', name: 'Português',   sub: 'Portuguese'  },
+            { code: 'pl', name: 'Polski',      sub: 'Polish'      },
+            { code: 'uk', name: 'Українська',  sub: 'Ukrainian'   },
+            { code: 'tr', name: 'Türkçe',      sub: 'Turkish'     },
+        ];
+
+        let current = localStorage.getItem('craneapp_language') || 'ru';
+
+        function render(q) {
+            q = (q || '').toLowerCase().trim();
+            const content = document.getElementById('content');
+
+            const match = l => !q || l.name.toLowerCase().includes(q) || l.sub.toLowerCase().includes(q) || l.code.includes(q);
+
+            const pinned = LANGUAGES.filter(l => PINNED.includes(l.code) && match(l));
+            const rest   = LANGUAGES.filter(l => !PINNED.includes(l.code) && match(l));
+
+            if (!pinned.length && !rest.length) {
+                content.innerHTML = '<div class="no-results">Ничего не найдено</div>';
+                return;
+            }
+
+            let html = '';
+
+            if (!q) {
+                if (pinned.length) {
+                    html += '<div class="section-label">Закреплённые</div><div class="section">' + pinned.map(row).join('') + '</div>';
+                }
+                if (rest.length) {
+                    html += '<div class="section-label" style="margin-top:8px;">Все языки</div><div class="section">' + rest.map(row).join('') + '</div>';
+                }
+            } else {
+                html += '<div class="section">' + [...pinned, ...rest].map(row).join('') + '</div>';
+            }
+
+            content.innerHTML = html;
+        }
+
+        const SVG_FLAGS = {
+            gb: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 30" width="42" height="28" style="display:block"><rect width="60" height="30" fill="#012169"/><path d="M0,0 L60,30 M60,0 L0,30" stroke="#fff" stroke-width="6"/><path d="M0,0 L60,30 M60,0 L0,30" stroke="#C8102E" stroke-width="4"/><path d="M30,0 v30 M0,15 h60" stroke="#fff" stroke-width="10"/><path d="M30,0 v30 M0,15 h60" stroke="#C8102E" stroke-width="6"/></svg>',
+            tr: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 38 28" width="38" height="28" style="display:block"><rect width="38" height="28" fill="#E30A17"/><circle cx="15" cy="14" r="7.5" fill="#fff"/><circle cx="18.2" cy="14" r="6" fill="#E30A17"/><polygon points="23,14 25.2,10.8 25.2,17.2" fill="#fff" transform="rotate(-15,23,14)"/><polygon points="26,14 27.8,11.8 27.8,16.2" fill="#fff" transform="rotate(-15,26,14)"/></svg>',
+            pt: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 38 28" width="38" height="28" style="display:block"><rect width="38" height="28" fill="#FF0000"/><rect width="15" height="28" fill="#006600"/><circle cx="15" cy="14" r="5.5" fill="#FFD700"/><circle cx="15" cy="14" r="4.5" fill="#fff"/><rect x="12.5" y="11.5" width="5" height="5" rx="0.5" fill="#003399"/><line x1="15" y1="11.5" x2="15" y2="16.5" stroke="#fff" stroke-width="0.8"/><line x1="12.5" y1="14" x2="17.5" y2="14" stroke="#fff" stroke-width="0.8"/></svg>'
+        };
+
+        function row(l) {
+            const sel = l.code === current;
+            const flagMap = { en: 'gb', uk: 'ua' };
+            const flagCode = flagMap[l.code] || l.code;
+            const flagHtml = SVG_FLAGS[flagCode]
+                ? '<div class="flag-wrap" style="width:' + (flagCode === 'gb' ? '42' : '38') + 'px">' + SVG_FLAGS[flagCode] + '</div>'
+                : '<div class="flag-wrap flag-' + flagCode + '"></div>';
+            return '<div class="lang-item' + (sel ? ' selected' : '') + '" onclick="pick(\'' + l.code + '\')">'
+                + flagHtml
+                + '<div class="lang-info"><div class="lang-name">' + l.name + '</div><div class="lang-sub">' + l.sub + '</div></div>'
+                + (sel ? '<span class="lang-check">✓</span>' : '')
+                + '</div>';
+        }
+
+        async function pick(code) {
+            if (code === current) return;
+            current = code;
+
+            const s = JSON.parse(localStorage.getItem('craneapp_settings') || '{}');
+            s.language = code;
+            localStorage.setItem('craneapp_settings', JSON.stringify(s));
+            localStorage.setItem('craneapp_language', code);
+
+            if (window.i18n) window.i18n.setLanguage(code);
+
+            render(document.getElementById('searchInput').value);
+            toast('Язык изменён', '✓');
+
+            try {
+                await fetch('/api/v1/users/all-settings', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    body: JSON.stringify({ settings: { language: code } })
+                });
+            } catch (e) {}
+        }
+
+        function toast(msg, icon) {
+            const t = document.createElement('div');
+            t.className = 'toast';
+            t.innerHTML = '<span>' + icon + '</span><span>' + msg + '</span>';
+            document.getElementById('toastContainer').appendChild(t);
+            setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity 0.3s'; setTimeout(() => t.remove(), 300); }, 2000);
+        }
+
+        async function init() {
+            try {
+                const res = await fetch('/api/v1/users/all-settings', { headers: { 'Authorization': 'Bearer ' + token } });
+                if (res.ok) {
+                    const d = await res.json();
+                    if (d.settings?.language) {
+                        current = d.settings.language;
+                        localStorage.setItem('craneapp_language', current);
+                    }
+                }
+            } catch (e) {}
+            render('');
+        }
+
+        init();
+    </script>
+</body>
+</html>

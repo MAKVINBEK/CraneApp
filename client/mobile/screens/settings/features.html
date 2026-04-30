@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Возможности - CraneApp</title>
+    <script src="../../scripts/theme.js"></script>
+    <style>
+        :root {
+            --bg-primary: #000000; --bg-secondary: #121212; --bg-tertiary: #1E1E1E;
+            --text-primary: #FFFFFF; --text-secondary: #B0B0B0; --text-muted: #666666;
+            --border-color: #1E1E1E; --accent-color: #FF007F;
+            --accent-gradient: linear-gradient(135deg, #FF007F, #9D00FF);
+        }
+        [data-theme="light"] {
+            --bg-primary: #FFFFFF; --bg-secondary: #F5F5F5; --bg-tertiary: #EEEEEE;
+            --text-primary: #000000; --text-secondary: #666666; --text-muted: #999999;
+            --border-color: #DDDDDD;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: var(--bg-primary); color: var(--text-primary); font-family: system-ui, sans-serif; min-height: 100vh; }
+        .header { padding: 12px 16px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 12px; }
+        .back-btn { background: none; border: none; color: var(--text-primary); font-size: 22px; cursor: pointer; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+        .back-btn:active { background: rgba(255,255,255,0.1); }
+        .header-title { font-size: 17px; font-weight: 700; }
+        .content { padding: 16px; }
+        .feature { background: var(--bg-secondary); padding: 16px; border-radius: 12px; margin-bottom: 12px; }
+        .feature-title { font-size: 15px; font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+        .feature-desc { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <button class="back-btn" onclick="history.back()">←</button>
+        <span class="header-title">Возможности</span>
+    </div>
+    <div class="content">
+        <div class="feature">
+            <div class="feature-title">💬 Мессенджер</div>
+            <div class="feature-desc">Личные чаты, группы и каналы с поддержкой медиа</div>
+        </div>
+        <div class="feature">
+            <div class="feature-title">📞 Звонки</div>
+            <div class="feature-desc">Голосовые и видеозвонки через WebRTC</div>
+        </div>
+        <div class="feature">
+            <div class="feature-title">🔒 Безопасность</div>
+            <div class="feature-desc">E2E шифрование, код-пароль, двухфакторная аутентификация</div>
+        </div>
+        <div class="feature">
+            <div class="feature-title">🎨 Персонализация</div>
+            <div class="feature-desc">Темы оформления, папки с чатами, стикеры</div>
+        </div>
+        <div class="feature">
+            <div class="feature-title">📱 Мультиплатформенность</div>
+            <div class="feature-desc">Синхронизация между устройствами</div>
+        </div>
+        <div class="feature">
+            <div class="feature-title">⭐ Premium</div>
+            <div class="feature-desc">Расширенные возможности для подписчиков</div>
+        </div>
+    </div>
+</body>
+</html>
