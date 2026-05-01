@@ -763,80 +763,60 @@
     <!-- Toast Container -->
     <div class="toast-container" id="toastContainer"></div>
 
-    <!-- Incoming Call — Fullscreen overlay -->
+    <!-- Incoming Call — Compact top banner (iOS-style) -->
     <style>
-      @keyframes icRingPulseRing{0%,100%{box-shadow:0 0 0 0 rgba(155,130,255,0.55);}50%{box-shadow:0 0 0 28px rgba(155,130,255,0);}}
-      @keyframes icRingShake{0%,100%{transform:rotate(0deg);}10%,30%,50%,70%,90%{transform:rotate(-12deg);}20%,40%,60%,80%{transform:rotate(12deg);}}
-      @keyframes icBgFade{from{opacity:0;}to{opacity:1;}}
-      .ic-overlay{
-        display:none;position:fixed;inset:0;z-index:11000;
-        background:radial-gradient(circle at 50% 30%,rgba(40,28,80,0.92) 0%,rgba(8,8,12,0.97) 70%);
-        backdrop-filter:blur(20px) saturate(160%);-webkit-backdrop-filter:blur(20px) saturate(160%);
+      @keyframes icSlideIn{from{transform:translate(-50%,-120%);opacity:0;}to{transform:translate(-50%,0);opacity:1;}}
+      @keyframes icAvatarPulse{0%,100%{box-shadow:0 0 0 0 rgba(52,211,153,0.55);}50%{box-shadow:0 0 0 10px rgba(52,211,153,0);}}
+      .ic-toast{
+        display:none;position:fixed;top:max(12px,env(safe-area-inset-top));left:50%;transform:translate(-50%,0);
+        z-index:11000;width:min(420px,calc(100vw - 16px));
+        background:rgba(28,28,32,0.92);backdrop-filter:blur(28px) saturate(180%);-webkit-backdrop-filter:blur(28px) saturate(180%);
+        border:1px solid rgba(255,255,255,0.08);border-radius:18px;
+        box-shadow:0 18px 50px rgba(0,0,0,0.45),0 0 0 1px rgba(255,255,255,0.04) inset;
         font-family:'Geologica',sans-serif;color:#fff;
-        flex-direction:column;align-items:center;justify-content:space-between;
-        padding:max(40px,env(safe-area-inset-top)) 24px max(28px,env(safe-area-inset-bottom));
-        animation:icBgFade 0.25s ease;
+        padding:10px 12px;
+        align-items:center;gap:10px;
+        animation:icSlideIn 0.3s cubic-bezier(0.4,1.4,0.6,1);
       }
-      .ic-overlay.show{display:flex;}
-      .ic-top{text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:24px;}
-      .ic-kind{font-size:13px;color:rgba(235,235,245,0.6);letter-spacing:0.06em;text-transform:uppercase;font-weight:500;}
-      .ic-kind-icon{width:18px;height:18px;display:inline-block;vertical-align:-3px;margin-right:6px;animation:icRingShake 1.6s ease-in-out infinite;transform-origin:center;}
-      .ic-mid{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;width:100%;}
-      .ic-avatar-wrap{position:relative;width:148px;height:148px;border-radius:50%;animation:icRingPulseRing 1.6s ease-in-out infinite;}
-      .ic-avatar{
-        width:148px;height:148px;border-radius:50%;
+      .ic-toast.show{display:flex;}
+      .ic-toast-avatar{
+        width:44px;height:44px;border-radius:50%;flex-shrink:0;
         background:linear-gradient(135deg,#9b82ff,#5a8bff);
         display:flex;align-items:center;justify-content:center;
-        font-weight:700;font-size:60px;color:#fff;overflow:hidden;
-        box-shadow:0 24px 60px rgba(90,75,200,0.55);
+        font-weight:700;font-size:18px;color:#fff;overflow:hidden;
+        animation:icAvatarPulse 1.4s ease-in-out infinite;
       }
-      .ic-avatar img{width:100%;height:100%;object-fit:cover;}
-      .ic-name{font-size:28px;font-weight:600;letter-spacing:-0.02em;text-align:center;}
-      .ic-status{font-size:14px;color:rgba(235,235,245,0.6);}
-      .ic-bottom{display:flex;width:100%;justify-content:space-around;align-items:center;max-width:420px;}
-      .ic-action{display:flex;flex-direction:column;align-items:center;gap:10px;cursor:pointer;border:none;background:transparent;color:#fff;font-family:inherit;}
-      .ic-action-btn{
-        width:72px;height:72px;border-radius:50%;border:none;cursor:pointer;
+      .ic-toast-avatar img{width:100%;height:100%;object-fit:cover;}
+      .ic-toast-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
+      .ic-toast-name{font-size:15px;font-weight:600;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+      .ic-toast-kind{font-size:12px;color:rgba(235,235,245,0.6);display:flex;align-items:center;gap:4px;}
+      .ic-toast-kind svg{width:11px;height:11px;}
+      .ic-toast-actions{display:flex;gap:6px;flex-shrink:0;}
+      .ic-toast-btn{
+        width:42px;height:42px;border-radius:50%;border:none;cursor:pointer;
         display:flex;align-items:center;justify-content:center;
-        transition:transform 0.15s,filter 0.15s;
+        transition:transform 0.12s,filter 0.12s;
+        font-family:inherit;color:#fff;
       }
-      .ic-action-btn:active{transform:scale(0.92);}
-      .ic-action-btn:hover{filter:brightness(1.1);}
-      .ic-action-btn.reject{background:linear-gradient(135deg,#ff4b62,#d92847);box-shadow:0 14px 36px rgba(217,40,71,0.45);}
-      .ic-action-btn.accept{background:linear-gradient(135deg,#34d399,#10b981);box-shadow:0 14px 36px rgba(16,185,129,0.45);}
-      .ic-action-btn svg{width:30px;height:30px;color:#fff;}
-      .ic-action-label{font-size:13px;color:rgba(235,235,245,0.7);font-weight:500;}
-      @media(max-width:380px){
-        .ic-avatar,.ic-avatar-wrap{width:128px;height:128px;}
-        .ic-avatar{font-size:52px;}
-        .ic-name{font-size:24px;}
-        .ic-action-btn{width:64px;height:64px;}
-        .ic-action-btn svg{width:26px;height:26px;}
-      }
+      .ic-toast-btn:active{transform:scale(0.9);}
+      .ic-toast-btn.reject{background:linear-gradient(135deg,#ff4b62,#d92847);box-shadow:0 6px 16px rgba(217,40,71,0.4);}
+      .ic-toast-btn.accept{background:linear-gradient(135deg,#34d399,#10b981);box-shadow:0 6px 16px rgba(16,185,129,0.4);}
+      .ic-toast-btn svg{width:20px;height:20px;}
     </style>
-    <div id="incomingCallBanner" class="ic-overlay" role="dialog" aria-modal="true">
-      <div class="ic-top">
-        <div class="ic-kind">
-          <span id="incomingKindIcon" class="ic-kind-icon"></span><span id="incomingKindLabel">Входящий звонок</span>
+    <div id="incomingCallBanner" class="ic-toast" role="alert">
+      <div id="incomingAvatar" class="ic-toast-avatar">?</div>
+      <div class="ic-toast-info">
+        <div id="incomingName" class="ic-toast-name">—</div>
+        <div class="ic-toast-kind">
+          <span id="incomingKindIcon"></span><span id="incomingKindLabel">Входящий звонок</span>
         </div>
       </div>
-      <div class="ic-mid">
-        <div class="ic-avatar-wrap"><div id="incomingAvatar" class="ic-avatar">?</div></div>
-        <div id="incomingName" class="ic-name">—</div>
-        <div class="ic-status">CraneApp</div>
-      </div>
-      <div class="ic-bottom">
-        <button class="ic-action" onclick="rejectIncomingCall()" aria-label="Отклонить">
-          <span class="ic-action-btn reject">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 15.46l-5.27-.61a1.5 1.5 0 0 0-1.21.4l-3.69 3.46a15 15 0 0 1-6.59-6.59l3.5-3.71a1.5 1.5 0 0 0 .4-1.21L7.54 2A1.5 1.5 0 0 0 6 .67H3a1.5 1.5 0 0 0-1.5 1.5C1.5 13.27 10.73 22.5 22 22.5a1.5 1.5 0 0 0 1.5-1.5v-3a1.5 1.5 0 0 0-1.34-1.5z" transform="rotate(135 12 12)"/></svg>
-          </span>
-          <span class="ic-action-label">Отклонить</span>
+      <div class="ic-toast-actions">
+        <button class="ic-toast-btn reject" onclick="rejectIncomingCall()" aria-label="Отклонить">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08c-.18-.17-.29-.42-.29-.7s.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71s-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.1-.7-.28-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg>
         </button>
-        <button class="ic-action" onclick="acceptIncomingCall()" aria-label="Принять">
-          <span class="ic-action-btn accept">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 15.46l-5.27-.61a1.5 1.5 0 0 0-1.21.4l-3.69 3.46a15 15 0 0 1-6.59-6.59l3.5-3.71a1.5 1.5 0 0 0 .4-1.21L7.54 2A1.5 1.5 0 0 0 6 .67H3a1.5 1.5 0 0 0-1.5 1.5C1.5 13.27 10.73 22.5 22 22.5a1.5 1.5 0 0 0 1.5-1.5v-3a1.5 1.5 0 0 0-1.34-1.5z"/></svg>
-          </span>
-          <span class="ic-action-label">Принять</span>
+        <button class="ic-toast-btn accept" onclick="acceptIncomingCall()" aria-label="Принять">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56-.35-.12-.74-.03-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/></svg>
         </button>
       </div>
     </div>
@@ -1504,42 +1484,53 @@
         function startVideoCallFromChat() { return _startCallFromChat('video'); }
         function startAudioCallFromChat() { return _startCallFromChat('audio'); }
 
-        // Рингтон через WebAudio (без файла)
-        let _ringtoneCtx = null, _ringtoneTimer = null;
+        // Рингтон через WebAudio (имитация классического звонка) + вибрация
+        let _ringtoneCtx = null, _ringtoneTimer = null, _vibrateTimer = null;
         function _startRingtone(){
             try {
                 _ringtoneCtx = new (window.AudioContext || window.webkitAudioContext)();
                 const ctx = _ringtoneCtx;
+                // Классическая двухтоновая мелодия звонка (пара звуковых импульсов, потом пауза)
                 const ring = () => {
                     if (!_ringtoneCtx) return;
                     const t0 = ctx.currentTime;
-                    [0, 0.4].forEach(off => {
-                        const o = ctx.createOscillator();
-                        const g = ctx.createGain();
-                        o.type = 'sine';
-                        o.frequency.value = 480;
-                        g.gain.setValueAtTime(0, t0 + off);
-                        g.gain.linearRampToValueAtTime(0.18, t0 + off + 0.05);
-                        g.gain.linearRampToValueAtTime(0, t0 + off + 0.32);
+                    [0, 0.5].forEach(off => {
+                        const o1 = ctx.createOscillator();
+                        const g1 = ctx.createGain();
+                        o1.type = 'sine';
+                        o1.frequency.value = 440;
+                        g1.gain.setValueAtTime(0, t0 + off);
+                        g1.gain.linearRampToValueAtTime(0.55, t0 + off + 0.04);
+                        g1.gain.setValueAtTime(0.55, t0 + off + 0.32);
+                        g1.gain.linearRampToValueAtTime(0, t0 + off + 0.40);
                         const o2 = ctx.createOscillator();
-                        o2.type = 'sine';
-                        o2.frequency.value = 620;
                         const g2 = ctx.createGain();
+                        o2.type = 'sine';
+                        o2.frequency.value = 480;
                         g2.gain.setValueAtTime(0, t0 + off);
-                        g2.gain.linearRampToValueAtTime(0.14, t0 + off + 0.05);
-                        g2.gain.linearRampToValueAtTime(0, t0 + off + 0.32);
-                        o.connect(g).connect(ctx.destination);
+                        g2.gain.linearRampToValueAtTime(0.45, t0 + off + 0.04);
+                        g2.gain.setValueAtTime(0.45, t0 + off + 0.32);
+                        g2.gain.linearRampToValueAtTime(0, t0 + off + 0.40);
+                        o1.connect(g1).connect(ctx.destination);
                         o2.connect(g2).connect(ctx.destination);
-                        o.start(t0 + off); o.stop(t0 + off + 0.34);
-                        o2.start(t0 + off); o2.stop(t0 + off + 0.34);
+                        o1.start(t0 + off); o1.stop(t0 + off + 0.42);
+                        o2.start(t0 + off); o2.stop(t0 + off + 0.42);
                     });
                 };
                 ring();
-                _ringtoneTimer = setInterval(ring, 2400);
+                _ringtoneTimer = setInterval(ring, 2000);
+                // Вибрация на мобильных — паттерн как у звонка
+                if (navigator.vibrate) {
+                    const vibrate = () => navigator.vibrate([400, 200, 400, 1000]);
+                    vibrate();
+                    _vibrateTimer = setInterval(vibrate, 2000);
+                }
             } catch(_){}
         }
         function _stopRingtone(){
             if (_ringtoneTimer) { clearInterval(_ringtoneTimer); _ringtoneTimer = null; }
+            if (_vibrateTimer) { clearInterval(_vibrateTimer); _vibrateTimer = null; }
+            if (navigator.vibrate) { try { navigator.vibrate(0); } catch(_){} }
             if (_ringtoneCtx) { try { _ringtoneCtx.close(); } catch(_){} _ringtoneCtx = null; }
         }
 
@@ -1557,15 +1548,21 @@
                 ? '<img src="'+payload.fromAvatar+'" alt="">'
                 : initial;
             const isAudio = payload.kind === 'audio';
-            kindLabel.textContent = isAudio ? 'Входящий аудиозвонок' : 'Входящий видеозвонок';
+            kindLabel.textContent = isAudio ? 'Аудиозвонок' : 'Видеозвонок';
             kindIcon.innerHTML = isAudio
-                ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>'
-                : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>';
+                ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>'
+                : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>';
             banner.classList.add('show');
             try { _startRingtone(); } catch(_){}
             // Авто-скрытие через 35 сек
             clearTimeout(_showIncomingCall._t);
             _showIncomingCall._t = setTimeout(() => rejectIncomingCall(), 35000);
+        }
+
+        function _hideIncomingCallBanner(){
+            const banner = document.getElementById('incomingCallBanner');
+            if (banner) banner.classList.remove('show');
+            clearTimeout(_showIncomingCall._t);
         }
 
         function acceptIncomingCall() {
@@ -1578,9 +1575,8 @@
                 }
             } catch(_){}
             try { _stopRingtone(); } catch(_){}
-            document.getElementById('incomingCallBanner').style.display = 'none';
+            _hideIncomingCallBanner();
             const kind = (c.kind === 'audio') ? 'audio' : 'video';
-            // p2p — если приглашение пришло персонально (1-на-1)
             const callType = 'p2p';
             _openCallWindow(c.roomId, callType, c.title || c.fromName || (kind === 'audio' ? 'Аудиозвонок' : 'Видеозвонок'), kind);
             _incomingCall = null;
@@ -1588,10 +1584,7 @@
 
         function rejectIncomingCall() {
             try { _stopRingtone(); } catch(_){}
-            if (!_incomingCall) {
-                document.getElementById('incomingCallBanner').style.display = 'none';
-                return;
-            }
+            if (!_incomingCall) { _hideIncomingCallBanner(); return; }
             const c = _incomingCall;
             try {
                 const ws = window.craneWs || window.ws;
@@ -1599,7 +1592,7 @@
                     ws.send(JSON.stringify({ type:'call_invite_response', to: c.from, roomId: c.roomId, accepted: false }));
                 }
             } catch(_){}
-            document.getElementById('incomingCallBanner').style.display = 'none';
+            _hideIncomingCallBanner();
             _incomingCall = null;
         }
 
