@@ -763,20 +763,80 @@
     <!-- Toast Container -->
     <div class="toast-container" id="toastContainer"></div>
 
-    <!-- Incoming Call Banner -->
-    <div id="incomingCallBanner" style="display:none;position:fixed;top:24px;left:50%;transform:translateX(-50%);z-index:11000;width:min(420px,92vw);background:rgba(28,28,34,0.86);backdrop-filter:blur(24px) saturate(160%);-webkit-backdrop-filter:blur(24px) saturate(160%);border:1px solid rgba(255,255,255,0.18);border-radius:18px;padding:14px;box-shadow:0 24px 60px rgba(0,0,0,0.55);font-family:'Geologica',sans-serif;color:#fff;animation:icRingPulse 1.6s ease-in-out infinite;">
-      <style>@keyframes icRingPulse{0%,100%{box-shadow:0 24px 60px rgba(0,0,0,0.55),0 0 0 0 rgba(155,130,255,0.5);}50%{box-shadow:0 24px 60px rgba(0,0,0,0.55),0 0 0 12px rgba(155,130,255,0);}}</style>
-      <div style="display:flex;align-items:center;gap:12px;">
-        <div id="incomingAvatar" style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#9b82ff,#5a8bff);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:19px;flex-shrink:0;overflow:hidden;">?</div>
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:11.5px;color:rgba(235,235,245,0.6);letter-spacing:0.02em;text-transform:uppercase;">Входящий видеозвонок</div>
-          <div id="incomingName" style="font-size:15px;font-weight:600;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">—</div>
+    <!-- Incoming Call — Fullscreen overlay -->
+    <style>
+      @keyframes icRingPulseRing{0%,100%{box-shadow:0 0 0 0 rgba(155,130,255,0.55);}50%{box-shadow:0 0 0 28px rgba(155,130,255,0);}}
+      @keyframes icRingShake{0%,100%{transform:rotate(0deg);}10%,30%,50%,70%,90%{transform:rotate(-12deg);}20%,40%,60%,80%{transform:rotate(12deg);}}
+      @keyframes icBgFade{from{opacity:0;}to{opacity:1;}}
+      .ic-overlay{
+        display:none;position:fixed;inset:0;z-index:11000;
+        background:radial-gradient(circle at 50% 30%,rgba(40,28,80,0.92) 0%,rgba(8,8,12,0.97) 70%);
+        backdrop-filter:blur(20px) saturate(160%);-webkit-backdrop-filter:blur(20px) saturate(160%);
+        font-family:'Geologica',sans-serif;color:#fff;
+        flex-direction:column;align-items:center;justify-content:space-between;
+        padding:max(40px,env(safe-area-inset-top)) 24px max(28px,env(safe-area-inset-bottom));
+        animation:icBgFade 0.25s ease;
+      }
+      .ic-overlay.show{display:flex;}
+      .ic-top{text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:24px;}
+      .ic-kind{font-size:13px;color:rgba(235,235,245,0.6);letter-spacing:0.06em;text-transform:uppercase;font-weight:500;}
+      .ic-kind-icon{width:18px;height:18px;display:inline-block;vertical-align:-3px;margin-right:6px;animation:icRingShake 1.6s ease-in-out infinite;transform-origin:center;}
+      .ic-mid{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;width:100%;}
+      .ic-avatar-wrap{position:relative;width:148px;height:148px;border-radius:50%;animation:icRingPulseRing 1.6s ease-in-out infinite;}
+      .ic-avatar{
+        width:148px;height:148px;border-radius:50%;
+        background:linear-gradient(135deg,#9b82ff,#5a8bff);
+        display:flex;align-items:center;justify-content:center;
+        font-weight:700;font-size:60px;color:#fff;overflow:hidden;
+        box-shadow:0 24px 60px rgba(90,75,200,0.55);
+      }
+      .ic-avatar img{width:100%;height:100%;object-fit:cover;}
+      .ic-name{font-size:28px;font-weight:600;letter-spacing:-0.02em;text-align:center;}
+      .ic-status{font-size:14px;color:rgba(235,235,245,0.6);}
+      .ic-bottom{display:flex;width:100%;justify-content:space-around;align-items:center;max-width:420px;}
+      .ic-action{display:flex;flex-direction:column;align-items:center;gap:10px;cursor:pointer;border:none;background:transparent;color:#fff;font-family:inherit;}
+      .ic-action-btn{
+        width:72px;height:72px;border-radius:50%;border:none;cursor:pointer;
+        display:flex;align-items:center;justify-content:center;
+        transition:transform 0.15s,filter 0.15s;
+      }
+      .ic-action-btn:active{transform:scale(0.92);}
+      .ic-action-btn:hover{filter:brightness(1.1);}
+      .ic-action-btn.reject{background:linear-gradient(135deg,#ff4b62,#d92847);box-shadow:0 14px 36px rgba(217,40,71,0.45);}
+      .ic-action-btn.accept{background:linear-gradient(135deg,#34d399,#10b981);box-shadow:0 14px 36px rgba(16,185,129,0.45);}
+      .ic-action-btn svg{width:30px;height:30px;color:#fff;}
+      .ic-action-label{font-size:13px;color:rgba(235,235,245,0.7);font-weight:500;}
+      @media(max-width:380px){
+        .ic-avatar,.ic-avatar-wrap{width:128px;height:128px;}
+        .ic-avatar{font-size:52px;}
+        .ic-name{font-size:24px;}
+        .ic-action-btn{width:64px;height:64px;}
+        .ic-action-btn svg{width:26px;height:26px;}
+      }
+    </style>
+    <div id="incomingCallBanner" class="ic-overlay" role="dialog" aria-modal="true">
+      <div class="ic-top">
+        <div class="ic-kind">
+          <span id="incomingKindIcon" class="ic-kind-icon"></span><span id="incomingKindLabel">Входящий звонок</span>
         </div>
-        <button onclick="rejectIncomingCall()" style="width:42px;height:42px;border-radius:50%;border:none;background:#ff4b62;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;" title="Отклонить">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M21 15.46l-5.27-.61a1.5 1.5 0 0 0-1.21.4l-3.69 3.46a15 15 0 0 1-6.59-6.59l3.5-3.71a1.5 1.5 0 0 0 .4-1.21L7.54 2A1.5 1.5 0 0 0 6 .67H3a1.5 1.5 0 0 0-1.5 1.5C1.5 13.27 10.73 22.5 22 22.5a1.5 1.5 0 0 0 1.5-1.5v-3a1.5 1.5 0 0 0-1.34-1.5z" transform="rotate(135 12 12)"/></svg>
+      </div>
+      <div class="ic-mid">
+        <div class="ic-avatar-wrap"><div id="incomingAvatar" class="ic-avatar">?</div></div>
+        <div id="incomingName" class="ic-name">—</div>
+        <div class="ic-status">CraneApp</div>
+      </div>
+      <div class="ic-bottom">
+        <button class="ic-action" onclick="rejectIncomingCall()" aria-label="Отклонить">
+          <span class="ic-action-btn reject">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 15.46l-5.27-.61a1.5 1.5 0 0 0-1.21.4l-3.69 3.46a15 15 0 0 1-6.59-6.59l3.5-3.71a1.5 1.5 0 0 0 .4-1.21L7.54 2A1.5 1.5 0 0 0 6 .67H3a1.5 1.5 0 0 0-1.5 1.5C1.5 13.27 10.73 22.5 22 22.5a1.5 1.5 0 0 0 1.5-1.5v-3a1.5 1.5 0 0 0-1.34-1.5z" transform="rotate(135 12 12)"/></svg>
+          </span>
+          <span class="ic-action-label">Отклонить</span>
         </button>
-        <button onclick="acceptIncomingCall()" style="width:42px;height:42px;border-radius:50%;border:none;background:#34d399;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;" title="Принять">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M21 15.46l-5.27-.61a1.5 1.5 0 0 0-1.21.4l-3.69 3.46a15 15 0 0 1-6.59-6.59l3.5-3.71a1.5 1.5 0 0 0 .4-1.21L7.54 2A1.5 1.5 0 0 0 6 .67H3a1.5 1.5 0 0 0-1.5 1.5C1.5 13.27 10.73 22.5 22 22.5a1.5 1.5 0 0 0 1.5-1.5v-3a1.5 1.5 0 0 0-1.34-1.5z"/></svg>
+        <button class="ic-action" onclick="acceptIncomingCall()" aria-label="Принять">
+          <span class="ic-action-btn accept">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 15.46l-5.27-.61a1.5 1.5 0 0 0-1.21.4l-3.69 3.46a15 15 0 0 1-6.59-6.59l3.5-3.71a1.5 1.5 0 0 0 .4-1.21L7.54 2A1.5 1.5 0 0 0 6 .67H3a1.5 1.5 0 0 0-1.5 1.5C1.5 13.27 10.73 22.5 22 22.5a1.5 1.5 0 0 0 1.5-1.5v-3a1.5 1.5 0 0 0-1.34-1.5z"/></svg>
+          </span>
+          <span class="ic-action-label">Принять</span>
         </button>
       </div>
     </div>
@@ -889,6 +949,9 @@
                     </div>
                     <div id="e2eIndicator" title="End-to-end шифрование активно" style="display:none;">
                     </div>
+                    <button class="chat-action-btn" id="audioCallBtn" onclick="startAudioCallFromChat()" title="Аудиозвонок">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                    </button>
                     <button class="chat-action-btn" id="videoCallBtn" onclick="startVideoCallFromChat()" title="Видеозвонок">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
                     </button>
@@ -1364,13 +1427,16 @@
 
         function _genRoomId() { return 'rm_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
 
-        function _openCallWindow(roomId, type, title) {
+        function _openCallWindow(roomId, type, title, kind) {
             const url = '../calls/call.html?room=' + encodeURIComponent(roomId)
                 + '&type=' + encodeURIComponent(type || 'group')
+                + '&kind=' + encodeURIComponent(kind || 'video')
                 + (title ? '&title=' + encodeURIComponent(title) : '');
             // На десктопе — новое окно, на мобилке — текущее
             if (window.innerWidth >= 768) {
-                window.open(url, 'craneapp_call_' + roomId, 'width=1100,height=720,resizable=yes');
+                const w = (kind === 'audio') ? 460 : 1100;
+                const h = (kind === 'audio') ? 720 : 720;
+                window.open(url, 'craneapp_call_' + roomId, 'width=' + w + ',height=' + h + ',resizable=yes');
             } else {
                 location.href = url;
             }
@@ -1393,28 +1459,69 @@
             }
         }
 
-        async function startVideoCallFromChat() {
+        async function _startCallFromChat(kind) {
             if (!activeChat) { try { showToast && showToast('info','Выберите чат'); } catch(_){} return; }
             const isGroup = activeChat.type === 'group';
-            const title = activeChat.name || (isGroup ? 'Групповой звонок' : 'Видеозвонок');
+            const kindLabel = kind === 'audio' ? 'Аудиозвонок' : 'Видеозвонок';
+            const title = activeChat.name || (isGroup ? 'Групповой звонок' : kindLabel);
             const roomId = await _createCallRoom(isGroup ? 'group' : 'p2p', activeChat.id, title);
-            // Приглашаем участников чата через WS
             try {
                 const ws = window.craneWs || window.ws;
                 if (ws && ws.readyState === 1) {
                     const memberIds = (activeChat.memberIds || []).filter(id => id && id !== user.id);
-                    // Если ID-шников нет (личный чат) — приглашаем второго участника
                     const targets = memberIds.length ? memberIds : (activeChat.peerId ? [activeChat.peerId] : []);
                     for (const to of targets) {
                         ws.send(JSON.stringify({
                             type: 'call_invite', to, roomId,
-                            kind: 'video', fromName: user.firstName || user.username, fromAvatar: user.avatarUrl || null,
+                            kind, fromName: user.firstName || user.username, fromAvatar: user.avatarUrl || null,
                             title
                         }));
                     }
                 }
             } catch (_) {}
-            _openCallWindow(roomId, isGroup ? 'group' : 'p2p', title);
+            _openCallWindow(roomId, isGroup ? 'group' : 'p2p', title, kind);
+        }
+
+        function startVideoCallFromChat() { return _startCallFromChat('video'); }
+        function startAudioCallFromChat() { return _startCallFromChat('audio'); }
+
+        // Рингтон через WebAudio (без файла)
+        let _ringtoneCtx = null, _ringtoneTimer = null;
+        function _startRingtone(){
+            try {
+                _ringtoneCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const ctx = _ringtoneCtx;
+                const ring = () => {
+                    if (!_ringtoneCtx) return;
+                    const t0 = ctx.currentTime;
+                    [0, 0.4].forEach(off => {
+                        const o = ctx.createOscillator();
+                        const g = ctx.createGain();
+                        o.type = 'sine';
+                        o.frequency.value = 480;
+                        g.gain.setValueAtTime(0, t0 + off);
+                        g.gain.linearRampToValueAtTime(0.18, t0 + off + 0.05);
+                        g.gain.linearRampToValueAtTime(0, t0 + off + 0.32);
+                        const o2 = ctx.createOscillator();
+                        o2.type = 'sine';
+                        o2.frequency.value = 620;
+                        const g2 = ctx.createGain();
+                        g2.gain.setValueAtTime(0, t0 + off);
+                        g2.gain.linearRampToValueAtTime(0.14, t0 + off + 0.05);
+                        g2.gain.linearRampToValueAtTime(0, t0 + off + 0.32);
+                        o.connect(g).connect(ctx.destination);
+                        o2.connect(g2).connect(ctx.destination);
+                        o.start(t0 + off); o.stop(t0 + off + 0.34);
+                        o2.start(t0 + off); o2.stop(t0 + off + 0.34);
+                    });
+                };
+                ring();
+                _ringtoneTimer = setInterval(ring, 2400);
+            } catch(_){}
+        }
+        function _stopRingtone(){
+            if (_ringtoneTimer) { clearInterval(_ringtoneTimer); _ringtoneTimer = null; }
+            if (_ringtoneCtx) { try { _ringtoneCtx.close(); } catch(_){} _ringtoneCtx = null; }
         }
 
         function _showIncomingCall(payload) {
@@ -1422,16 +1529,24 @@
             const banner = document.getElementById('incomingCallBanner');
             const nameEl = document.getElementById('incomingName');
             const avEl = document.getElementById('incomingAvatar');
+            const kindLabel = document.getElementById('incomingKindLabel');
+            const kindIcon = document.getElementById('incomingKindIcon');
             if (!banner) return;
             nameEl.textContent = payload.fromName || payload.title || 'Неизвестный';
             const initial = (payload.fromName || '?').charAt(0).toUpperCase();
             avEl.innerHTML = payload.fromAvatar
-                ? '<img src="'+payload.fromAvatar+'" style="width:100%;height:100%;object-fit:cover;">'
+                ? '<img src="'+payload.fromAvatar+'" alt="">'
                 : initial;
-            banner.style.display = 'block';
-            // Авто-скрытие через 30 сек
+            const isAudio = payload.kind === 'audio';
+            kindLabel.textContent = isAudio ? 'Входящий аудиозвонок' : 'Входящий видеозвонок';
+            kindIcon.innerHTML = isAudio
+                ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>'
+                : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>';
+            banner.classList.add('show');
+            try { _startRingtone(); } catch(_){}
+            // Авто-скрытие через 35 сек
             clearTimeout(_showIncomingCall._t);
-            _showIncomingCall._t = setTimeout(() => rejectIncomingCall(), 30000);
+            _showIncomingCall._t = setTimeout(() => rejectIncomingCall(), 35000);
         }
 
         function acceptIncomingCall() {
@@ -1443,12 +1558,17 @@
                     ws.send(JSON.stringify({ type:'call_invite_response', to: c.from, roomId: c.roomId, accepted: true }));
                 }
             } catch(_){}
+            try { _stopRingtone(); } catch(_){}
             document.getElementById('incomingCallBanner').style.display = 'none';
-            _openCallWindow(c.roomId, c.kind === 'voice' ? 'p2p' : 'group', c.title || c.fromName || 'Видеозвонок');
+            const kind = (c.kind === 'audio') ? 'audio' : 'video';
+            // p2p — если приглашение пришло персонально (1-на-1)
+            const callType = 'p2p';
+            _openCallWindow(c.roomId, callType, c.title || c.fromName || (kind === 'audio' ? 'Аудиозвонок' : 'Видеозвонок'), kind);
             _incomingCall = null;
         }
 
         function rejectIncomingCall() {
+            try { _stopRingtone(); } catch(_){}
             if (!_incomingCall) {
                 document.getElementById('incomingCallBanner').style.display = 'none';
                 return;
