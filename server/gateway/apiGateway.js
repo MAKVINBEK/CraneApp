@@ -3477,25 +3477,30 @@ app.post('/api/v1/users/:userId/unblock', authMiddleware, async (req, res) => {
 
 app.get('/api/v1/chats', authMiddleware, async (req, res) => {
     try {
-        // Используем подзапрос вместо JOIN для защиты от дубликатов
         const result = await query(
-            `SELECT DISTINCT ON (c.id) c.*, 
-                    (SELECT cm2.role FROM chat_members cm2 WHERE cm2.chat_id = c.id AND cm2.user_id = $1) as role,
-                    (SELECT COUNT(*) FROM messages m WHERE m.chat_id = c.id AND m.is_deleted = FALSE) as message_count,
-                    (SELECT MAX(created_at) FROM messages m WHERE m.chat_id = c.id) as last_message_at,
-                    (SELECT content FROM messages m WHERE m.chat_id = c.id AND m.is_deleted = FALSE ORDER BY m.created_at DESC LIMIT 1) as last_message_content,
-                    (SELECT type FROM messages m WHERE m.chat_id = c.id AND m.is_deleted = FALSE ORDER BY m.created_at DESC LIMIT 1) as last_message_type,
-                    (SELECT sender_id FROM messages m WHERE m.chat_id = c.id AND m.is_deleted = FALSE ORDER BY m.created_at DESC LIMIT 1) as last_message_sender_id,
-                    (SELECT is_encrypted FROM messages m WHERE m.chat_id = c.id AND m.is_deleted = FALSE ORDER BY m.created_at DESC LIMIT 1) as last_message_encrypted,
-                    (SELECT encryption_iv FROM messages m WHERE m.chat_id = c.id AND m.is_deleted = FALSE ORDER BY m.created_at DESC LIMIT 1) as last_message_iv,
-                    COALESCE(ucs.is_pinned, FALSE) as user_is_pinned,
-                    ucs.pinned_at as user_pinned_at,
-                    COALESCE(ucs.is_archived, FALSE) as user_is_archived
+            `SELECT c.*,
+                    cm.role,
+                    COALESCE(ucs.is_pinned, FALSE)   AS user_is_pinned,
+                    ucs.pinned_at                     AS user_pinned_at,
+                    COALESCE(ucs.is_archived, FALSE)  AS user_is_archived,
+                    lm.content      AS last_message_content,
+                    lm.type         AS last_message_type,
+                    lm.sender_id    AS last_message_sender_id,
+                    lm.is_encrypted AS last_message_encrypted,
+                    lm.encryption_iv AS last_message_iv,
+                    lm.created_at   AS last_message_at
              FROM chats c
-             LEFT JOIN user_chat_settings ucs ON c.id = ucs.chat_id AND ucs.user_id = $1
-             WHERE c.id IN (SELECT cm.chat_id FROM chat_members cm WHERE cm.user_id = $1)
-             AND COALESCE(ucs.is_archived, FALSE) = FALSE
-             ORDER BY c.id, user_is_pinned DESC, user_pinned_at DESC NULLS LAST, last_message_at DESC NULLS LAST`,
+             JOIN chat_members cm ON cm.chat_id = c.id AND cm.user_id = $1
+             LEFT JOIN user_chat_settings ucs ON ucs.chat_id = c.id AND ucs.user_id = $1
+             LEFT JOIN LATERAL (
+                 SELECT content, type, sender_id, is_encrypted, encryption_iv, created_at
+                 FROM messages
+                 WHERE chat_id = c.id AND is_deleted = FALSE
+                 ORDER BY created_at DESC
+                 LIMIT 1
+             ) lm ON TRUE
+             WHERE COALESCE(ucs.is_archived, FALSE) = FALSE
+             ORDER BY user_is_pinned DESC, user_pinned_at DESC NULLS LAST, lm.created_at DESC NULLS LAST`,
             [req.user.id]
         );
         
@@ -3509,7 +3514,6 @@ app.get('/api/v1/chats', authMiddleware, async (req, res) => {
             isPinned: c.user_is_pinned || false,
             isArchived: c.user_is_archived || false,
             pinnedAt: c.user_pinned_at,
-            messageCount: parseInt(c.message_count), 
             lastMessageAt: c.last_message_at,
             lastMessage: c.last_message_content || '',
             lastMessageEncrypted: c.last_message_encrypted || false,
