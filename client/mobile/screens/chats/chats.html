@@ -4452,96 +4452,90 @@
                         }
                     }
                     
-                    // Обрабатываем приватные чаты с проверкой на дубликаты пользователей
-                    for (let i = 0; i < privateChats.length; i++) {
-                        const c = privateChats[i];
-                        
-                        // Пропускаем если уже обработали этот чат
-                        if (uniqueChats.has(c.id)) {
+                    // Обрабатываем приватные чаты — параллельно с таймаутом 5с
+                    function fetchWithTimeout(url, opts, ms) {
+                        const ctrl = new AbortController();
+                        const tid = setTimeout(() => ctrl.abort(), ms);
+                        return fetch(url, { ...opts, signal: ctrl.signal })
+                            .finally(() => clearTimeout(tid));
+                    }
+
+                    const memberResults = await Promise.allSettled(
+                        privateChats.map(c => {
+                            if (uniqueChats.has(c.id)) return Promise.resolve({ skip: true, c });
+                            return fetchWithTimeout('/api/v1/chats/' + c.id + '/members',
+                                { headers: { 'Authorization': 'Bearer ' + token } }, 5000)
+                                .then(r => r.ok ? r.json().then(d => ({ c, mData: d })) : Promise.resolve({ c, status: r.status }))
+                                .catch(() => ({ c, timeout: true }));
+                        })
+                    );
+
+                    for (const result of memberResults) {
+                        if (result.status === 'rejected') continue;
+                        const val = result.value;
+                        if (!val || val.skip) continue;
+                        const c = val.c;
+
+                        // При таймауте или ошибке — используем кэш
+                        if (val.timeout || val.status) {
+                            const cached = chatUsers[c.id];
+                            if (cached) {
+                                uniqueChats.set(c.id, prepareChatEntry(c, {
+                                    id: c.id, name: cached.name, av: cached.av,
+                                    lastMessage: formatLastMessage(c),
+                                    time: c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '',
+                                    isOnline: cached.isOnline, isPinned: c.isPinned || false,
+                                    lastMessageType: c.lastMessageType
+                                }));
+                                if (c.isPinned) pinnedChatIds.add(c.id);
+                            }
                             continue;
                         }
-                        
-                        try {
-                            const mRes = await fetch('/api/v1/chats/' + c.id + '/members', {
-                                headers: { 'Authorization': 'Bearer ' + token }
-                            });
-                            // При rate limit — используем кэш
-                            if (mRes.status === 429) {
-                                const cached = chatUsers[c.id];
-                                if (cached) {
-                                    let lastMsgText = formatLastMessage(c);
-                                    uniqueChats.set(c.id, prepareChatEntry(c, {
-                                        id: c.id, name: cached.name, av: cached.av,
-                                        lastMessage: lastMsgText,
-                                        time: c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '',
-                                        isOnline: cached.isOnline, isPinned: c.isPinned || false,
-                                        lastMessageType: c.lastMessageType
-                                    }));
-                                    if (c.isPinned) pinnedChatIds.add(c.id);
-                                }
-                                continue;
-                            }
-                            const mData = await mRes.json();
-                            const other = mData.members && mData.members.find(function(m) { 
-                                return m.id !== user.id; 
-                            });
-                            
-                            if (other) {
-                                // Проверяем, не обрабатывали ли мы уже чат с этим пользователем
-                                let foundDuplicate = false;
-                                for (const [existingChatId, existingChat] of uniqueChats) {
-                                    // Проверяем по ID пользователя
-                                    const existingUser = chatUsers[existingChatId];
-                                    if (existingUser && existingUser.id === other.id) {
-                                        console.warn('Duplicate chat found for user', other.username, '- keeping newer chat:', c.id, 'vs existing:', existingChatId);
-                                        // Удаляем старый чат
-                                        uniqueChats.delete(existingChatId);
-                                        foundDuplicate = true;
-                                        break;
-                                    }
-                                }
-                                
-                                // Сохраняем информацию о пользователе
-                                chatUsers[c.id] = {
-                                    id: other.id,
-                                    username: other.username,
-                                    name: other.first_name || other.username,
-                                    av: other.avatar_url || (other.first_name ? other.first_name[0] : other.username[0]),
-                                    bio: other.bio || '',
-                                    isOnline: other.is_blocked ? false : other.is_online,
-                                    lastSeen: other.last_seen,
-                                    badge: other.badge || null,
-                                    badges: other.badges || [],
-                                    isBot: other.is_bot || false,
-                                    isPremium: other.is_premium || false,
-                                    isBlocked: other.is_blocked || false
-                                };
-                                
-                                // Формируем текст последнего сообщения
-                                let lastMsgText = formatLastMessage(c);
-                                
-                                // Добавляем в Map
-                                uniqueChats.set(c.id, prepareChatEntry(c, {
-                                    id: c.id,
-                                    name: chatUsers[c.id].name,
-                                    av: chatUsers[c.id].av,
-                                    lastMessage: lastMsgText,
-                                    lastMessageAt: c.lastMessageAt || null,
-                                    time: c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '',
-                                    isOnline: other.is_online,
-                                    isPinned: c.isPinned || false,
-                                    lastMessageType: c.lastMessageType,
-                                    badge: other.badge || null,
-                                    isBot: other.is_bot || false
-                                }));
-                                
-                                // Добавляем в pinnedChatIds если чат закреплён
-                                if (c.isPinned) {
-                                    pinnedChatIds.add(c.id);
+
+                        const other = val.mData && val.mData.members && val.mData.members.find(function(m) {
+                            return m.id !== user.id;
+                        });
+
+                        if (other) {
+                            // Удаляем дубликаты по пользователю
+                            for (const [existingChatId] of uniqueChats) {
+                                const existingUser = chatUsers[existingChatId];
+                                if (existingUser && existingUser.id === other.id) {
+                                    uniqueChats.delete(existingChatId);
+                                    break;
                                 }
                             }
-                        } catch (e) {
-                            console.error('Error loading chat members:', e);
+
+                            chatUsers[c.id] = {
+                                id: other.id,
+                                username: other.username,
+                                name: other.first_name || other.username,
+                                av: other.avatar_url || (other.first_name ? other.first_name[0] : other.username[0]),
+                                bio: other.bio || '',
+                                isOnline: other.is_blocked ? false : other.is_online,
+                                lastSeen: other.last_seen,
+                                badge: other.badge || null,
+                                badges: other.badges || [],
+                                isBot: other.is_bot || false,
+                                isPremium: other.is_premium || false,
+                                isBlocked: other.is_blocked || false
+                            };
+
+                            uniqueChats.set(c.id, prepareChatEntry(c, {
+                                id: c.id,
+                                name: chatUsers[c.id].name,
+                                av: chatUsers[c.id].av,
+                                lastMessage: formatLastMessage(c),
+                                lastMessageAt: c.lastMessageAt || null,
+                                time: c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '',
+                                isOnline: other.is_online,
+                                isPinned: c.isPinned || false,
+                                lastMessageType: c.lastMessageType,
+                                badge: other.badge || null,
+                                isBot: other.is_bot || false
+                            }));
+
+                            if (c.isPinned) pinnedChatIds.add(c.id);
                         }
                     }
                     
