@@ -291,14 +291,38 @@ app.get('/', (req, res) => {
 // VIDEO CALLS — REST ENDPOINTS
 // ============================================
 
-// Конфиг ICE-серверов: STUN бесплатный + TURN если задан в ENV
+// Конфиг ICE-серверов: STUN + TURN (Metered или ручные ENV)
+let _cachedIceServers = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' }
+];
+
+async function _refreshMeteredTurn() {
+    const apiKey = process.env.METERED_API_KEY;
+    const domain = process.env.METERED_DOMAIN;
+    if (!apiKey || !domain) return;
+    try {
+        const res = await fetch(`https://${domain}/api/v1/turn/credentials?apiKey=${apiKey}`);
+        if (!res.ok) return;
+        const servers = await res.json();
+        if (Array.isArray(servers) && servers.length > 0) {
+            _cachedIceServers = servers;
+            logger.info(`📡 TURN credentials refreshed from Metered (${servers.length} servers)`);
+        }
+    } catch (e) {
+        logger.warn('TURN refresh failed:', e.message);
+    }
+}
+
+// Обновляем при старте и каждые 12 часов (credentials у Metered живут 24ч)
+_refreshMeteredTurn();
+setInterval(_refreshMeteredTurn, 12 * 60 * 60 * 1000);
+
 function getIceServers() {
-    const ice = [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' }
-    ];
-    if (process.env.TURN_URL && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
+    const ice = [..._cachedIceServers];
+    // Ручные TURN через ENV (если Metered не используется)
+    if (!process.env.METERED_API_KEY && process.env.TURN_URL && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
         ice.push({
             urls: process.env.TURN_URL,
             username: process.env.TURN_USERNAME,
