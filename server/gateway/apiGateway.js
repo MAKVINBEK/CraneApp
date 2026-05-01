@@ -384,7 +384,23 @@ app.get('/api/v1/calls/rooms/:roomId', async (req, res) => {
 app.get('/api/v1/calls/ice-servers', async (req, res) => {
     const servers = getIceServers();
     const hasTurn = servers.some(s => (Array.isArray(s.urls) ? s.urls : [s.urls]).some(u => u.startsWith('turn:')));
-    res.json({ servers, hasTurn, meteredConfigured: !!(process.env.METERED_API_KEY && process.env.METERED_DOMAIN) });
+    const apiKey = process.env.METERED_API_KEY;
+    const domain = process.env.METERED_DOMAIN;
+    let meteredTest = null;
+    if (apiKey && domain) {
+        try {
+            const ctrl = new AbortController();
+            const tid = setTimeout(() => ctrl.abort(), 8000);
+            const url = `https://${domain}/api/v1/turn/credentials?apiKey=${apiKey}`;
+            const r = await fetch(url, { signal: ctrl.signal });
+            clearTimeout(tid);
+            const body = await r.text();
+            meteredTest = { status: r.status, ok: r.ok, url, body: body.slice(0, 500) };
+        } catch (e) {
+            meteredTest = { error: e.message };
+        }
+    }
+    res.json({ servers, hasTurn, meteredConfigured: !!(apiKey && domain), meteredTest });
 });
 
 // Список активных комнат (для раздела «Встречи»)
