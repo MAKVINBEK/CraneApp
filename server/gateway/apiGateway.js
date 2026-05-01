@@ -3915,21 +3915,24 @@ app.delete('/api/v1/chats/:chatId/archive', authMiddleware, async (req, res) => 
 // Получить архивированные чаты
 app.get('/api/v1/chats/archived', authMiddleware, async (req, res) => {
     try {
-        // Используем подзапрос вместо JOIN для защиты от дубликатов
         const result = await query(
-            `SELECT DISTINCT ON (c.id) c.*, 
-                    (SELECT cm2.role FROM chat_members cm2 WHERE cm2.chat_id = c.id AND cm2.user_id = $1) as role,
-                    (SELECT content FROM messages m WHERE m.chat_id = c.id AND m.is_deleted = FALSE ORDER BY m.created_at DESC LIMIT 1) as last_message_content,
-                    (SELECT type FROM messages m WHERE m.chat_id = c.id AND m.is_deleted = FALSE ORDER BY m.created_at DESC LIMIT 1) as last_message_type,
-                    (SELECT is_encrypted FROM messages m WHERE m.chat_id = c.id AND m.is_deleted = FALSE ORDER BY m.created_at DESC LIMIT 1) as last_message_encrypted,
-                    (SELECT encryption_iv FROM messages m WHERE m.chat_id = c.id AND m.is_deleted = FALSE ORDER BY m.created_at DESC LIMIT 1) as last_message_iv,
-                    (SELECT MAX(created_at) FROM messages m WHERE m.chat_id = c.id) as last_message_at,
-                    ucs.archived_at as user_archived_at
+            `SELECT c.*, cm.role,
+                    lm.content      AS last_message_content,
+                    lm.type         AS last_message_type,
+                    lm.is_encrypted AS last_message_encrypted,
+                    lm.encryption_iv AS last_message_iv,
+                    lm.created_at   AS last_message_at,
+                    ucs.archived_at AS user_archived_at
              FROM chats c
-             JOIN user_chat_settings ucs ON c.id = ucs.chat_id AND ucs.user_id = $1
-             WHERE c.id IN (SELECT cm.chat_id FROM chat_members cm WHERE cm.user_id = $1)
-             AND ucs.is_archived = TRUE
-             ORDER BY c.id, ucs.archived_at DESC`,
+             JOIN chat_members cm ON c.id = cm.chat_id AND cm.user_id = $1
+             JOIN user_chat_settings ucs ON c.id = ucs.chat_id AND ucs.user_id = $1 AND ucs.is_archived = TRUE
+             LEFT JOIN LATERAL (
+                 SELECT content, type, is_encrypted, encryption_iv, created_at
+                 FROM messages
+                 WHERE chat_id = c.id AND is_deleted = FALSE
+                 ORDER BY created_at DESC LIMIT 1
+             ) lm ON TRUE
+             ORDER BY ucs.archived_at DESC`,
             [req.user.id]
         );
         
@@ -4676,6 +4679,15 @@ app.delete('/api/v1/messages/:messageId/favorite', authMiddleware, async (req, r
 
 const connectedUsers = new Map();
 
+// Throttle last_seen updates: не чаще 1 раза в 30 секунд на пользователя
+const _lastSeenTs = new Map();
+function throttleLastSeen(userId) {
+    const now = Date.now();
+    if ((_lastSeenTs.get(userId) || 0) > now - 30000) return;
+    _lastSeenTs.set(userId, now);
+    query('UPDATE users SET last_seen = NOW() WHERE id = $1', [userId]).catch(() => {});
+}
+
 wss.on('connection', async (ws, req) => {
     const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
     
@@ -4697,28 +4709,34 @@ wss.on('connection', async (ws, req) => {
 
     logger.info('🔌 WebSocket connection:', userId, 'from', ip);
 
-    // Обновляем last_seen при подключении
+    // last_seen + рассылка статуса "онлайн" — в фоне, не блокируем WS-handshake
     if (userId && !userId.startsWith('anonymous')) {
-        await query('UPDATE users SET last_seen = NOW() WHERE id = $1', [userId]);
-        
-        // Уведомляем все чаты пользователя о том, что он онлайн
-        try {
-            const userChats = await query(
-                'SELECT chat_id FROM chat_members WHERE user_id = $1',
-                [userId]
-            );
-            
-            for (const chat of userChats.rows) {
-                broadcastToChat(chat.chat_id, { 
-                    type: 'user_status', 
-                    userId: userId, 
-                    isOnline: true,
+        (async () => {
+            try {
+                await query('UPDATE users SET last_seen = NOW() WHERE id = $1', [userId]);
+                // Один JOIN вместо N+1: все пользователи, которые состоят в одном чате с userId
+                const res = await query(
+                    `SELECT DISTINCT cm2.user_id
+                     FROM chat_members cm1
+                     JOIN chat_members cm2 ON cm1.chat_id = cm2.chat_id AND cm2.user_id != $1
+                     WHERE cm1.user_id = $1`,
+                    [userId]
+                );
+                const statusMsg = JSON.stringify({
+                    type: 'user_status', userId, isOnline: true,
                     lastSeen: new Date().toISOString()
-                }, userId);
-            }
-        } catch (e) {
-            logger.warn('⚠️ Could not broadcast online status:', e.message);
-        }
+                });
+                for (const row of res.rows) {
+                    const conns = connectedUsers.get(row.user_id);
+                    if (!conns) continue;
+                    for (const c of conns) {
+                        if (c.readyState === WebSocket.OPEN) {
+                            try { c.send(statusMsg); } catch (_) {}
+                        }
+                    }
+                }
+            } catch (_) {}
+        })();
     }
 
     if (!connectedUsers.has(userId)) {
@@ -4757,10 +4775,8 @@ wss.on('connection', async (ws, req) => {
         try {
             const msg = JSON.parse(data);
             
-            // Обновляем last_seen при любой активности
-            if (userId && !userId.startsWith('anonymous')) {
-                await query('UPDATE users SET last_seen = NOW() WHERE id = $1', [userId]);
-            }
+            // Обновляем last_seen — не чаще 1 раза в 30 сек, не блокируем обработку
+            if (userId && !userId.startsWith('anonymous')) throttleLastSeen(userId);
             
             switch (msg.type) {
                 case 'chat_message':
@@ -4888,25 +4904,32 @@ wss.on('connection', async (ws, req) => {
             if (userConnections.size === 0) {
                 connectedUsers.delete(userId);
                 
-                // Уведомляем о выходе пользователя
+                // Рассылка статуса "оффлайн" — в фоне, один JOIN
                 if (userId && !userId.startsWith('anonymous')) {
-                    try {
-                        const userChats = await query(
-                            'SELECT chat_id FROM chat_members WHERE user_id = $1',
-                            [userId]
-                        );
-                        
-                        for (const chat of userChats.rows) {
-                            broadcastToChat(chat.chat_id, { 
-                                type: 'user_status', 
-                                userId: userId, 
-                                isOnline: false,
+                    (async () => {
+                        try {
+                            const res = await query(
+                                `SELECT DISTINCT cm2.user_id
+                                 FROM chat_members cm1
+                                 JOIN chat_members cm2 ON cm1.chat_id = cm2.chat_id AND cm2.user_id != $1
+                                 WHERE cm1.user_id = $1`,
+                                [userId]
+                            );
+                            const statusMsg = JSON.stringify({
+                                type: 'user_status', userId, isOnline: false,
                                 lastSeen: new Date().toISOString()
-                            }, userId);
-                        }
-                    } catch (e) {
-                        logger.warn('⚠️ Could not broadcast offline status:', e.message);
-                    }
+                            });
+                            for (const row of res.rows) {
+                                const conns = connectedUsers.get(row.user_id);
+                                if (!conns) continue;
+                                for (const c of conns) {
+                                    if (c.readyState === WebSocket.OPEN) {
+                                        try { c.send(statusMsg); } catch (_) {}
+                                    }
+                                }
+                            }
+                        } catch (_) {}
+                    })();
                 }
             }
         }
@@ -4960,42 +4983,23 @@ function sendToCallRoom(roomId, message, exceptUserId) {
 
 async function broadcastToChat(chatId, message, excludeUserId) {
     try {
-        logger.info('📡 Broadcasting to chat:', chatId, 'exclude:', excludeUserId);
         const members = await query(
             'SELECT user_id FROM chat_members WHERE chat_id = $1',
             [chatId]
         );
         const memberIds = new Set(members.rows.map(r => r.user_id));
-        logger.info('📡 Members count:', memberIds.size);
-
-        let sentCount = 0;
+        const data = JSON.stringify(message);
         wss.clients.forEach(client => {
             if (
                 client.readyState === WebSocket.OPEN &&
                 client.userId !== excludeUserId &&
                 memberIds.has(client.userId)
             ) {
-                try {
-                    client.send(JSON.stringify(message));
-                    sentCount++;
-                } catch (err) {
-                    logger.error('❌ WS send error:', err);
-                }
+                try { client.send(data); } catch (_) {}
             }
         });
-        logger.info('📡 Sent to', sentCount, 'clients');
     } catch (e) {
-        logger.error('❌ Broadcast error:', e);
-        // fallback — рассылаем всем если БД недоступна
-        wss.clients.forEach(client => {
-            if (client.readyState === WebSocket.OPEN && client.userId !== excludeUserId) {
-                try {
-                    client.send(JSON.stringify(message));
-                } catch (err) {
-                    logger.error('❌ WS fallback send error:', err);
-                }
-            }
-        });
+        logger.warn('⚠️ broadcastToChat error:', e.message);
     }
 }
 
