@@ -4939,8 +4939,10 @@
             
             if (window.innerWidth < 768) {
                 document.getElementById('sidebar').classList.add('hidden');
+                const tb = document.getElementById('tabBar');
+                if (tb) tb.style.display = 'none';
             }
-            
+
             document.getElementById('noChat').style.display = 'none';
             document.getElementById('chatView').classList.add('active');
 
@@ -5124,9 +5126,11 @@
         function closeChat() {
             activeChat = null;
             renderChatList();
-            
+
             document.getElementById('sidebar').classList.remove('hidden');
-            
+            const tb = document.getElementById('tabBar');
+            if (tb) tb.style.display = '';
+
             document.getElementById('noChat').style.display = 'flex';
             document.getElementById('chatView').classList.remove('active');
             cancelReply();
