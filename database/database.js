@@ -8,12 +8,17 @@ const pool = new Pool({
     max: 10,
     connectionTimeoutMillis: 5000,
     idleTimeoutMillis: 30000,
-    statement_timeout: 15000,
 });
 
-async function query(text, params) {
-    const res = await pool.query(text, params);
-    return res;
+async function query(text, params, timeoutMs = 12000) {
+    const client = await pool.connect();
+    try {
+        await client.query(`SET statement_timeout = ${timeoutMs}`);
+        const res = await client.query(text, params);
+        return res;
+    } finally {
+        client.release();
+    }
 }
 
 async function initDatabase() {
