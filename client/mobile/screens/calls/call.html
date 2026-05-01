@@ -580,12 +580,16 @@
                 if (data.iceServers) iceServers = data.iceServers;
                 if (data.room && data.room.title) document.getElementById('callTitle').textContent = data.room.title;
             } else if (res.status === 404) {
-                // Комнаты ещё нет — создадим (если хост)
-                await fetch('/api/v1/calls/rooms', {
+                // Комнаты ещё нет — создадим и возьмём ICE-серверы из ответа
+                const cr = await fetch('/api/v1/calls/rooms', {
                     method:'POST',
                     headers:{ 'Authorization':'Bearer '+TOKEN, 'Content-Type':'application/json' },
                     body: JSON.stringify({ type: ROOM_TYPE, title: ROOM_TITLE, roomId: ROOM_ID })
                 });
+                if (cr.ok) {
+                    const cd = await cr.json();
+                    if (cd.iceServers && cd.iceServers.length) iceServers = cd.iceServers;
+                }
             }
         } catch(_) {}
     }

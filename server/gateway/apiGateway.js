@@ -380,6 +380,13 @@ app.get('/api/v1/calls/rooms/:roomId', async (req, res) => {
     });
 });
 
+// Диагностика ICE-серверов
+app.get('/api/v1/calls/ice-servers', async (req, res) => {
+    const servers = getIceServers();
+    const hasTurn = servers.some(s => (Array.isArray(s.urls) ? s.urls : [s.urls]).some(u => u.startsWith('turn:')));
+    res.json({ servers, hasTurn, meteredConfigured: !!(process.env.METERED_API_KEY && process.env.METERED_DOMAIN) });
+});
+
 // Список активных комнат (для раздела «Встречи»)
 app.get('/api/v1/calls/rooms', async (req, res) => {
     const u = await authFromHeader(req);
