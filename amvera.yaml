@@ -1,6 +1,5 @@
 meta:
   environment: dockerfile
-  projectType: web
 
 build:
   dockerfile: Dockerfile
