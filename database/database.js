@@ -4,16 +4,15 @@ const { Pool } = require('pg');
 // Railway автоматически даёт эти переменные при добавлении PostgreSQL
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: false, // Временно отключаем SSL для теста
-    connectionTimeoutMillis: 10000,
-    idleTimeoutMillis: 30000
+    ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
+    max: 10,
+    connectionTimeoutMillis: 5000,
+    idleTimeoutMillis: 30000,
+    statement_timeout: 15000,
 });
 
 async function query(text, params) {
-    const start = Date.now();
     const res = await pool.query(text, params);
-    const duration = Date.now() - start;
-    console.log('Executed query', { text: text.substring(0, 50), duration, rows: res.rowCount });
     return res;
 }
 
