@@ -1468,8 +1468,27 @@
             try {
                 const ws = window.craneWs || window.ws;
                 if (ws && ws.readyState === 1) {
-                    const memberIds = (activeChat.memberIds || []).filter(id => id && id !== user.id);
-                    const targets = memberIds.length ? memberIds : (activeChat.peerId ? [activeChat.peerId] : []);
+                    // Для личного чата берём ID собеседника из chatUsers
+                    let targets = [];
+                    if (!isGroup) {
+                        const peerId = chatUsers[activeChat.id]?.id;
+                        if (peerId && peerId !== user.id) targets = [peerId];
+                    } else {
+                        // Для группы — запрашиваем участников через API
+                        try {
+                            const token = localStorage.getItem('craneapp_auth_token');
+                            const r = await fetch('/api/v1/chats/' + activeChat.id + '/members', {
+                                headers: { 'Authorization': 'Bearer ' + token }
+                            });
+                            if (r.ok) {
+                                const d = await r.json();
+                                targets = (d.members || []).map(m => m.id || m.userId).filter(id => id && id !== user.id);
+                            }
+                        } catch(_) {}
+                    }
+                    if (targets.length === 0) {
+                        try { showToast('Не удалось найти собеседника'); } catch(_){}
+                    }
                     for (const to of targets) {
                         ws.send(JSON.stringify({
                             type: 'call_invite', to, roomId,
