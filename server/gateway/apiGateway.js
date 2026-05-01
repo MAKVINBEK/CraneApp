@@ -302,8 +302,11 @@ async function _refreshMeteredTurn() {
     const apiKey = process.env.METERED_API_KEY;
     const domain = process.env.METERED_DOMAIN;
     if (!apiKey || !domain) return;
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 8000); // таймаут 8 сек
     try {
-        const res = await fetch(`https://${domain}/api/v1/turn/credentials?apiKey=${apiKey}`);
+        const res = await fetch(`https://${domain}/api/v1/turn/credentials?apiKey=${apiKey}`, { signal: ctrl.signal });
+        clearTimeout(tid);
         if (!res.ok) return;
         const servers = await res.json();
         if (Array.isArray(servers) && servers.length > 0) {
@@ -311,12 +314,13 @@ async function _refreshMeteredTurn() {
             logger.info(`📡 TURN credentials refreshed from Metered (${servers.length} servers)`);
         }
     } catch (e) {
+        clearTimeout(tid);
         logger.warn('TURN refresh failed:', e.message);
     }
 }
 
-// Обновляем при старте и каждые 12 часов (credentials у Metered живут 24ч)
-_refreshMeteredTurn();
+// Обновляем при старте (с задержкой 3с чтобы не мешать запуску) и каждые 12 часов
+setTimeout(_refreshMeteredTurn, 3000);
 setInterval(_refreshMeteredTurn, 12 * 60 * 60 * 1000);
 
 function getIceServers() {
