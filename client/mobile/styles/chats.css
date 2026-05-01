@@ -754,7 +754,7 @@ body {
     background: var(--bg-secondary);
     display: flex;
     gap: 6px;
-    align-items: flex-end;
+    align-items: center;
     flex-shrink: 0;
     position: relative;
 }
