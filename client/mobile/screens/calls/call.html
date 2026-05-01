@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+    <meta name="theme-color" content="#07070a">
+    <title>CraneApp — Звонок</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geologica:wght@400;500;600;700&display=swap">
+    <style>
+    :root{
+        --bg:#07070a;
+        --bg-elev:rgba(28,28,34,0.72);
+        --bg-elev-2:rgba(38,38,46,0.86);
+        --stroke:rgba(255,255,255,0.10);
+        --stroke-strong:rgba(255,255,255,0.18);
+        --text:#fff;
+        --text-2:rgba(235,235,245,0.74);
+        --text-3:rgba(235,235,245,0.46);
+        --accent:#9b82ff;
+        --accent-2:#b8a4ff;
+        --danger:#ff4b62;
+        --success:#34d399;
+        --safe-bottom:env(safe-area-inset-bottom,0px);
+        --safe-top:env(safe-area-inset-top,0px);
+    }
+    *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+    html,body{height:100%;overflow:hidden;font-family:'Geologica','SF Pro Display',-apple-system,system-ui,sans-serif;letter-spacing:-0.01em;}
+    body{
+        background:#000;
+        color:var(--text);
+        -webkit-font-smoothing:antialiased;
+        position:relative;
+    }
+    body::before{
+        content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+        background:
+            radial-gradient(circle at 18% 14%, rgba(155,130,255,0.18) 0%, transparent 40%),
+            radial-gradient(circle at 84% 90%, rgba(255,75,136,0.14) 0%, transparent 42%);
+    }
+
+    /* ===== Лобби (до подключения к звонку) ===== */
+    .lobby{
+        position:fixed;inset:0;z-index:5;
+        display:flex;flex-direction:column;align-items:center;justify-content:center;
+        padding:32px 22px;
+        background:rgba(10,10,14,0.6);
+        backdrop-filter:blur(24px) saturate(160%);
+        -webkit-backdrop-filter:blur(24px) saturate(160%);
+    }
+    .lobby.hidden{display:none;}
+    .lobby h1{font-size:26px;font-weight:700;letter-spacing:-0.02em;margin-bottom:6px;text-align:center;}
+    .lobby .sub{color:var(--text-3);font-size:14px;margin-bottom:28px;text-align:center;}
+    .lobby .preview{
+        width:min(420px,86vw);aspect-ratio:16/10;
+        border-radius:24px;overflow:hidden;
+        background:#0d0d12;
+        border:1px solid var(--stroke);
+        position:relative;
+        box-shadow:0 30px 80px rgba(0,0,0,0.5);
+        margin-bottom:22px;
+    }
+    .lobby .preview video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);}
+    .lobby .preview .preview-empty{
+        position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+        color:var(--text-3);font-size:13px;gap:10px;
+    }
+    .lobby .preview .preview-empty svg{width:34px;height:34px;opacity:0.6;}
+    .lobby .controls{display:flex;gap:14px;margin-bottom:22px;}
+    .lobby .btn-toggle{
+        width:54px;height:54px;border-radius:50%;
+        border:1px solid var(--stroke-strong);
+        background:var(--bg-elev);
+        backdrop-filter:blur(18px);
+        -webkit-backdrop-filter:blur(18px);
+        color:#fff;cursor:pointer;
+        display:flex;align-items:center;justify-content:center;
+        transition:transform 0.15s,background 0.18s,border-color 0.18s;
+    }
+    .lobby .btn-toggle:active{transform:scale(0.94);}
+    .lobby .btn-toggle.off{background:rgba(255,75,98,0.18);border-color:rgba(255,75,98,0.4);color:#ffb6c1;}
+    .lobby .btn-toggle svg{width:22px;height:22px;}
+    .lobby .btn-join{
+        height:52px;padding:0 32px;border-radius:14px;border:none;
+        background:linear-gradient(135deg,#9b82ff,#5a8bff);
+        color:#fff;font:600 15px/1 'Geologica',sans-serif;letter-spacing:-0.01em;
+        cursor:pointer;
+        box-shadow:0 14px 36px rgba(90,139,255,0.36);
+        transition:transform 0.15s,filter 0.18s;
+    }
+    .lobby .btn-join:hover{filter:brightness(1.07);}
+    .lobby .btn-join:active{transform:scale(0.97);}
+    .lobby .btn-join:disabled{opacity:0.5;cursor:not-allowed;}
+    .lobby .room-info{
+        margin-top:6px;color:var(--text-3);font-size:12px;
+        display:flex;align-items:center;gap:8px;
+    }
+    .lobby .room-info code{
+        background:var(--bg-elev);
+        padding:3px 8px;border-radius:6px;
+        font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+        color:var(--text-2);font-size:11px;
+        border:1px solid var(--stroke);
+    }
+
+    /* ===== Главный экран звонка ===== */
+    .call{
+        position:fixed;inset:0;z-index:1;
+        display:flex;flex-direction:column;
+    }
+    .call-header{
+        position:absolute;top:0;left:0;right:0;
+        padding:calc(14px + var(--safe-top)) 18px 14px;
+        display:flex;align-items:center;justify-content:space-between;
+        z-index:10;
+        background:linear-gradient(180deg,rgba(0,0,0,0.5) 0%,transparent 100%);
+        pointer-events:none;
+    }
+    .call-header > * { pointer-events:auto; }
+    .call-meta{display:flex;flex-direction:column;}
+    .call-title{font-size:15px;font-weight:600;letter-spacing:-0.01em;}
+    .call-time{font-size:12px;color:var(--text-3);font-variant-numeric:tabular-nums;margin-top:2px;}
+    .call-badge{
+        background:var(--bg-elev);
+        backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+        border:1px solid var(--stroke);
+        border-radius:999px;padding:6px 12px;
+        font-size:12px;color:var(--text-2);
+        display:flex;align-items:center;gap:6px;
+    }
+    .call-badge .dot{width:6px;height:6px;border-radius:50%;background:var(--success);box-shadow:0 0 8px var(--success);}
+
+    /* Сетка тайлов */
+    .tiles{
+        flex:1;display:grid;gap:10px;padding:10px;
+        padding-top:calc(72px + var(--safe-top));
+        padding-bottom:calc(120px + var(--safe-bottom));
+    }
+    .tiles[data-count="1"]{grid-template-columns:1fr;grid-template-rows:1fr;}
+    .tiles[data-count="2"]{grid-template-columns:1fr;grid-template-rows:1fr 1fr;}
+    .tiles[data-count="3"]{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;}
+    .tiles[data-count="3"] .tile:nth-child(1){grid-column:span 2;}
+    .tiles[data-count="4"]{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;}
+    .tiles[data-count="5"]{grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr;}
+    .tiles[data-count="5"] .tile:nth-child(1){grid-column:span 2;}
+    @media(min-width:900px){
+        .tiles[data-count="2"]{grid-template-columns:1fr 1fr;grid-template-rows:1fr;}
+        .tiles[data-count="3"]{grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr;}
+        .tiles[data-count="3"] .tile:nth-child(1){grid-column:span 1;}
+        .tiles[data-count="4"]{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;}
+    }
+
+    .tile{
+        position:relative;border-radius:20px;overflow:hidden;
+        background:#0d0d14;border:1px solid var(--stroke);
+        box-shadow:0 14px 40px rgba(0,0,0,0.4);
+        transition:border-color 0.18s,box-shadow 0.18s;
+    }
+    .tile.speaking{border-color:rgba(155,130,255,0.65);box-shadow:0 0 0 2px rgba(155,130,255,0.45),0 14px 40px rgba(0,0,0,0.4);}
+    .tile video{width:100%;height:100%;object-fit:cover;background:#000;}
+    .tile.is-self video{transform:scaleX(-1);}
+    .tile .ph{
+        position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+        background:radial-gradient(circle at 50% 40%,#1f1f2a,#0a0a10);
+    }
+    .tile .ph .ph-avatar{
+        width:96px;height:96px;border-radius:50%;
+        display:flex;align-items:center;justify-content:center;
+        background:linear-gradient(135deg,#9b82ff,#5a8bff);
+        font-size:36px;font-weight:700;color:#fff;
+        box-shadow:0 14px 32px rgba(90,139,255,0.36);
+        overflow:hidden;
+    }
+    .tile .ph .ph-avatar img{width:100%;height:100%;object-fit:cover;}
+    .tile .label{
+        position:absolute;left:12px;bottom:12px;right:12px;
+        display:flex;align-items:center;gap:8px;
+        pointer-events:none;
+    }
+    .tile .name{
+        background:rgba(0,0,0,0.55);
+        backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+        border:1px solid var(--stroke);
+        padding:5px 10px;border-radius:8px;
+        font-size:12.5px;font-weight:500;
+        color:#fff;max-width:100%;
+        overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    }
+    .tile .mic-state{
+        width:26px;height:26px;border-radius:50%;
+        background:rgba(0,0,0,0.55);
+        backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+        border:1px solid var(--stroke);
+        display:flex;align-items:center;justify-content:center;
+        flex-shrink:0;
+    }
+    .tile .mic-state.muted{background:rgba(255,75,98,0.85);border-color:transparent;}
+    .tile .mic-state svg{width:13px;height:13px;}
+
+    /* Нижняя панель управления */
+    .controls-bar{
+        position:absolute;left:0;right:0;bottom:0;
+        padding:18px 14px calc(18px + var(--safe-bottom));
+        display:flex;justify-content:center;align-items:center;gap:12px;
+        z-index:10;
+        background:linear-gradient(0deg,rgba(0,0,0,0.55) 0%,transparent 100%);
+    }
+    .control{
+        width:56px;height:56px;border-radius:50%;
+        border:1px solid var(--stroke-strong);
+        background:var(--bg-elev);
+        backdrop-filter:blur(20px) saturate(160%);
+        -webkit-backdrop-filter:blur(20px) saturate(160%);
+        color:#fff;cursor:pointer;
+        display:flex;align-items:center;justify-content:center;
+        transition:transform 0.15s,background 0.18s,border-color 0.18s;
+        position:relative;
+    }
+    .control:hover{background:var(--bg-elev-2);}
+    .control:active{transform:scale(0.92);}
+    .control svg{width:22px;height:22px;}
+    .control.off{background:rgba(255,75,98,0.18);border-color:rgba(255,75,98,0.4);color:#ffb6c1;}
+    .control.hangup{
+        background:linear-gradient(135deg,#ff4b62,#d92847);
+        border-color:transparent;
+        width:62px;height:62px;
+        box-shadow:0 14px 36px rgba(217,40,71,0.45);
+    }
+    .control.hangup svg{width:24px;height:24px;}
+    .control[data-tip]::after{
+        content:attr(data-tip);
+        position:absolute;bottom:calc(100% + 8px);left:50%;
+        transform:translateX(-50%) translateY(4px);
+        background:#1c1c20;color:#fff;border:1px solid rgba(255,255,255,0.14);
+        padding:5px 10px;border-radius:8px;font-size:11.5px;font-weight:500;
+        white-space:nowrap;pointer-events:none;opacity:0;transition:opacity 0.14s,transform 0.14s;
+        box-shadow:0 8px 22px rgba(0,0,0,0.45);
+    }
+    .control[data-tip]:hover::after{opacity:1;transform:translateX(-50%) translateY(0);}
+
+    /* Toast */
+    .toast-host{position:fixed;left:0;right:0;top:calc(20px + var(--safe-top));z-index:1000;display:flex;justify-content:center;pointer-events:none;}
+    .toast{
+        background:var(--bg-elev-2);
+        backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+        border:1px solid var(--stroke-strong);
+        padding:10px 16px;border-radius:14px;
+        font-size:13px;font-weight:500;
+        box-shadow:0 14px 32px rgba(0,0,0,0.4);
+        opacity:0;transform:translateY(-8px);transition:opacity 0.2s,transform 0.2s;
+    }
+    .toast.show{opacity:1;transform:translateY(0);}
+
+    @media(max-width:600px){
+        .control{width:50px;height:50px;}
+        .control.hangup{width:56px;height:56px;}
+        .lobby .preview{aspect-ratio:9/14;width:min(280px,72vw);}
+    }
+    </style>
+</head>
+<body>
+
+    <!-- Лобби — выбор камеры/микрофона перед входом -->
+    <div class="lobby" id="lobby">
+        <h1 id="lobbyTitle">Готовы присоединиться?</h1>
+        <div class="sub" id="lobbySub">Проверьте камеру и микрофон</div>
+        <div class="preview" id="lobbyPreview">
+            <video id="lobbyVideo" autoplay playsinline muted></video>
+            <div class="preview-empty" id="lobbyPreviewEmpty">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 12h.01"/><path d="M11 12h.01"/><path d="M15 12h.01"/></svg>
+                <span>Камера выключена</span>
+            </div>
+        </div>
+        <div class="controls">
+            <button class="btn-toggle" id="lobbyMicBtn" title="Микрофон">
+                <svg id="lobbyMicIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+            </button>
+            <button class="btn-toggle" id="lobbyCamBtn" title="Камера">
+                <svg id="lobbyCamIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+            </button>
+        </div>
+        <button class="btn-join" id="lobbyJoinBtn">Присоединиться</button>
+        <div class="room-info">Комната: <code id="lobbyRoomCode">—</code></div>
+    </div>
+
+    <!-- Окно созвона -->
+    <main class="call" id="callView" style="display:none;">
+        <header class="call-header">
+            <div class="call-meta">
+                <div class="call-title" id="callTitle">Видеовстреча</div>
+                <div class="call-time" id="callTime">00:00</div>
+            </div>
+            <div class="call-badge"><span class="dot"></span><span id="callPeerCount">1</span> в звонке</div>
+        </header>
+
+        <section class="tiles" id="tiles" data-count="1">
+            <!-- self tile вставляется JS-ом -->
+        </section>
+
+        <div class="controls-bar">
+            <button class="control" id="ctrlMic" data-tip="Микрофон">
+                <svg id="ctrlMicIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+            </button>
+            <button class="control" id="ctrlCam" data-tip="Камера">
+                <svg id="ctrlCamIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+            </button>
+            <button class="control" id="ctrlScreen" data-tip="Демонстрация экрана">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            </button>
+            <button class="control" id="ctrlInvite" data-tip="Скопировать ссылку">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            </button>
+            <button class="control hangup" id="ctrlHangup" data-tip="Завершить">
+                <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M21 15.46l-5.27-.61a1.5 1.5 0 0 0-1.21.4l-3.69 3.46a15 15 0 0 1-6.59-6.59l3.5-3.71a1.5 1.5 0 0 0 .4-1.21L7.54 2A1.5 1.5 0 0 0 6 .67H3a1.5 1.5 0 0 0-1.5 1.5C1.5 13.27 10.73 22.5 22 22.5a1.5 1.5 0 0 0 1.5-1.5v-3a1.5 1.5 0 0 0-1.34-1.5z" transform="rotate(135 12 12)"/></svg>
+            </button>
+        </div>
+    </main>
+
+    <div class="toast-host"><div class="toast" id="toast"></div></div>
+
+<script>
+(function(){
+    'use strict';
+
+    // ---------- Утилиты ----------
+    const qs = new URLSearchParams(location.search);
+    const ROOM_ID = qs.get('room') || '';
+    const ROOM_TITLE = qs.get('title') || '';
+    const ROOM_TYPE = qs.get('type') || 'group';
+    const TOKEN = localStorage.getItem('craneapp_auth_token');
+    let userData;
+    try { userData = JSON.parse(localStorage.getItem('craneapp_user_data') || '{}'); } catch(_) { userData = {}; }
+    const ME = { id: userData.id || ('guest_'+Math.random().toString(36).slice(2,7)), name: userData.firstName || userData.username || 'Гость', avatar: userData.avatarUrl || null };
+
+    if (!TOKEN || !userData.id) {
+        // Не авторизован — отправляем на логин
+        location.href = '../auth/login.html';
+        return;
+    }
+    if (!ROOM_ID) {
+        document.getElementById('lobbyTitle').textContent = 'Комната не указана';
+        document.getElementById('lobbySub').textContent = 'Откройте звонок по приглашению';
+        document.getElementById('lobbyJoinBtn').disabled = true;
+        return;
+    }
+
+    document.getElementById('lobbyRoomCode').textContent = ROOM_ID;
+    document.getElementById('callTitle').textContent = ROOM_TITLE || (ROOM_TYPE === 'p2p' ? 'Личный звонок' : 'Видеовстреча');
+
+    function showToast(text, ms=2200){
+        const t = document.getElementById('toast');
+        t.textContent = text;
+        t.classList.add('show');
+        clearTimeout(showToast._t);
+        showToast._t = setTimeout(()=>t.classList.remove('show'), ms);
+    }
+
+    // ---------- Состояние ----------
+    let localStream = null;
+    let screenStream = null;
+    let micEnabled = true;
+    let camEnabled = true;
+    let ws = null;
+    let wsReady = false;
+    let iceServers = [{ urls:'stun:stun.l.google.com:19302' }];
+    const peers = new Map(); // peerId -> { pc, name, avatar, micOn, camOn, videoEl, tileEl, speaking }
+    let callStartTs = 0;
+    let timerInterval = null;
+
+    // ---------- Лобби: предпросмотр камеры ----------
+    const lobbyVideo = document.getElementById('lobbyVideo');
+    const lobbyEmpty = document.getElementById('lobbyPreviewEmpty');
+    const lobbyMicBtn = document.getElementById('lobbyMicBtn');
+    const lobbyCamBtn = document.getElementById('lobbyCamBtn');
+
+    async function startLocalStream(){
+        try {
+            const s = await navigator.mediaDevices.getUserMedia({
+                audio: true,
+                video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }
+            });
+            localStream = s;
+            applyTrackStates();
+            lobbyVideo.srcObject = s;
+            lobbyEmpty.style.display = camEnabled ? 'none' : 'flex';
+        } catch(err) {
+            console.warn('getUserMedia error', err);
+            // Пробуем только аудио
+            try {
+                const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                localStream = s;
+                camEnabled = false;
+                applyTrackStates();
+                lobbyEmpty.style.display = 'flex';
+                lobbyEmpty.querySelector('span').textContent = 'Камера недоступна';
+            } catch(e2) {
+                showToast('Нет доступа к камере и микрофону');
+                lobbyEmpty.querySelector('span').textContent = 'Доступ запрещён';
+            }
+        }
+    }
+
+    function applyTrackStates(){
+        if (!localStream) return;
+        localStream.getAudioTracks().forEach(t => t.enabled = micEnabled);
+        localStream.getVideoTracks().forEach(t => t.enabled = camEnabled);
+        lobbyMicBtn.classList.toggle('off', !micEnabled);
+        lobbyCamBtn.classList.toggle('off', !camEnabled);
+        document.getElementById('ctrlMic').classList.toggle('off', !micEnabled);
+        document.getElementById('ctrlCam').classList.toggle('off', !camEnabled);
+        if (!camEnabled) lobbyEmpty.style.display = 'flex';
+        else if (localStream.getVideoTracks().length) lobbyEmpty.style.display = 'none';
+    }
+
+    lobbyMicBtn.onclick = () => { micEnabled = !micEnabled; applyTrackStates(); broadcastState(); };
+    lobbyCamBtn.onclick = () => { camEnabled = !camEnabled; applyTrackStates(); broadcastState(); };
+
+    document.getElementById('ctrlMic').onclick = lobbyMicBtn.onclick;
+    document.getElementById('ctrlCam').onclick = lobbyCamBtn.onclick;
+
+    // ---------- Запросить ICE-серверы и метаданные комнаты ----------
+    async function fetchRoomConfig(){
+        try {
+            const res = await fetch('/api/v1/calls/rooms/' + encodeURIComponent(ROOM_ID), {
+                headers: { 'Authorization': 'Bearer ' + TOKEN }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.iceServers) iceServers = data.iceServers;
+                if (data.room && data.room.title) document.getElementById('callTitle').textContent = data.room.title;
+            } else if (res.status === 404) {
+                // Комнаты ещё нет — создадим (если хост)
+                await fetch('/api/v1/calls/rooms', {
+                    method:'POST',
+                    headers:{ 'Authorization':'Bearer '+TOKEN, 'Content-Type':'application/json' },
+                    body: JSON.stringify({ type: ROOM_TYPE, title: ROOM_TITLE, roomId: ROOM_ID })
+                });
+            }
+        } catch(_) {}
+    }
+
+    // ---------- Ссылка-приглашение ----------
+    document.getElementById('ctrlInvite').onclick = () => {
+        const url = location.origin + '/client/mobile/screens/calls/call.html?room=' + encodeURIComponent(ROOM_ID) + (ROOM_TITLE?'&title='+encodeURIComponent(ROOM_TITLE):'') + '&type=' + ROOM_TYPE;
+        if (navigator.clipboard) navigator.clipboard.writeText(url).then(()=>showToast('Ссылка скопирована'),()=>showToast(url));
+        else showToast(url);
+    };
+
+    // ---------- Hangup ----------
+    document.getElementById('ctrlHangup').onclick = () => leaveCall(true);
+
+    // ---------- Демонстрация экрана ----------
+    document.getElementById('ctrlScreen').onclick = async () => {
+        try {
+            if (!screenStream) {
+                screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+                const screenTrack = screenStream.getVideoTracks()[0];
+                screenTrack.onended = () => stopScreenShare();
+                replaceVideoTrackForAll(screenTrack);
+                showToast('Демонстрация экрана включена');
+                document.getElementById('ctrlScreen').style.background = 'rgba(155,130,255,0.32)';
+            } else {
+                stopScreenShare();
+            }
+        } catch(e) { showToast('Не удалось начать показ экрана'); }
+    };
+    function stopScreenShare(){
+        if (screenStream) { screenStream.getTracks().forEach(t=>t.stop()); screenStream = null; }
+        const camTrack = localStream && localStream.getVideoTracks()[0];
+        if (camTrack) replaceVideoTrackForAll(camTrack);
+        document.getElementById('ctrlScreen').style.background = '';
+    }
+    function replaceVideoTrackForAll(newTrack){
+        for (const p of peers.values()) {
+            const senders = p.pc.getSenders().filter(s => s.track && s.track.kind === 'video');
+            for (const s of senders) s.replaceTrack(newTrack);
+        }
+        // Обновим самопросмотр
+        const selfTile = document.querySelector('.tile.is-self video');
+        if (selfTile) {
+            const ms = new MediaStream();
+            ms.addTrack(newTrack);
+            if (localStream) localStream.getAudioTracks().forEach(t=>ms.addTrack(t));
+            selfTile.srcObject = ms;
+        }
+    }
+
+    // ---------- WebSocket-сигналинг ----------
+    function connectWS(){
+        return new Promise((resolve)=>{
+            const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(proto + '//' + location.host + '/ws?userId=' + encodeURIComponent(ME.id));
+            ws.onopen = () => { wsReady = true; resolve(); };
+            ws.onmessage = (e) => handleWS(JSON.parse(e.data));
+            ws.onclose = () => { wsReady = false; };
+            ws.onerror = () => {};
+        });
+    }
+    function wsSend(obj){ if (ws && ws.readyState===1) ws.send(JSON.stringify(obj)); }
+
+    async function handleWS(msg){
+        switch(msg.type){
+            case 'call_joined':
+                // Создать pc и offer для каждого существующего peer-а
+                for (const peer of (msg.peers||[])) {
+                    await initiatePeer(peer);
+                }
+                break;
+            case 'call_peer_joined':
+                addPeerPlaceholder(msg.peer);
+                // Не инициируем offer — ждём, пока новый peer пришлёт нам offer
+                break;
+            case 'call_peer_left':
+                removePeer(msg.peer.userId);
+                break;
+            case 'call_offer':
+                await onRemoteOffer(msg.from, msg.payload);
+                break;
+            case 'call_answer':
+                await onRemoteAnswer(msg.from, msg.payload);
+                break;
+            case 'call_ice':
+                await onRemoteIce(msg.from, msg.payload);
+                break;
+            case 'call_error':
+                showToast(msg.reason === 'room_full' ? 'Комната заполнена (макс. 5)' : 'Ошибка звонка');
+                setTimeout(()=>leaveCall(false), 1200);
+                break;
+        }
+    }
+
+    // ---------- PeerConnections ----------
+    function makePC(peerId){
+        const pc = new RTCPeerConnection({ iceServers });
+        pc.onicecandidate = (e) => {
+            if (e.candidate) wsSend({ type:'call_ice', to:peerId, roomId:ROOM_ID, payload:e.candidate });
+        };
+        pc.ontrack = (e) => {
+            const peer = peers.get(peerId);
+            if (!peer) return;
+            const stream = e.streams[0] || new MediaStream([e.track]);
+            peer.videoEl.srcObject = stream;
+            peer.tileEl.querySelector('.ph').style.display = 'none';
+        };
+        pc.onconnectionstatechange = () => {
+            if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+                removePeer(peerId);
+            }
+        };
+        // Добавляем локальные треки
+        if (localStream) {
+            for (const t of localStream.getTracks()) pc.addTrack(t, localStream);
+        }
+        return pc;
+    }
+
+    async function initiatePeer(peerInfo){
+        const pid = peerInfo.userId;
+        if (peers.has(pid)) return;
+        addPeerPlaceholder(peerInfo);
+        const peer = peers.get(pid);
+        peer.pc = makePC(pid);
+        const offer = await peer.pc.createOffer({ offerToReceiveAudio:true, offerToReceiveVideo:true });
+        await peer.pc.setLocalDescription(offer);
+        wsSend({ type:'call_offer', to:pid, roomId:ROOM_ID, payload: peer.pc.localDescription });
+    }
+
+    async function onRemoteOffer(from, sdp){
+        if (!peers.has(from)) addPeerPlaceholder({ userId: from, displayName: null, avatarUrl: null });
+        const peer = peers.get(from);
+        if (!peer.pc) peer.pc = makePC(from);
+        await peer.pc.setRemoteDescription(new RTCSessionDescription(sdp));
+        const answer = await peer.pc.createAnswer();
+        await peer.pc.setLocalDescription(answer);
+        wsSend({ type:'call_answer', to:from, roomId:ROOM_ID, payload: peer.pc.localDescription });
+    }
+    async function onRemoteAnswer(from, sdp){
+        const peer = peers.get(from); if (!peer || !peer.pc) return;
+        await peer.pc.setRemoteDescription(new RTCSessionDescription(sdp));
+    }
+    async function onRemoteIce(from, candidate){
+        const peer = peers.get(from); if (!peer || !peer.pc) return;
+        try { await peer.pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch(_) {}
+    }
+
+    function broadcastState(){
+        // (зарезервировано) — сейчас mute/cam отображается только локально
+    }
+
+    // ---------- Тайлы ----------
+    const tilesEl = document.getElementById('tiles');
+    function refreshTilesCount(){
+        const n = Math.min(5, 1 + peers.size);
+        tilesEl.dataset.count = String(n);
+        document.getElementById('callPeerCount').textContent = String(n);
+    }
+
+    function addSelfTile(){
+        const tile = document.createElement('div');
+        tile.className = 'tile is-self';
+        tile.dataset.userId = 'self';
+        tile.innerHTML = `
+            <video autoplay playsinline muted></video>
+            <div class="ph"><div class="ph-avatar">${escapeHtml((ME.name||'?')[0].toUpperCase())}</div></div>
+            <div class="label">
+                <span class="name">${escapeHtml(ME.name)} (вы)</span>
+                <span class="mic-state" id="selfMicState"></span>
+            </div>`;
+        tilesEl.appendChild(tile);
+        const v = tile.querySelector('video');
+        if (localStream) v.srcObject = localStream;
+        if (camEnabled && localStream && localStream.getVideoTracks().length) {
+            tile.querySelector('.ph').style.display = 'none';
+        }
+    }
+
+    function addPeerPlaceholder(info){
+        const pid = info.userId;
+        if (peers.has(pid)) return;
+        const tile = document.createElement('div');
+        tile.className = 'tile';
+        tile.dataset.userId = pid;
+        const initial = ((info.displayName||'?')[0]||'?').toUpperCase();
+        tile.innerHTML = `
+            <video autoplay playsinline></video>
+            <div class="ph"><div class="ph-avatar">${info.avatarUrl?`<img src="${escapeAttr(info.avatarUrl)}" alt="">`:escapeHtml(initial)}</div></div>
+            <div class="label">
+                <span class="name">${escapeHtml(info.displayName||'Участник')}</span>
+                <span class="mic-state"></span>
+            </div>`;
+        tilesEl.appendChild(tile);
+        peers.set(pid, {
+            pc:null,
+            name: info.displayName||'Участник',
+            avatar: info.avatarUrl||null,
+            videoEl: tile.querySelector('video'),
+            tileEl: tile
+        });
+        refreshTilesCount();
+    }
+
+    function removePeer(pid){
+        const peer = peers.get(pid);
+        if (!peer) return;
+        try { peer.pc && peer.pc.close(); } catch(_) {}
+        if (peer.tileEl && peer.tileEl.parentNode) peer.tileEl.parentNode.removeChild(peer.tileEl);
+        peers.delete(pid);
+        refreshTilesCount();
+    }
+
+    function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function escapeAttr(s){ return escapeHtml(s); }
+
+    // ---------- Таймер ----------
+    function startTimer(){
+        callStartTs = Date.now();
+        timerInterval = setInterval(()=>{
+            const sec = Math.floor((Date.now() - callStartTs) / 1000);
+            const m = String(Math.floor(sec/60)).padStart(2,'0');
+            const s = String(sec%60).padStart(2,'0');
+            document.getElementById('callTime').textContent = m+':'+s;
+        }, 1000);
+    }
+
+    // ---------- Вход в комнату ----------
+    document.getElementById('lobbyJoinBtn').onclick = async () => {
+        const btn = document.getElementById('lobbyJoinBtn');
+        btn.disabled = true; btn.textContent = 'Подключение...';
+        if (!localStream) await startLocalStream();
+        await fetchRoomConfig();
+        await connectWS();
+        // Заходим в комнату
+        wsSend({
+            type:'call_join', roomId:ROOM_ID,
+            displayName: ME.name, avatarUrl: ME.avatar
+        });
+        // Переключаем UI
+        document.getElementById('lobby').classList.add('hidden');
+        document.getElementById('callView').style.display = 'flex';
+        addSelfTile();
+        startTimer();
+    };
+
+    function leaveCall(returnHome){
+        try { wsSend({ type:'call_leave', roomId: ROOM_ID }); } catch(_) {}
+        try { ws && ws.close(); } catch(_) {}
+        for (const pid of Array.from(peers.keys())) removePeer(pid);
+        if (localStream) localStream.getTracks().forEach(t=>t.stop());
+        if (screenStream) screenStream.getTracks().forEach(t=>t.stop());
+        clearInterval(timerInterval);
+        if (returnHome) {
+            location.href = '../chats/chats.html';
+        } else {
+            document.getElementById('callView').style.display = 'none';
+            document.getElementById('lobby').classList.remove('hidden');
+            const btn = document.getElementById('lobbyJoinBtn');
+            btn.disabled = false; btn.textContent = 'Присоединиться';
+        }
+    }
+
+    window.addEventListener('beforeunload', () => {
+        try { wsSend({ type:'call_leave', roomId: ROOM_ID }); } catch(_) {}
+    });
+
+    // Старт
+    startLocalStream();
+
+})();
+</script>
+</body>
+</html>

@@ -16,6 +16,7 @@ const logger = require('../services/logger');
 const { pool, query, initDatabase, ensureTablesExist } = require('../../database/database');
 const security = require('../middleware/security');
 const QRCode = require('qrcode');
+const callRoom = require('../services/call-service/callRoom');
 
 const MAX_LOGIN_ATTEMPTS = 5; // синхронизировано с security.js
 
@@ -284,6 +285,78 @@ function handleFileUpload(base64Data, type, subDir = 'media') {
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../../public/index.html'));
+});
+
+// ============================================
+// VIDEO CALLS — REST ENDPOINTS
+// ============================================
+
+// Конфиг ICE-серверов: STUN бесплатный + TURN если задан в ENV
+function getIceServers() {
+    const ice = [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
+    ];
+    if (process.env.TURN_URL && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
+        ice.push({
+            urls: process.env.TURN_URL,
+            username: process.env.TURN_USERNAME,
+            credential: process.env.TURN_CREDENTIAL
+        });
+    }
+    return ice;
+}
+
+// Простая JWT-проверка из Authorization (без middleware-цепочки)
+async function authFromHeader(req) {
+    try {
+        const auth = req.headers.authorization;
+        if (!auth || !auth.startsWith('Bearer ')) return null;
+        const token = auth.slice(7);
+        if (!process.env.JWT_SECRET) return null;
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        return decoded;
+    } catch (_) { return null; }
+}
+
+// Создать комнату (1-на-1 или групповую)
+app.post('/api/v1/calls/rooms', async (req, res) => {
+    const u = await authFromHeader(req);
+    if (!u) return res.status(401).json({ error: 'Unauthorized' });
+    const { type = 'group', chatId = null, title = null } = req.body || {};
+    const room = callRoom.createRoom(u.userId, { type, chatId, title });
+    res.json({
+        success: true,
+        room: { id: room.id, type: room.type, chatId: room.chatId, title: room.title, hostId: room.hostId },
+        iceServers: getIceServers(),
+        maxParticipants: callRoom.MAX_PARTICIPANTS
+    });
+});
+
+// Получить инфу о комнате
+app.get('/api/v1/calls/rooms/:roomId', async (req, res) => {
+    const u = await authFromHeader(req);
+    if (!u) return res.status(401).json({ error: 'Unauthorized' });
+    const room = callRoom.getRoom(req.params.roomId);
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+    res.json({
+        success: true,
+        room: {
+            id: room.id, type: room.type, chatId: room.chatId, title: room.title,
+            hostId: room.hostId,
+            participants: Array.from(room.participants.values())
+        },
+        iceServers: getIceServers(),
+        maxParticipants: callRoom.MAX_PARTICIPANTS
+    });
+});
+
+// Список активных комнат (для раздела «Встречи»)
+app.get('/api/v1/calls/rooms', async (req, res) => {
+    const u = await authFromHeader(req);
+    if (!u) return res.status(401).json({ error: 'Unauthorized' });
+    res.json({ success: true, rooms: callRoom.listRooms() });
 });
 
 // ============================================
@@ -4671,6 +4744,85 @@ wss.on('connection', async (ws, req) => {
                 case 'ping':
                     ws.send(JSON.stringify({ type: 'pong' }));
                     break;
+
+                // ===== Видеозвонки =====
+                case 'call_join': {
+                    if (!msg.roomId) break;
+                    const r = callRoom.joinRoom(msg.roomId, ws.userId, {
+                        displayName: msg.displayName || null,
+                        avatarUrl: msg.avatarUrl || null
+                    });
+                    if (!r.ok) {
+                        ws.send(JSON.stringify({ type: 'call_error', reason: r.error }));
+                        break;
+                    }
+                    // Сохраняем roomId на сокете
+                    ws.callRoomId = msg.roomId;
+                    // Шлём текущему — список существующих участников (peers)
+                    ws.send(JSON.stringify({
+                        type: 'call_joined',
+                        roomId: msg.roomId,
+                        peers: r.peers,
+                        self: { userId: ws.userId }
+                    }));
+                    // Шлём остальным — что новый участник присоединился
+                    sendToCallRoom(msg.roomId, {
+                        type: 'call_peer_joined',
+                        roomId: msg.roomId,
+                        peer: { userId: ws.userId, displayName: msg.displayName || null, avatarUrl: msg.avatarUrl || null }
+                    }, ws.userId);
+                    break;
+                }
+                case 'call_leave': {
+                    const roomId = ws.callRoomId || msg.roomId;
+                    if (!roomId) break;
+                    callRoom.leaveRoom(roomId, ws.userId);
+                    sendToCallRoom(roomId, {
+                        type: 'call_peer_left',
+                        roomId,
+                        peer: { userId: ws.userId }
+                    }, ws.userId);
+                    ws.callRoomId = null;
+                    break;
+                }
+                case 'call_offer':
+                case 'call_answer':
+                case 'call_ice': {
+                    if (!msg.to || !msg.payload) break;
+                    sendToUser(msg.to, {
+                        type: msg.type,
+                        roomId: msg.roomId || ws.callRoomId,
+                        from: ws.userId,
+                        payload: msg.payload
+                    });
+                    break;
+                }
+                case 'call_invite': {
+                    // Приглашение конкретного пользователя в комнату
+                    if (!msg.to || !msg.roomId) break;
+                    sendToUser(msg.to, {
+                        type: 'call_incoming',
+                        roomId: msg.roomId,
+                        kind: msg.kind || 'video',
+                        from: ws.userId,
+                        fromName: msg.fromName || null,
+                        fromAvatar: msg.fromAvatar || null,
+                        title: msg.title || null
+                    });
+                    break;
+                }
+                case 'call_invite_response': {
+                    // Ответ на приглашение (accepted/rejected) — уведомляем инициатора
+                    if (!msg.to) break;
+                    sendToUser(msg.to, {
+                        type: 'call_invite_response',
+                        roomId: msg.roomId,
+                        from: ws.userId,
+                        accepted: !!msg.accepted
+                    });
+                    break;
+                }
+
                 default:
                     ws.send(JSON.stringify({ type: 'received', data: msg }));
             }
@@ -4684,6 +4836,19 @@ wss.on('connection', async (ws, req) => {
         const currentCount = WS_CONNECTIONS.get(ip) || 1;
         if (currentCount <= 1) WS_CONNECTIONS.delete(ip);
         else WS_CONNECTIONS.set(ip, currentCount - 1);
+
+        // Если пользователь был в видеозвонке — оповещаем остальных и убираем
+        if (ws.callRoomId) {
+            try {
+                callRoom.leaveRoom(ws.callRoomId, ws.userId);
+                sendToCallRoom(ws.callRoomId, {
+                    type: 'call_peer_left',
+                    roomId: ws.callRoomId,
+                    peer: { userId: ws.userId }
+                }, ws.userId);
+            } catch (_) {}
+            ws.callRoomId = null;
+        }
 
         const userConnections = connectedUsers.get(userId);
         if (userConnections) {
@@ -4729,6 +4894,37 @@ setInterval(() => {
         ws.ping();
     });
 }, 30000);
+
+// Доставить сообщение конкретному пользователю (всем его открытым WS-сокетам)
+function sendToUser(userId, message) {
+    const conns = connectedUsers.get(userId);
+    if (!conns || conns.size === 0) return false;
+    const data = JSON.stringify(message);
+    let sent = 0;
+    for (const c of conns) {
+        if (c.readyState === WebSocket.OPEN) {
+            try { c.send(data); sent++; } catch (_) {}
+        }
+    }
+    return sent > 0;
+}
+
+// Разослать всем участникам call-комнаты, кроме отправителя
+function sendToCallRoom(roomId, message, exceptUserId) {
+    const room = callRoom.getRoom(roomId);
+    if (!room) return;
+    const data = JSON.stringify(message);
+    for (const p of room.participants.values()) {
+        if (p.userId === exceptUserId) continue;
+        const conns = connectedUsers.get(p.userId);
+        if (!conns) continue;
+        for (const c of conns) {
+            if (c.readyState === WebSocket.OPEN) {
+                try { c.send(data); } catch (_) {}
+            }
+        }
+    }
+}
 
 async function broadcastToChat(chatId, message, excludeUserId) {
     try {

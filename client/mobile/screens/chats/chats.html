@@ -763,6 +763,24 @@
     <!-- Toast Container -->
     <div class="toast-container" id="toastContainer"></div>
 
+    <!-- Incoming Call Banner -->
+    <div id="incomingCallBanner" style="display:none;position:fixed;top:24px;left:50%;transform:translateX(-50%);z-index:11000;width:min(420px,92vw);background:rgba(28,28,34,0.86);backdrop-filter:blur(24px) saturate(160%);-webkit-backdrop-filter:blur(24px) saturate(160%);border:1px solid rgba(255,255,255,0.18);border-radius:18px;padding:14px;box-shadow:0 24px 60px rgba(0,0,0,0.55);font-family:'Geologica',sans-serif;color:#fff;animation:icRingPulse 1.6s ease-in-out infinite;">
+      <style>@keyframes icRingPulse{0%,100%{box-shadow:0 24px 60px rgba(0,0,0,0.55),0 0 0 0 rgba(155,130,255,0.5);}50%{box-shadow:0 24px 60px rgba(0,0,0,0.55),0 0 0 12px rgba(155,130,255,0);}}</style>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div id="incomingAvatar" style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#9b82ff,#5a8bff);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:19px;flex-shrink:0;overflow:hidden;">?</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:11.5px;color:rgba(235,235,245,0.6);letter-spacing:0.02em;text-transform:uppercase;">Входящий видеозвонок</div>
+          <div id="incomingName" style="font-size:15px;font-weight:600;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">—</div>
+        </div>
+        <button onclick="rejectIncomingCall()" style="width:42px;height:42px;border-radius:50%;border:none;background:#ff4b62;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;" title="Отклонить">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M21 15.46l-5.27-.61a1.5 1.5 0 0 0-1.21.4l-3.69 3.46a15 15 0 0 1-6.59-6.59l3.5-3.71a1.5 1.5 0 0 0 .4-1.21L7.54 2A1.5 1.5 0 0 0 6 .67H3a1.5 1.5 0 0 0-1.5 1.5C1.5 13.27 10.73 22.5 22 22.5a1.5 1.5 0 0 0 1.5-1.5v-3a1.5 1.5 0 0 0-1.34-1.5z" transform="rotate(135 12 12)"/></svg>
+        </button>
+        <button onclick="acceptIncomingCall()" style="width:42px;height:42px;border-radius:50%;border:none;background:#34d399;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;" title="Принять">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M21 15.46l-5.27-.61a1.5 1.5 0 0 0-1.21.4l-3.69 3.46a15 15 0 0 1-6.59-6.59l3.5-3.71a1.5 1.5 0 0 0 .4-1.21L7.54 2A1.5 1.5 0 0 0 6 .67H3a1.5 1.5 0 0 0-1.5 1.5C1.5 13.27 10.73 22.5 22 22.5a1.5 1.5 0 0 0 1.5-1.5v-3a1.5 1.5 0 0 0-1.34-1.5z"/></svg>
+        </button>
+      </div>
+    </div>
+
     <!-- Hidden File Inputs -->
     <input type="file" id="cameraInput" accept="image/*,video/*" capture="environment" style="display:none" onchange="handleFileSelect(this)">
     <input type="file" id="galleryInput" accept="image/*,video/*" style="display:none" onchange="handleFileSelect(this)">
@@ -871,6 +889,9 @@
                     </div>
                     <div id="e2eIndicator" title="End-to-end шифрование активно" style="display:none;">
                     </div>
+                    <button class="chat-action-btn" id="videoCallBtn" onclick="startVideoCallFromChat()" title="Видеозвонок">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                    </button>
                     <button class="chat-action-btn" id="membersBtn" onclick="openGroupMembers()" title="Участники" style="display:none;">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                     </button>
@@ -1337,6 +1358,142 @@
         });
 
         // ============================================
+        // VIDEO CALLS (старт + входящие)
+        // ============================================
+        let _incomingCall = null;
+
+        function _genRoomId() { return 'rm_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
+
+        function _openCallWindow(roomId, type, title) {
+            const url = '../calls/call.html?room=' + encodeURIComponent(roomId)
+                + '&type=' + encodeURIComponent(type || 'group')
+                + (title ? '&title=' + encodeURIComponent(title) : '');
+            // На десктопе — новое окно, на мобилке — текущее
+            if (window.innerWidth >= 768) {
+                window.open(url, 'craneapp_call_' + roomId, 'width=1100,height=720,resizable=yes');
+            } else {
+                location.href = url;
+            }
+        }
+
+        async function _createCallRoom(type, chatId, title) {
+            try {
+                const token = localStorage.getItem('craneapp_auth_token');
+                const res = await fetch('/api/v1/calls/rooms', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type, chatId, title })
+                });
+                if (!res.ok) throw new Error('Failed');
+                const data = await res.json();
+                return data.room.id;
+            } catch (e) {
+                // Фолбэк — клиентский ID, /calls/call.html сам создаст комнату
+                return _genRoomId();
+            }
+        }
+
+        async function startVideoCallFromChat() {
+            if (!activeChat) { try { showToast && showToast('info','Выберите чат'); } catch(_){} return; }
+            const isGroup = activeChat.type === 'group';
+            const title = activeChat.name || (isGroup ? 'Групповой звонок' : 'Видеозвонок');
+            const roomId = await _createCallRoom(isGroup ? 'group' : 'p2p', activeChat.id, title);
+            // Приглашаем участников чата через WS
+            try {
+                const ws = window.craneWs || window.ws;
+                if (ws && ws.readyState === 1) {
+                    const memberIds = (activeChat.memberIds || []).filter(id => id && id !== user.id);
+                    // Если ID-шников нет (личный чат) — приглашаем второго участника
+                    const targets = memberIds.length ? memberIds : (activeChat.peerId ? [activeChat.peerId] : []);
+                    for (const to of targets) {
+                        ws.send(JSON.stringify({
+                            type: 'call_invite', to, roomId,
+                            kind: 'video', fromName: user.firstName || user.username, fromAvatar: user.avatarUrl || null,
+                            title
+                        }));
+                    }
+                }
+            } catch (_) {}
+            _openCallWindow(roomId, isGroup ? 'group' : 'p2p', title);
+        }
+
+        function _showIncomingCall(payload) {
+            _incomingCall = payload;
+            const banner = document.getElementById('incomingCallBanner');
+            const nameEl = document.getElementById('incomingName');
+            const avEl = document.getElementById('incomingAvatar');
+            if (!banner) return;
+            nameEl.textContent = payload.fromName || payload.title || 'Неизвестный';
+            const initial = (payload.fromName || '?').charAt(0).toUpperCase();
+            avEl.innerHTML = payload.fromAvatar
+                ? '<img src="'+payload.fromAvatar+'" style="width:100%;height:100%;object-fit:cover;">'
+                : initial;
+            banner.style.display = 'block';
+            // Авто-скрытие через 30 сек
+            clearTimeout(_showIncomingCall._t);
+            _showIncomingCall._t = setTimeout(() => rejectIncomingCall(), 30000);
+        }
+
+        function acceptIncomingCall() {
+            if (!_incomingCall) return;
+            const c = _incomingCall;
+            try {
+                const ws = window.craneWs || window.ws;
+                if (ws && ws.readyState === 1) {
+                    ws.send(JSON.stringify({ type:'call_invite_response', to: c.from, roomId: c.roomId, accepted: true }));
+                }
+            } catch(_){}
+            document.getElementById('incomingCallBanner').style.display = 'none';
+            _openCallWindow(c.roomId, c.kind === 'voice' ? 'p2p' : 'group', c.title || c.fromName || 'Видеозвонок');
+            _incomingCall = null;
+        }
+
+        function rejectIncomingCall() {
+            if (!_incomingCall) {
+                document.getElementById('incomingCallBanner').style.display = 'none';
+                return;
+            }
+            const c = _incomingCall;
+            try {
+                const ws = window.craneWs || window.ws;
+                if (ws && ws.readyState === 1) {
+                    ws.send(JSON.stringify({ type:'call_invite_response', to: c.from, roomId: c.roomId, accepted: false }));
+                }
+            } catch(_){}
+            document.getElementById('incomingCallBanner').style.display = 'none';
+            _incomingCall = null;
+        }
+
+        async function startInstantMeeting() {
+            const title = 'Встреча — ' + (user.firstName || user.username || 'CraneApp');
+            const roomId = await _createCallRoom('group', null, title);
+            _openCallWindow(roomId, 'group', title);
+        }
+        function joinMeetingByLink() {
+            const url = prompt('Вставьте ссылку или ID комнаты:');
+            if (!url) return;
+            let roomId = url.trim();
+            try {
+                if (roomId.includes('?')) {
+                    const u = new URL(roomId, location.origin);
+                    roomId = u.searchParams.get('room') || roomId;
+                }
+            } catch(_) {}
+            if (!roomId) return;
+            _openCallWindow(roomId, 'group', 'Встреча');
+        }
+
+        // Глобальный перехват входящих звонков из WebSocket
+        // (вешается после инициализации основного WS-клиента)
+        window.__handleIncomingCallMessage = function(msg) {
+            if (msg && msg.type === 'call_incoming') {
+                _showIncomingCall(msg);
+                return true;
+            }
+            return false;
+        };
+
+        // ============================================
         // SECTION TABS (ЛС / Чаты / Каналы / Сообщества / Встречи)
         // ============================================
         let currentSection = 'dms';
@@ -1402,7 +1559,17 @@
             } else if (section === 'communities') {
                 showPlaceholder(commIcon, 'Сообщества', 'Раздел в разработке. Скоро вы сможете объединять чаты и каналы в сообщества.');
             } else if (section === 'meetings') {
-                showPlaceholder(meetIcon, 'Встречи', 'Раздел в разработке. Скоро вы сможете планировать видеовстречи и созваниваться.');
+                Array.from(list.children).forEach(ch => {
+                    if (ch.id !== 'sectionPlaceholder') ch.style.display = 'none';
+                });
+                if (!placeholder.parentElement) list.appendChild(placeholder);
+                placeholder.style.display = 'flex';
+                placeholder.innerHTML =
+                    '<div style="width:72px;height:72px;border-radius:20px;background:linear-gradient(135deg,#9b82ff,#5a8bff);display:flex;align-items:center;justify-content:center;margin-bottom:18px;box-shadow:0 14px 36px rgba(90,139,255,0.36);">' + meetIcon + '</div>' +
+                    '<div style="font-size:18px;font-weight:700;color:var(--rd-text,#fff);letter-spacing:-0.01em;margin-bottom:6px;">Встречи</div>' +
+                    '<div style="font-size:13px;color:var(--rd-text-3,rgba(235,235,245,0.46));max-width:280px;line-height:1.45;margin-bottom:18px;">Создайте видеовстречу и пригласите участников по ссылке. До 5 человек.</div>' +
+                    '<button onclick="startInstantMeeting()" style="height:46px;padding:0 24px;border-radius:12px;border:none;background:linear-gradient(135deg,#9b82ff,#5a8bff);color:#fff;font-family:Geologica,sans-serif;font-weight:600;font-size:14px;letter-spacing:-0.01em;cursor:pointer;box-shadow:0 12px 28px rgba(90,139,255,0.32);">+ Начать встречу</button>' +
+                    '<button onclick="joinMeetingByLink()" style="margin-top:10px;height:42px;padding:0 22px;border-radius:12px;border:1px solid var(--rd-stroke,rgba(255,255,255,0.1));background:transparent;color:var(--rd-text,#fff);font-family:Geologica,sans-serif;font-weight:500;font-size:13.5px;cursor:pointer;">Войти по ссылке…</button>';
             } else {
                 // dms / chats — фильтруем уже отрендеренные элементы списка
                 restoreList();
@@ -3633,6 +3800,7 @@
             
             try {
                 ws = new WebSocket(wsUrl);
+                window.craneWs = ws;
             } catch (e) {
                 console.error('WebSocket error:', e);
                 scheduleReconnect();
@@ -3674,6 +3842,16 @@
         }
 
         function handleWsMessage(data) {
+            // Перехват входящего видеозвонка
+            if (data && data.type === 'call_incoming') {
+                if (window.__handleIncomingCallMessage) window.__handleIncomingCallMessage(data);
+                return;
+            }
+            if (data && data.type === 'call_invite_response') {
+                try { showToast && showToast(data.accepted ? 'success' : 'info',
+                    data.accepted ? 'Собеседник принял звонок' : 'Собеседник отклонил звонок'); } catch(_){}
+                return;
+            }
             switch (data.type) {
                 case 'connected':
                     console.log('WS session:', data.userId);
