@@ -1535,13 +1535,25 @@
                     if (targets.length === 0) {
                         try { showToast('Не удалось найти собеседника'); } catch(_){}
                     }
-                    for (const to of targets) {
-                        ws.send(JSON.stringify({
-                            type: 'call_invite', to, roomId,
-                            kind, fromName: user.firstName || user.username, fromAvatar: user.avatarUrl || null,
-                            title
-                        }));
+                    const invitePayloads = targets.map(to => ({
+                        type: 'call_invite', to, roomId,
+                        kind, fromName: user.firstName || user.username, fromAvatar: user.avatarUrl || null,
+                        title
+                    }));
+                    // Отправляем сразу, потом повторяем 2 раза с интервалом 3 сек
+                    // (защита от zombie-соединений на мобильных сетях)
+                    function sendInvites() {
+                        const w = window.craneWs || window.ws;
+                        if (w && w.readyState === WebSocket.OPEN) {
+                            invitePayloads.forEach(p => w.send(JSON.stringify(p)));
+                        }
                     }
+                    sendInvites();
+                    const retryInvite1 = setTimeout(sendInvites, 3000);
+                    const retryInvite2 = setTimeout(sendInvites, 6000);
+                    // Отменяем повторы если собеседник ответил
+                    const cancelRetry = () => { clearTimeout(retryInvite1); clearTimeout(retryInvite2); };
+                    window._cancelCallInviteRetry = cancelRetry;
                 }
             } catch (_) {}
             _openCallWindow(roomId, isGroup ? 'group' : 'p2p', title, kind);
@@ -4018,6 +4030,13 @@
                     clearTimeout(wsReconnectTimer);
                     wsReconnectTimer = null;
                 }
+                // Keepalive: пинг каждые 20 сек чтобы NAT мобильных операторов не дропал соединение
+                if (ws._pingInterval) clearInterval(ws._pingInterval);
+                ws._pingInterval = setInterval(function() {
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ type: 'ping' }));
+                    }
+                }, 20000);
             };
             
             ws.onmessage = function(event) {
@@ -4031,6 +4050,7 @@
             
             ws.onclose = function() {
                 console.log('❌ WebSocket disconnected');
+                if (ws._pingInterval) { clearInterval(ws._pingInterval); ws._pingInterval = null; }
                 scheduleReconnect();
             };
             
@@ -4053,6 +4073,7 @@
                 return;
             }
             if (data && data.type === 'call_invite_response') {
+                if (window._cancelCallInviteRetry) { window._cancelCallInviteRetry(); window._cancelCallInviteRetry = null; }
                 try { showToast && showToast(data.accepted ? 'success' : 'info',
                     data.accepted ? 'Собеседник принял звонок' : 'Собеседник отклонил звонок'); } catch(_){}
                 return;
