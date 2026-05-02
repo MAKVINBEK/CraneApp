@@ -699,8 +699,9 @@ body {
 }
 
 .call-tooltip-popup {
+    display: none;
     position: fixed;
-    background: rgba(28, 28, 30, 0.88);
+    background: rgba(28, 28, 30, 0.92);
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
     color: rgba(255, 255, 255, 0.92);
@@ -712,9 +713,6 @@ body {
     letter-spacing: -0.08px;
     line-height: 1.45;
     pointer-events: none;
-    opacity: 0;
-    transform: translateY(4px) scale(0.96);
-    transition: opacity 0.13s ease, transform 0.13s ease;
     z-index: 9999;
     white-space: nowrap;
     max-width: 260px;
@@ -723,8 +721,7 @@ body {
 }
 
 .call-tooltip-popup.visible {
-    opacity: 1;
-    transform: translateY(0) scale(1);
+    display: block;
 }
 
 /* ============================================
