@@ -2876,18 +2876,25 @@
                 return res.json();
             }).then(function(data) {
                 if (data.message) {
-                    delete messagesData[tempId];
-                    messagesData[data.message.id] = data.message;
-
-                    var tempEl = document.querySelector('[data-message-id="' + tempId + '"]');
-                    if (tempEl) {
-                        tempEl.dataset.messageId = data.message.id;
-                        tempEl.classList.remove('pending');
-                    }
+                    _confirmMessage(tempId, data.message);
                 }
             }).catch(function(err) {
                 showToast('error', 'Ошибка отправки', '❌');
             });
+        }
+
+        // Подтвердить сообщение: убрать pending, заменить часы на галочку
+        function _confirmMessage(tempId, serverMessage) {
+            const tempEl = document.querySelector('[data-message-id="' + tempId + '"]');
+            if (!tempEl) return;
+            tempEl.dataset.messageId = serverMessage.id;
+            tempEl.classList.remove('pending');
+            const span = tempEl.querySelector('.msg-time span');
+            if (span) {
+                span.innerHTML = '<svg width="12" height="10" viewBox="0 0 12 10" fill="none" style="opacity:.7"><path d="M1 5l3 3 7-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+            }
+            delete messagesData[tempId];
+            messagesData[serverMessage.id] = serverMessage;
         }
 
         function createMessageElement(m) {
@@ -5931,15 +5938,7 @@
                 const data = await res.json();
 
                 if (res.ok && data.message) {
-                    delete messagesData[tempId];
-                    messagesData[data.message.id] = data.message;
-
-                    const tempEl = document.querySelector('[data-message-id="' + tempId + '"]');
-                    if (tempEl) {
-                        tempEl.dataset.messageId = data.message.id;
-                        tempEl.classList.remove('pending');
-                    }
-
+                    _confirmMessage(tempId, data.message);
                     loadChats();
                 } else if (res.status === 403) {
                     const el = document.querySelector('[data-message-id="' + tempId + '"]');
@@ -6565,12 +6564,7 @@
                         body: JSON.stringify({ content: '', type: 'video_note', mediaUrl: serverUrl, mediaType: 'video_note', voiceDuration: duration })
                     });
                     const data = await res.json();
-                    if (data.message) {
-                        delete messagesData[tempId];
-                        messagesData[data.message.id] = data.message;
-                        const tempEl = document.querySelector('[data-message-id="' + tempId + '"]');
-                        if (tempEl) { tempEl.dataset.messageId = data.message.id; tempEl.classList.remove('pending'); }
-                    }
+                    if (data.message) { _confirmMessage(tempId, data.message); }
                 } catch (err) { showToast('error', 'Ошибка отправки', '❌'); }
             };
             reader.readAsDataURL(blob);
@@ -6854,14 +6848,7 @@
                         })
                     });
                     const data = await res.json();
-                    if (data.message) {
-                        delete messagesData[tempId];
-                        messagesData[data.message.id] = data.message;
-                        if (tempEl) {
-                            tempEl.dataset.messageId = data.message.id;
-                            tempEl.classList.remove('pending');
-                        }
-                    }
+                    if (data.message) { _confirmMessage(tempId, data.message); }
                 } catch (err) {
                     console.error('Voice send error:', err);
                     showToast('error', 'Ошибка отправки', '❌');
