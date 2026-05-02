@@ -8108,12 +8108,11 @@
          if (!btn) return;
          btn.addEventListener('mouseenter', function() { showTip(btn); });
          btn.addEventListener('mouseleave', function() { hideTip(0); });
-         btn.addEventListener('touchstart', function(e) {
+         btn.addEventListener('click', function() {
              if (!btn.classList.contains('call-btn-offline')) return;
-             e.preventDefault();
              showTip(btn);
              hideTip(2500);
-         }, { passive: false });
+         });
      });
  }, 0);
 </script>
