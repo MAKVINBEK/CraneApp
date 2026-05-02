@@ -5074,6 +5074,12 @@
             // Показываем кнопку участников только для групп
             const membersBtn = document.getElementById('membersBtn');
             if (membersBtn) membersBtn.style.display = activeChat.type === 'group' ? 'flex' : 'none';
+
+            // Сбрасываем кнопки звонка при смене чата
+            const _aBtn = document.getElementById('audioCallBtn');
+            const _vBtn = document.getElementById('videoCallBtn');
+            if (_aBtn) { _aBtn.disabled = false; _aBtn.title = 'Аудиозвонок'; }
+            if (_vBtn) { _vBtn.disabled = false; _vBtn.title = 'Видеозвонок'; }
             messagesData = {};
             renderChatList();
 
@@ -5228,10 +5234,24 @@
                 });
                 const data = await res.json();
                 
+                const _isPrivate = activeChat && activeChat.type !== 'group';
+                const _audioBtn = document.getElementById('audioCallBtn');
+                const _videoBtn = document.getElementById('videoCallBtn');
+
                 if (data.isOnline) {
                     statusEl.textContent = 'онлайн';
                     statusEl.style.color = 'var(--success-color)';
+                    if (_isPrivate) {
+                        if (_audioBtn) { _audioBtn.disabled = false; _audioBtn.title = 'Аудиозвонок'; }
+                        if (_videoBtn) { _videoBtn.disabled = false; _videoBtn.title = 'Видеозвонок'; }
+                    }
                 } else {
+                    if (_isPrivate) {
+                        const _peerName = chatUsers[activeChat.id]?.name || activeChat.name || 'Собеседник';
+                        const _tip = _peerName + ' офлайн — звонок недоступен';
+                        if (_audioBtn) { _audioBtn.disabled = true; _audioBtn.title = _tip; }
+                        if (_videoBtn) { _videoBtn.disabled = true; _videoBtn.title = _tip; }
+                    }
                     const lastSeen = data.lastSeen ? new Date(data.lastSeen) : null;
                     statusEl.style.color = 'var(--text-muted)';
                     if (data.lastSeen === null && !data.isOnline) {

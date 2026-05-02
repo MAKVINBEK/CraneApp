@@ -693,6 +693,12 @@ body {
     color: var(--text-primary);
 }
 
+.chat-action-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    pointer-events: all;
+}
+
 /* ============================================
    Messages
    ============================================ */
