@@ -8057,7 +8057,8 @@
  });
 
  // Тултип для кнопок звонка когда собеседник офлайн
- (function() {
+ // setTimeout — div#callTooltip находится после этого <script>, поэтому ждём конца парсинга
+ setTimeout(function() {
      var tip = document.getElementById('callTooltip');
      if (!tip) return;
      var hideTimer = null;
@@ -8100,7 +8101,7 @@
              hideTip(2500);
          }, { passive: false });
      });
- })();
+ }, 0);
 </script>
 <script src="../../scripts/cameraCheck.js"></script>
 <div id="callTooltip" class="call-tooltip-popup"></div>
