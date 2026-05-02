@@ -4776,28 +4776,38 @@ wss.on('connection', async (ws, req) => {
     });
 
     ws.on('message', async (data) => {
-        // WS flood protection — максимум 20 сообщений в секунду
-        const now = Date.now();
-        if (now > wsMessageResetAt) {
-            wsMessageCount = 0;
-            wsMessageResetAt = now + 1000;
-        }
-        wsMessageCount++;
-        if (wsMessageCount > 20) {
-            logger.warn(`🚫 WS message flood from ${ip} (user: ${userId})`);
-            ws.close(1008, 'Message rate limit exceeded');
-            return;
-        }
-
         // Ограничение размера сообщения — 64KB
         if (data.length > 64 * 1024) {
             ws.send(JSON.stringify({ type: 'error', message: 'Message too large' }));
             return;
         }
 
+        let msg;
         try {
-            const msg = JSON.parse(data);
-            
+            msg = JSON.parse(data);
+        } catch (_) {
+            return;
+        }
+
+        // WS flood protection — WebRTC-сигнализация (ICE/SDP) не ограничивается,
+        // т.к. браузер генерирует 20–30 ICE-кандидатов за 1 сек при подключении
+        const isRtcSignaling = msg.type === 'call_ice' || msg.type === 'call_offer' ||
+                               msg.type === 'call_answer' || msg.type === 'call_join';
+        if (!isRtcSignaling) {
+            const now = Date.now();
+            if (now > wsMessageResetAt) {
+                wsMessageCount = 0;
+                wsMessageResetAt = now + 1000;
+            }
+            wsMessageCount++;
+            if (wsMessageCount > 30) {
+                logger.warn(`🚫 WS message flood from ${ip} (user: ${userId})`);
+                ws.close(1008, 'Message rate limit exceeded');
+                return;
+            }
+        }
+
+        try {
             // Обновляем last_seen — не чаще 1 раза в 30 сек, не блокируем обработку
             if (userId && !userId.startsWith('anonymous')) throttleLastSeen(userId);
             
