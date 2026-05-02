@@ -259,56 +259,6 @@
         .lobby .preview{aspect-ratio:9/14;width:min(280px,72vw);}
     }
 
-    /* ===== Audio-only режим (без видео) ===== */
-    body.audio-mode::before{
-        background:
-            radial-gradient(circle at 50% 25%,rgba(155,130,255,0.30) 0%,transparent 55%),
-            radial-gradient(circle at 50% 95%,rgba(90,139,255,0.18) 0%,transparent 55%);
-    }
-    .audio-mode .lobby .preview{display:none;}
-    .audio-mode .lobby h1{margin-bottom:14px;}
-    .audio-mode .lobby .sub{margin-bottom:32px;}
-    .audio-mode .lobby .audio-avatar{
-        width:160px;height:160px;border-radius:50%;
-        background:linear-gradient(135deg,#9b82ff,#5a8bff);
-        display:flex;align-items:center;justify-content:center;
-        font-weight:700;font-size:64px;color:#fff;overflow:hidden;
-        box-shadow:0 24px 60px rgba(90,75,200,0.5);
-        margin-bottom:24px;
-    }
-    .audio-mode .lobby .audio-avatar img{width:100%;height:100%;object-fit:cover;}
-    .audio-mode .lobby #lobbyCamBtn{display:none;}
-
-    /* Audio call — основной экран */
-    .audio-call{
-        position:fixed;inset:0;z-index:1;
-        display:none;flex-direction:column;align-items:center;justify-content:space-between;
-        padding:max(48px,env(safe-area-inset-top)) 24px max(28px,env(safe-area-inset-bottom));
-    }
-    .audio-call.show{display:flex;}
-    .audio-top{text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px;}
-    .audio-top .ac-kind{font-size:13px;color:rgba(235,235,245,0.6);letter-spacing:0.06em;text-transform:uppercase;font-weight:500;}
-    .audio-mid{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;}
-    @keyframes acRingPulse{0%,100%{box-shadow:0 0 0 0 rgba(155,130,255,0.45);}50%{box-shadow:0 0 0 24px rgba(155,130,255,0);}}
-    .ac-avatar-wrap{position:relative;width:172px;height:172px;border-radius:50%;}
-    .ac-avatar-wrap.calling{animation:acRingPulse 1.6s ease-in-out infinite;}
-    .ac-avatar{
-        width:172px;height:172px;border-radius:50%;
-        background:linear-gradient(135deg,#9b82ff,#5a8bff);
-        display:flex;align-items:center;justify-content:center;
-        font-weight:700;font-size:68px;color:#fff;overflow:hidden;
-        box-shadow:0 24px 60px rgba(90,75,200,0.55);
-    }
-    .ac-avatar img{width:100%;height:100%;object-fit:cover;}
-    .ac-name{font-size:30px;font-weight:600;letter-spacing:-0.02em;text-align:center;}
-    .ac-status{font-size:14px;color:rgba(235,235,245,0.7);font-variant-numeric:tabular-nums;}
-    .ac-controls{display:flex;gap:18px;align-items:center;justify-content:center;}
-    @media(max-width:380px){
-        .ac-avatar-wrap,.ac-avatar{width:148px;height:148px;}
-        .ac-avatar{font-size:60px;}
-        .ac-name{font-size:26px;}
-    }
-
     /* Кнопка "← Чат" — только в embedded-режиме */
     .call-back-btn{
         display:none;align-items:center;justify-content:center;
@@ -328,10 +278,6 @@
     .call-back-btn:active{transform:scale(0.96);}
     .call-back-btn svg{width:15px;height:15px;flex-shrink:0;}
     body.embedded .call-back-btn{display:flex;}
-    /* В audio-top кнопка выровнена вертикально по левому краю */
-    .audio-top{position:relative;}
-    .audio-top .call-back-btn{position:absolute;left:0;top:50%;transform:translateY(-50%);}
-    .audio-top .call-back-btn:active{transform:translateY(-50%) scale(0.96);}
 
     /* Video 1-on-1 — PiP-раскладка (собеседник на весь экран, своя камера в углу) */
     .pip-mode .tiles{
@@ -363,7 +309,6 @@
     <div class="lobby" id="lobby">
         <h1 id="lobbyTitle">Готовы присоединиться?</h1>
         <div class="sub" id="lobbySub">Проверьте камеру и микрофон</div>
-        <div class="audio-avatar" id="audioAvatarLobby" style="display:none;">?</div>
         <div class="preview" id="lobbyPreview">
             <video id="lobbyVideo" autoplay playsinline muted></video>
             <div class="preview-empty" id="lobbyPreviewEmpty">
@@ -382,35 +327,6 @@
         <button class="btn-join" id="lobbyJoinBtn">Присоединиться</button>
         <div class="room-info">Комната: <code id="lobbyRoomCode">—</code></div>
     </div>
-
-    <!-- Audio-only main view -->
-    <main class="audio-call" id="audioCallView">
-        <div class="audio-top">
-            <button class="call-back-btn" id="audioCtrlBack" title="Вернуться в чат">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-                Чат
-            </button>
-            <div class="ac-kind" id="audioKind">Аудиозвонок</div>
-        </div>
-        <div class="audio-mid">
-            <div class="ac-avatar-wrap calling" id="audioAvatarWrap">
-                <div class="ac-avatar" id="audioAvatar">?</div>
-            </div>
-            <div class="ac-name" id="audioPeerName">—</div>
-            <div class="ac-status" id="audioStatus">Звоним...</div>
-        </div>
-        <div class="ac-controls">
-            <button class="control" id="audioCtrlMic" data-tip="Микрофон">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
-            </button>
-            <button class="control" id="audioCtrlSpeaker" data-tip="Динамик">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
-            </button>
-            <button class="control hangup" id="audioCtrlHangup" data-tip="Завершить">
-                <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08c-.18-.17-.29-.42-.29-.7s.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71s-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.1-.7-.28-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg>
-            </button>
-        </div>
-    </main>
 
     <!-- Окно созвона -->
     <main class="call" id="callView" style="display:none;">
@@ -468,7 +384,6 @@
         if (IS_EMBEDDED) window.parent.postMessage({ type: 'crane_call_minimize' }, '*');
     }
     document.getElementById('ctrlBack').onclick = minimizeCall;
-    document.getElementById('audioCtrlBack').onclick = minimizeCall;
 
     // Сигнал от родительского окна — завершить звонок
     window.addEventListener('message', (e) => {
@@ -494,17 +409,10 @@
 
     // Применяем режим к UI
     if (IS_AUDIO) {
-        document.body.classList.add('audio-mode');
         document.getElementById('lobbyTitle').textContent = ROOM_TITLE || 'Аудиозвонок';
-        document.getElementById('lobbySub').textContent = 'Проверьте микрофон перед звонком';
-        const av = document.getElementById('audioAvatarLobby');
-        if (av) {
-            const initial = (ROOM_TITLE || '?').charAt(0).toUpperCase();
-            av.textContent = initial;
-            av.style.display = 'flex';
-        }
+        document.getElementById('lobbySub').textContent = 'Камера по умолчанию выключена — можно включить';
     }
-    if (IS_P2P && !IS_AUDIO) {
+    if (IS_P2P) {
         document.body.classList.add('pip-mode');
     }
 
@@ -543,17 +451,6 @@
     const lobbyCamBtn = document.getElementById('lobbyCamBtn');
 
     async function startLocalStream(){
-        // В audio-режиме сразу пробуем только аудио
-        if (IS_AUDIO) {
-            try {
-                const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-                localStream = s;
-                applyTrackStates();
-            } catch(e) {
-                showToast('Нет доступа к микрофону');
-            }
-            return;
-        }
         try {
             const s = await navigator.mediaDevices.getUserMedia({
                 audio: true,
@@ -589,12 +486,11 @@
         const ctrlCamEl = document.getElementById('ctrlCam');
         if (ctrlMicEl) ctrlMicEl.classList.toggle('off', !micEnabled);
         if (ctrlCamEl) ctrlCamEl.classList.toggle('off', !camEnabled);
-        const aMic = document.getElementById('audioCtrlMic');
-        if (aMic) aMic.classList.toggle('off', !micEnabled);
-        if (!IS_AUDIO) {
-            if (!camEnabled) lobbyEmpty.style.display = 'flex';
-            else if (localStream.getVideoTracks().length) lobbyEmpty.style.display = 'none';
-        }
+        // Обновляем превью лобби и заглушку своего тайла
+        if (!camEnabled) lobbyEmpty.style.display = 'flex';
+        else if (localStream.getVideoTracks().length) lobbyEmpty.style.display = 'none';
+        const selfPh = document.querySelector('.tile.is-self .ph');
+        if (selfPh) selfPh.style.display = (camEnabled && localStream && localStream.getVideoTracks().some(t => t.readyState !== 'ended')) ? 'none' : '';
     }
 
     lobbyMicBtn.onclick = () => { micEnabled = !micEnabled; applyTrackStates(); broadcastState(); };
@@ -602,20 +498,6 @@
 
     document.getElementById('ctrlMic').onclick = lobbyMicBtn.onclick;
     document.getElementById('ctrlCam').onclick = lobbyCamBtn.onclick;
-    // audio-only контролы
-    const audioCtrlMic = document.getElementById('audioCtrlMic');
-    const audioCtrlSpeaker = document.getElementById('audioCtrlSpeaker');
-    const audioCtrlHangup = document.getElementById('audioCtrlHangup');
-    if (audioCtrlMic) audioCtrlMic.onclick = lobbyMicBtn.onclick;
-    if (audioCtrlSpeaker) audioCtrlSpeaker.onclick = () => {
-        speakerOn = !speakerOn;
-        audioCtrlSpeaker.classList.toggle('off', !speakerOn);
-        // Управляем громкостью всех удалённых аудио
-        for (const p of peers.values()) {
-            if (p.audioEl) p.audioEl.muted = !speakerOn;
-        }
-    };
-    if (audioCtrlHangup) audioCtrlHangup.onclick = () => leaveCall(true);
 
     // ---------- Запросить ICE-серверы и метаданные комнаты ----------
     async function fetchRoomConfig(){
@@ -764,35 +646,21 @@
         };
         pc.ontrack = (e) => {
             const peer = peers.get(peerId);
-            if (!peer) return;
-            const stream = e.streams[0] || new MediaStream([e.track]);
-            if (IS_AUDIO || !peer.videoEl) {
-                // Audio-режим: создаём <audio> для проигрывания
-                if (!peer.audioEl) {
-                    const a = document.createElement('audio');
-                    a.autoplay = true;
-                    a.playsInline = true;
-                    a.muted = !speakerOn;
-                    document.body.appendChild(a);
-                    peer.audioEl = a;
-                }
-                peer.audioEl.srcObject = stream;
-            }
-            if (peer.videoEl) {
+            if (!peer || !peer.videoEl) return;
+            const stream = e.streams[0];
+            if (!stream) return;
+            // Один videoEl на peer — играет и аудио, и видео
+            if (peer.videoEl.srcObject !== stream) {
                 peer.videoEl.srcObject = stream;
-                if (peer.tileEl) {
-                    const ph = peer.tileEl.querySelector('.ph');
-                    if (ph) ph.style.display = 'none';
-                }
             }
-            // Переход из «Звоним...» в активный звонок
+            // Убираем аватар-заглушку только когда получили видеотрек
+            if (e.track.kind === 'video' && peer.tileEl) {
+                const ph = peer.tileEl.querySelector('.ph');
+                if (ph) ph.style.display = 'none';
+            }
             if (!connected) {
                 connected = true;
                 clearTimeout(dialingTimer); dialingTimer = null;
-                if (IS_AUDIO) {
-                    const wrap = document.getElementById('audioAvatarWrap');
-                    if (wrap) wrap.classList.remove('calling');
-                }
                 startTimer();
             }
         };
@@ -877,27 +745,6 @@
         const pid = info.userId;
         if (peers.has(pid)) return;
         const initial = ((info.displayName||'?')[0]||'?').toUpperCase();
-        if (IS_AUDIO) {
-            // Без тайла — только данные. UI отображает один центральный аватар в audio-call.
-            peers.set(pid, {
-                pc:null,
-                name: info.displayName||'Участник',
-                avatar: info.avatarUrl||null,
-                audioEl:null, videoEl:null, tileEl:null
-            });
-            // Обновим имя/аватар в audio-call (показываем имя первого подключившегося)
-            const nameEl = document.getElementById('audioPeerName');
-            const avEl = document.getElementById('audioAvatar');
-            if (nameEl && nameEl.textContent === '—') {
-                nameEl.textContent = info.displayName || ROOM_TITLE || 'Собеседник';
-                if (info.avatarUrl) {
-                    avEl.innerHTML = '<img src="'+escapeAttr(info.avatarUrl)+'" alt="">';
-                } else {
-                    avEl.textContent = initial;
-                }
-            }
-            return;
-        }
         const tile = document.createElement('div');
         tile.className = 'tile';
         tile.dataset.userId = pid;
@@ -928,11 +775,9 @@
             try { peer.audioEl.srcObject = null; peer.audioEl.remove(); } catch(_){}
         }
         peers.delete(pid);
-        if (IS_AUDIO && peers.size === 0 && connected) {
-            // В 1-на-1 audio: собеседник вышел — завершаем
-            const status = document.getElementById('audioStatus');
-            if (status) status.textContent = 'Вызов завершён';
-            setTimeout(() => leaveCall(true), 1200);
+        if (IS_P2P && peers.size === 0 && connected) {
+            showToast('Собеседник покинул звонок');
+            setTimeout(() => leaveCall(true), 1500);
             return;
         }
         refreshTilesCount();
@@ -952,8 +797,6 @@
             const txt = m+':'+s;
             const callTimeEl = document.getElementById('callTime');
             if (callTimeEl) callTimeEl.textContent = txt;
-            const audioStatusEl = document.getElementById('audioStatus');
-            if (IS_AUDIO && audioStatusEl) audioStatusEl.textContent = txt;
         };
         tick();
         timerInterval = setInterval(tick, 1000);
@@ -972,35 +815,19 @@
             displayName: ME.name, avatarUrl: ME.avatar
         });
         document.getElementById('lobby').classList.add('hidden');
-        if (IS_AUDIO) {
-            // Аудио-экран
-            document.getElementById('audioCallView').classList.add('show');
-            // Изначально показываем «Звоним...»; таймер запустится при подключении peer
-            const status = document.getElementById('audioStatus');
-            if (status) status.textContent = 'Звоним...';
-            // Если за 60 сек никто не подключился — закрываем
+        document.getElementById('callView').style.display = 'flex';
+        addSelfTile();
+        if (IS_P2P) {
+            const callTimeEl = document.getElementById('callTime');
+            if (callTimeEl) callTimeEl.textContent = 'Звоним...';
             dialingTimer = setTimeout(() => {
-                if (!connected) {
-                    if (status) status.textContent = 'Нет ответа';
+                if (peers.size === 0) {
+                    if (callTimeEl) callTimeEl.textContent = 'Нет ответа';
                     setTimeout(() => leaveCall(true), 1500);
                 }
             }, 60000);
         } else {
-            document.getElementById('callView').style.display = 'flex';
-            addSelfTile();
-            // Для p2p-видео — показываем «Звоним...» пока peer не подключился
-            if (IS_P2P) {
-                const callTimeEl = document.getElementById('callTime');
-                if (callTimeEl) callTimeEl.textContent = 'Звоним...';
-                dialingTimer = setTimeout(() => {
-                    if (peers.size === 0) {
-                        if (callTimeEl) callTimeEl.textContent = 'Нет ответа';
-                        setTimeout(() => leaveCall(true), 1500);
-                    }
-                }, 60000);
-            } else {
-                startTimer();
-            }
+            startTimer();
         }
     };
 
@@ -1023,7 +850,6 @@
             location.href = '../chats/chats.html';
         } else {
             document.getElementById('callView').style.display = 'none';
-            const a = document.getElementById('audioCallView'); if (a) a.classList.remove('show');
             document.getElementById('lobby').classList.remove('hidden');
             const btn = document.getElementById('lobbyJoinBtn');
             btn.disabled = false; btn.textContent = 'Присоединиться';
