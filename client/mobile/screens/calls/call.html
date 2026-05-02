@@ -487,6 +487,8 @@
     let timerInterval = null;
     let connected = false; // первый peer подключился (для audio-режима)
     let dialingTimer = null;
+    let inCall = false;
+    let wsReconnectTimer = null;
 
     // ---------- Лобби: предпросмотр камеры ----------
     const lobbyVideo = document.getElementById('lobbyVideo');
@@ -645,13 +647,37 @@
         return new Promise((resolve)=>{
             const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
             ws = new WebSocket(proto + '//' + location.host + '/ws?userId=' + encodeURIComponent(ME.id));
-            ws.onopen = () => { wsReady = true; resolve(); };
+            ws.onopen = () => {
+                wsReady = true;
+                resolve();
+                // При реконнекте во время звонка — пересоздаём peers и переподключаемся
+                if (inCall) {
+                    _clearAllPeers();
+                    wsSend({ type:'call_join', roomId:ROOM_ID, displayName:ME.name, avatarUrl:ME.avatar });
+                }
+            };
             ws.onmessage = (e) => handleWS(JSON.parse(e.data));
-            ws.onclose = () => { wsReady = false; };
+            ws.onclose = () => {
+                wsReady = false;
+                if (inCall) {
+                    clearTimeout(wsReconnectTimer);
+                    wsReconnectTimer = setTimeout(() => connectWS(), 1500);
+                }
+            };
             ws.onerror = () => {};
         });
     }
     function wsSend(obj){ if (ws && ws.readyState===1) ws.send(JSON.stringify(obj)); }
+
+    function _clearAllPeers(){
+        for (const [, peer] of peers) {
+            if (peer.pc) { try { peer.pc.close(); } catch(_) {} }
+            if (peer.tileEl && peer.tileEl.parentNode) peer.tileEl.parentNode.removeChild(peer.tileEl);
+            if (peer.audioEl) { try { peer.audioEl.srcObject = null; peer.audioEl.remove(); } catch(_) {} }
+        }
+        peers.clear();
+        refreshTilesCount();
+    }
 
     async function handleWS(msg){
         switch(msg.type){
@@ -747,9 +773,15 @@
     }
 
     async function onRemoteOffer(from, sdp){
-        if (!peers.has(from)) addPeerPlaceholder({ userId: from, displayName: null, avatarUrl: null });
+        if (peers.has(from)) {
+            // Переконнект — закрываем старый PC и создаём новый
+            const existing = peers.get(from);
+            if (existing.pc) { try { existing.pc.close(); } catch(_) {} existing.pc = null; }
+        } else {
+            addPeerPlaceholder({ userId: from, displayName: null, avatarUrl: null });
+        }
         const peer = peers.get(from);
-        if (!peer.pc) peer.pc = makePC(from);
+        peer.pc = makePC(from);
         await peer.pc.setRemoteDescription(new RTCSessionDescription(sdp));
         const answer = await peer.pc.createAnswer();
         await peer.pc.setLocalDescription(answer);
@@ -887,6 +919,7 @@
         btn.disabled = true; btn.textContent = 'Подключение...';
         if (!localStream) await startLocalStream();
         await fetchRoomConfig();
+        inCall = true;
         await connectWS();
         wsSend({
             type:'call_join', roomId:ROOM_ID,
@@ -926,6 +959,8 @@
     };
 
     function leaveCall(returnHome){
+        inCall = false;
+        clearTimeout(wsReconnectTimer);
         try { wsSend({ type:'call_leave', roomId: ROOM_ID }); } catch(_) {}
         try { ws && ws.close(); } catch(_) {}
         for (const pid of Array.from(peers.keys())) removePeer(pid);
