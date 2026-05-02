@@ -356,12 +356,39 @@ async function authFromHeader(req) {
     } catch (_) { return null; }
 }
 
+// Сохранить системное сообщение о завершённом звонке
+async function saveCallMessage(r) {
+    if (!r || !r.closed || !r.chatId) return;
+    try {
+        const status = r.answeredAt ? 'answered' : 'missed';
+        const duration = r.answeredAt ? Math.floor((Date.now() - r.answeredAt) / 1000) : 0;
+        const content = JSON.stringify({ callKind: r.callKind || 'video', status, duration, initiatorId: r.hostId });
+        const msgId = uuidv4();
+        const result = await query(
+            `INSERT INTO messages (id, chat_id, sender_id, content, type, created_at)
+             VALUES ($1, $2, $3, $4, 'call', NOW()) RETURNING *`,
+            [msgId, r.chatId, r.hostId, content]
+        );
+        const msg = result.rows[0];
+        if (msg) {
+            broadcastToChat(r.chatId, {
+                type: 'new_message',
+                chatId: r.chatId,
+                chatType: 'private',
+                message: { ...msg, type: 'call' }
+            }, null);
+        }
+    } catch (e) {
+        logger.warn('⚠️ saveCallMessage error:', e.message);
+    }
+}
+
 // Создать комнату (1-на-1 или групповую)
 app.post('/api/v1/calls/rooms', async (req, res) => {
     const u = await authFromHeader(req);
     if (!u) return res.status(401).json({ error: 'Unauthorized' });
-    const { type = 'group', chatId = null, title = null } = req.body || {};
-    const room = callRoom.createRoom(u.userId, { type, chatId, title });
+    const { type = 'group', chatId = null, title = null, callKind = 'video' } = req.body || {};
+    const room = callRoom.createRoom(u.userId, { type, chatId, title, callKind });
     res.json({
         success: true,
         room: { id: room.id, type: room.type, chatId: room.chatId, title: room.title, hostId: room.hostId },
@@ -803,6 +830,10 @@ async function autoMigrate() {
         // Добавляем флаг зашифрованности к сообщениям
         await query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_encrypted BOOLEAN DEFAULT FALSE`);
         await query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS encryption_iv TEXT`);
+
+        // Расширяем CHECK-ограничение типов сообщений — добавляем 'call'
+        await query(`ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_type_check`).catch(() => {});
+        await query(`ALTER TABLE messages ADD CONSTRAINT messages_type_check CHECK (type IN ('text','image','video','audio','voice','file','sticker','gif','contact','location','call'))`).catch(() => {});
 
         logger.info('✅ Database migrations completed!');
         
@@ -4837,6 +4868,9 @@ wss.on('connection', async (ws, req) => {
                 // ===== Видеозвонки =====
                 case 'call_join': {
                     if (!msg.roomId) break;
+                    // Сохраняем callKind на комнате если клиент его прислал
+                    const existingRoom = callRoom.getRoom(msg.roomId);
+                    if (existingRoom && msg.callKind) existingRoom.callKind = msg.callKind;
                     const r = callRoom.joinRoom(msg.roomId, ws.userId, {
                         displayName: msg.displayName || null,
                         avatarUrl: msg.avatarUrl || null
@@ -4865,12 +4899,13 @@ wss.on('connection', async (ws, req) => {
                 case 'call_leave': {
                     const roomId = ws.callRoomId || msg.roomId;
                     if (!roomId) break;
-                    callRoom.leaveRoom(roomId, ws.userId);
+                    const lr = callRoom.leaveRoom(roomId, ws.userId);
                     sendToCallRoom(roomId, {
                         type: 'call_peer_left',
                         roomId,
                         peer: { userId: ws.userId }
                     }, ws.userId);
+                    if (lr && lr.ok) saveCallMessage(lr).catch(() => {});
                     ws.callRoomId = null;
                     break;
                 }
@@ -4929,12 +4964,13 @@ wss.on('connection', async (ws, req) => {
         // Если пользователь был в видеозвонке — оповещаем остальных и убираем
         if (ws.callRoomId) {
             try {
-                callRoom.leaveRoom(ws.callRoomId, ws.userId);
+                const lr = callRoom.leaveRoom(ws.callRoomId, ws.userId);
                 sendToCallRoom(ws.callRoomId, {
                     type: 'call_peer_left',
                     roomId: ws.callRoomId,
                     peer: { userId: ws.userId }
                 }, ws.userId);
+                if (lr && lr.ok) saveCallMessage(lr).catch(() => {});
             } catch (_) {}
             ws.callRoomId = null;
         }

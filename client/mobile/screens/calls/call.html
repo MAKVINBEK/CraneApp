@@ -840,7 +840,8 @@
         await connectWS();
         wsSend({
             type:'call_join', roomId:ROOM_ID,
-            displayName: ME.name, avatarUrl: ME.avatar
+            displayName: ME.name, avatarUrl: ME.avatar,
+            callKind: ROOM_KIND
         });
         document.getElementById('lobby').classList.add('hidden');
         document.getElementById('callView').style.display = 'flex';

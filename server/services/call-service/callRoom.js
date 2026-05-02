@@ -7,7 +7,7 @@ const logger = require('../logger');
 
 const MAX_PARTICIPANTS = 5;
 
-// roomId -> { id, hostId, type ('p2p'|'group'), createdAt, participants: Map<userId, { joinedAt, displayName, avatarUrl }> }
+// roomId -> { id, hostId, type ('p2p'|'group'), callKind ('video'|'audio'), chatId, createdAt, answeredAt, participants }
 const rooms = new Map();
 
 // userId -> roomId (быстрая проверка — пользователь уже в звонке)
@@ -20,9 +20,11 @@ function createRoom(hostId, opts = {}) {
         id: roomId,
         hostId,
         type: opts.type || 'group',
+        callKind: opts.callKind || 'video',
         chatId: opts.chatId || null,
         title: opts.title || null,
         createdAt: Date.now(),
+        answeredAt: null,
         participants: new Map()
     };
     rooms.set(roomId, room);
@@ -49,6 +51,10 @@ function joinRoom(roomId, userId, info = {}) {
         avatarUrl: info.avatarUrl || null
     });
     userToRoom.set(userId, roomId);
+    // Фиксируем момент когда в комнате оказалось ≥2 участников (звонок принят)
+    if (!room.answeredAt && room.participants.size >= 2) {
+        room.answeredAt = Date.now();
+    }
     return { ok: true, room, peers: listOtherPeers(room, userId) };
 }
 
@@ -59,9 +65,18 @@ function leaveRoom(roomId, userId) {
     if (userToRoom.get(userId) === roomId) userToRoom.delete(userId);
 
     if (room.participants.size === 0) {
+        // Снимок перед удалением — нужен для сохранения сообщения о звонке
+        const snapshot = {
+            chatId: room.chatId,
+            callKind: room.callKind,
+            answeredAt: room.answeredAt,
+            createdAt: room.createdAt,
+            hostId: room.hostId,
+            type: room.type
+        };
         rooms.delete(roomId);
         logger.info(`📞 Room closed: ${roomId}`);
-        return { ok: true, closed: true, had };
+        return { ok: true, closed: true, had, ...snapshot };
     }
     return { ok: true, closed: false, had };
 }
