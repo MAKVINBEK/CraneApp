@@ -912,11 +912,28 @@
         
         <!-- Main -->
         <div class="main">
+            <!-- Плашка активного звонка (когда панель скрыта) -->
+            <div id="activeCallBar" class="active-call-bar" style="display:none;">
+                <span class="active-call-dot"></span>
+                <span class="active-call-label" id="activeCallBarTitle">Звонок активен</span>
+                <button class="active-call-return" onclick="_showCallPanel()">Вернуться</button>
+                <button class="active-call-end" onclick="_endCall(true)" title="Завершить звонок">
+                    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" width="16" height="16"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08c-.18-.17-.29-.42-.29-.7s.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71s-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.1-.7-.28-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg>
+                </button>
+            </div>
+
+            <!-- Панель звонка (iframe) -->
+            <div id="callPanel" class="call-panel" style="display:none;">
+                <iframe id="callFrame" class="call-frame" src=""
+                    allow="camera *; microphone *; display-capture *"
+                    allowfullscreen></iframe>
+            </div>
+
             <div class="no-chat" id="noChat">
                 <div class="no-chat-icon">💬</div>
                 <div class="no-chat-text" data-i18n="selectChatPrompt">Выберите чат</div>
             </div>
-            
+
             <div class="chat-view" id="chatView">
                 <div class="chat-header">
                     <button class="back-btn" onclick="closeChat()">←</button>
@@ -1407,20 +1424,69 @@
 
         function _genRoomId() { return 'rm_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
 
+        let _activeCallRoomId = null;
+        let _activeCallTitle = '';
+
         function _openCallWindow(roomId, type, title, kind) {
             const url = '../calls/call.html?room=' + encodeURIComponent(roomId)
                 + '&type=' + encodeURIComponent(type || 'group')
                 + '&kind=' + encodeURIComponent(kind || 'video')
-                + (title ? '&title=' + encodeURIComponent(title) : '');
-            // На десктопе — новое окно, на мобилке — текущее
-            if (window.innerWidth >= 768) {
-                const w = (kind === 'audio') ? 460 : 1100;
-                const h = (kind === 'audio') ? 720 : 720;
-                window.open(url, 'craneapp_call_' + roomId, 'width=' + w + ',height=' + h + ',resizable=yes');
+                + (title ? '&title=' + encodeURIComponent(title) : '')
+                + '&embedded=1';
+            _activeCallRoomId = roomId;
+            _activeCallTitle = title || (kind === 'audio' ? 'Аудиозвонок' : 'Видеозвонок');
+            document.getElementById('callFrame').src = url;
+            _showCallPanel();
+        }
+
+        function _showCallPanel() {
+            document.getElementById('callPanel').style.display = 'flex';
+            document.getElementById('activeCallBar').style.display = 'none';
+            document.getElementById('noChat').style.display = 'none';
+            const chatView = document.getElementById('chatView');
+            chatView.classList.remove('active');
+            document.body.classList.remove('chat-open');
+        }
+
+        function _hideCallPanel() {
+            document.getElementById('callPanel').style.display = 'none';
+            if (_activeCallRoomId) {
+                const bar = document.getElementById('activeCallBar');
+                document.getElementById('activeCallBarTitle').textContent = _activeCallTitle;
+                bar.style.display = 'flex';
+            }
+            // Восстанавливаем предыдущий вид
+            if (typeof activeChat !== 'undefined' && activeChat) {
+                document.getElementById('chatView').classList.add('active');
+                document.body.classList.add('chat-open');
             } else {
-                location.href = url;
+                document.getElementById('noChat').style.display = '';
             }
         }
+
+        function _endCall(fromBar) {
+            if (fromBar) {
+                // Команда завершить — передаём в iframe
+                try { document.getElementById('callFrame').contentWindow.postMessage({ type: 'crane_hangup' }, '*'); } catch(_) {}
+            }
+            _activeCallRoomId = null;
+            document.getElementById('callPanel').style.display = 'none';
+            document.getElementById('callFrame').src = '';
+            document.getElementById('activeCallBar').style.display = 'none';
+            if (typeof activeChat !== 'undefined' && activeChat) {
+                document.getElementById('chatView').classList.add('active');
+                document.body.classList.add('chat-open');
+            } else {
+                document.getElementById('noChat').style.display = '';
+            }
+        }
+
+        // Сообщения от iframe (call.html)
+        window.addEventListener('message', (e) => {
+            if (!e.data || typeof e.data !== 'object') return;
+            if (e.data.type === 'crane_call_ended') _endCall(false);
+            if (e.data.type === 'crane_call_minimize') _hideCallPanel();
+        });
 
         async function _createCallRoom(type, chatId, title) {
             try {

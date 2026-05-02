@@ -308,6 +308,22 @@
         .ac-name{font-size:26px;}
     }
 
+    /* Кнопка "← в чат" — только в embedded-режиме */
+    .call-back-btn{
+        display:none;align-items:center;justify-content:center;
+        width:36px;height:36px;border-radius:50%;
+        background:var(--bg-elev);border:1px solid var(--stroke);
+        color:#fff;cursor:pointer;flex-shrink:0;
+        backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+        transition:background 0.15s;
+    }
+    .call-back-btn:hover{background:var(--bg-elev-2);}
+    .call-back-btn svg{width:18px;height:18px;}
+    body.embedded .call-back-btn{display:flex;}
+    /* В audio-top кнопка выровнена по левому краю */
+    .audio-top{position:relative;}
+    .audio-top .call-back-btn{position:absolute;left:0;top:0;}
+
     /* Video 1-on-1 — PiP-раскладка (собеседник на весь экран, своя камера в углу) */
     .pip-mode .tiles{
         display:block !important;padding:0 !important;
@@ -361,6 +377,9 @@
     <!-- Audio-only main view -->
     <main class="audio-call" id="audioCallView">
         <div class="audio-top">
+            <button class="call-back-btn" id="audioCtrlBack" title="Вернуться в чат">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
             <div class="ac-kind" id="audioKind">Аудиозвонок</div>
         </div>
         <div class="audio-mid">
@@ -386,6 +405,9 @@
     <!-- Окно созвона -->
     <main class="call" id="callView" style="display:none;">
         <header class="call-header">
+            <button class="call-back-btn" id="ctrlBack" title="Вернуться в чат">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
             <div class="call-meta">
                 <div class="call-title" id="callTitle">Видеовстреча</div>
                 <div class="call-time" id="callTime">00:00</div>
@@ -428,6 +450,19 @@
     const ROOM_TITLE = qs.get('title') || '';
     const ROOM_TYPE = qs.get('type') || 'group';
     const ROOM_KIND = (qs.get('kind') === 'audio') ? 'audio' : 'video'; // audio | video
+    const IS_EMBEDDED = qs.get('embedded') === '1';
+    if (IS_EMBEDDED) document.body.classList.add('embedded');
+
+    function minimizeCall(){
+        if (IS_EMBEDDED) window.parent.postMessage({ type: 'crane_call_minimize' }, '*');
+    }
+    document.getElementById('ctrlBack').onclick = minimizeCall;
+    document.getElementById('audioCtrlBack').onclick = minimizeCall;
+
+    // Сигнал от родительского окна — завершить звонок
+    window.addEventListener('message', (e) => {
+        if (e.data && e.data.type === 'crane_hangup') leaveCall(true);
+    });
     const IS_AUDIO = ROOM_KIND === 'audio';
     const IS_P2P = ROOM_TYPE === 'p2p';
     const TOKEN = localStorage.getItem('craneapp_auth_token');
@@ -968,7 +1003,10 @@
         if (screenStream) screenStream.getTracks().forEach(t=>t.stop());
         clearInterval(timerInterval); timerInterval = null;
         clearTimeout(dialingTimer); dialingTimer = null;
-        if (returnHome) {
+        if (IS_EMBEDDED) {
+            // В embedded-режиме сообщаем родителю — пусть он управляет навигацией
+            window.parent.postMessage({ type: 'crane_call_ended' }, '*');
+        } else if (returnHome) {
             // На десктопе — закрыть окно если оно было открыто; иначе вернуться в чаты
             if (window.opener && !window.opener.closed) { try { window.close(); return; } catch(_){} }
             location.href = '../chats/chats.html';
