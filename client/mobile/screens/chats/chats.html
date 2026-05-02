@@ -5078,8 +5078,8 @@
             // Сбрасываем кнопки звонка при смене чата
             const _aBtn = document.getElementById('audioCallBtn');
             const _vBtn = document.getElementById('videoCallBtn');
-            if (_aBtn) { _aBtn.disabled = false; _aBtn.title = 'Аудиозвонок'; }
-            if (_vBtn) { _vBtn.disabled = false; _vBtn.title = 'Видеозвонок'; }
+            if (_aBtn) { _aBtn.disabled = false; _aBtn.title = 'Аудиозвонок'; delete _aBtn.dataset.tooltip; }
+            if (_vBtn) { _vBtn.disabled = false; _vBtn.title = 'Видеозвонок'; delete _vBtn.dataset.tooltip; }
             messagesData = {};
             renderChatList();
 
@@ -5242,15 +5242,15 @@
                     statusEl.textContent = 'онлайн';
                     statusEl.style.color = 'var(--success-color)';
                     if (_isPrivate) {
-                        if (_audioBtn) { _audioBtn.disabled = false; _audioBtn.title = 'Аудиозвонок'; }
-                        if (_videoBtn) { _videoBtn.disabled = false; _videoBtn.title = 'Видеозвонок'; }
+                        if (_audioBtn) { _audioBtn.disabled = false; _audioBtn.title = 'Аудиозвонок'; delete _audioBtn.dataset.tooltip; }
+                        if (_videoBtn) { _videoBtn.disabled = false; _videoBtn.title = 'Видеозвонок'; delete _videoBtn.dataset.tooltip; }
                     }
                 } else {
                     if (_isPrivate) {
                         const _peerName = chatUsers[activeChat.id]?.name || activeChat.name || 'Собеседник';
                         const _tip = _peerName + ' офлайн — звонок недоступен';
-                        if (_audioBtn) { _audioBtn.disabled = true; _audioBtn.title = _tip; }
-                        if (_videoBtn) { _videoBtn.disabled = true; _videoBtn.title = _tip; }
+                        if (_audioBtn) { _audioBtn.disabled = true; _audioBtn.removeAttribute('title'); _audioBtn.dataset.tooltip = _tip; }
+                        if (_videoBtn) { _videoBtn.disabled = true; _videoBtn.removeAttribute('title'); _videoBtn.dataset.tooltip = _tip; }
                     }
                     const lastSeen = data.lastSeen ? new Date(data.lastSeen) : null;
                     statusEl.style.color = 'var(--text-muted)';
@@ -8053,7 +8053,58 @@
  document.addEventListener('visibilitychange', function() {
      if (!document.hidden) initFolderTabs();
  });
+
+ // Кастомный тултип для заблокированных кнопок звонка
+ (function() {
+     const tip = document.getElementById('callTooltip');
+     if (!tip) return;
+     let hideTimer = null;
+
+     function showTip(btn) {
+         const text = btn.dataset.tooltip;
+         if (!text || !btn.disabled) return;
+         clearTimeout(hideTimer);
+         tip.textContent = text;
+         tip.style.display = 'block';
+         tip.classList.remove('visible');
+         // Следующий кадр — чтобы display:block успел примениться до measure
+         requestAnimationFrame(function() {
+             const r = btn.getBoundingClientRect();
+             const tw = tip.offsetWidth;
+             const th = tip.offsetHeight;
+             let left = r.left + r.width / 2 - tw / 2;
+             left = Math.max(8, Math.min(left, window.innerWidth - tw - 8));
+             const top = (r.top - th - 8 > 8) ? (r.top - th - 8) : (r.bottom + 8);
+             tip.style.left = left + 'px';
+             tip.style.top = top + 'px';
+             tip.classList.add('visible');
+         });
+     }
+
+     function hideTip(delay) {
+         clearTimeout(hideTimer);
+         if (delay) {
+             hideTimer = setTimeout(function() { tip.classList.remove('visible'); }, delay);
+         } else {
+             tip.classList.remove('visible');
+         }
+     }
+
+     ['audioCallBtn', 'videoCallBtn'].forEach(function(id) {
+         const btn = document.getElementById(id);
+         if (!btn) return;
+         btn.addEventListener('mouseenter', function() { showTip(btn); });
+         btn.addEventListener('mouseleave', function() { hideTip(0); });
+         btn.addEventListener('touchstart', function(e) {
+             if (!btn.disabled) return;
+             e.preventDefault();
+             showTip(btn);
+             hideTip(2500);
+         }, { passive: false });
+     });
+ })();
 </script>
 <script src="../../scripts/cameraCheck.js"></script>
+<div id="callTooltip" class="call-tooltip-popup"></div>
 </body>
 </html>

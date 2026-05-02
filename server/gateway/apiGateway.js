@@ -3187,11 +3187,7 @@ app.get('/api/v1/users/:userId/status', authMiddleware, async (req, res) => {
         const { userId } = req.params;
         
         const result = await query(
-            `SELECT u.id, u.last_seen,
-                    CASE 
-                        WHEN u.last_seen > NOW() - INTERVAL '5 minutes' THEN TRUE 
-                        ELSE FALSE 
-                    END as is_online,
+            `SELECT u.id, u.last_seen, u.is_online,
                     us.privacy_settings
              FROM users u
              LEFT JOIN user_settings us ON us.user_id = u.id
@@ -4775,7 +4771,7 @@ wss.on('connection', async (ws, req) => {
     if (userId && !userId.startsWith('anonymous')) {
         (async () => {
             try {
-                await query('UPDATE users SET last_seen = NOW() WHERE id = $1', [userId]);
+                await query('UPDATE users SET last_seen = NOW(), is_online = TRUE WHERE id = $1', [userId]);
                 // Один JOIN вместо N+1: все пользователи, которые состоят в одном чате с userId
                 const res = await query(
                     `SELECT DISTINCT cm2.user_id
@@ -4985,6 +4981,7 @@ wss.on('connection', async (ws, req) => {
                 if (userId && !userId.startsWith('anonymous')) {
                     (async () => {
                         try {
+                            await query('UPDATE users SET is_online = FALSE, last_seen = NOW() WHERE id = $1', [userId]);
                             const res = await query(
                                 `SELECT DISTINCT cm2.user_id
                                  FROM chat_members cm1
