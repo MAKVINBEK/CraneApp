@@ -8081,16 +8081,17 @@
          if (!btn.dataset.tooltip || !btn.classList.contains('call-btn-offline')) return;
          clearTimeout(hideTimer);
          tip.textContent = btn.dataset.tooltip;
-         // Позиционируем до добавления visible, используем только getBoundingClientRect (всегда надёжен)
-         var r = btn.getBoundingClientRect();
-         var centerX = r.left + r.width / 2;
-         // Горизонталь: центрируем через left+translateX, без offsetWidth
-         tip.style.left = Math.round(centerX) + 'px';
-         tip.style.transform = 'translateX(-50%)';
-         // Вертикаль: сначала пробуем над кнопкой, при нехватке места — под ней
-         var topAbove = r.top - 42;
-         tip.style.top = (topAbove >= 8 ? topAbove : r.bottom + 8) + 'px';
          tip.classList.add('visible');
+         var r = btn.getBoundingClientRect();
+         var tw = tip.offsetWidth;
+         var th = tip.offsetHeight;
+         var left = r.left + r.width / 2 - tw / 2;
+         if (left < 8) left = 8;
+         if (left + tw > window.innerWidth - 8) left = window.innerWidth - tw - 8;
+         var top = r.top - th - 8;
+         if (top < 8) top = r.bottom + 8;
+         tip.style.left = left + 'px';
+         tip.style.top = top + 'px';
      }
 
      function hideTip(delay) {
@@ -8105,21 +8106,13 @@
      ['audioCallBtn', 'videoCallBtn'].forEach(function(id) {
          var btn = document.getElementById(id);
          if (!btn) return;
-         // Десктоп: при наведении
          btn.addEventListener('mouseenter', function() { showTip(btn); });
          btn.addEventListener('mouseleave', function() { hideTip(0); });
-         // Мобильный: touchend надёжнее click на реальных устройствах
-         var _tStartY = 0;
-         btn.addEventListener('touchstart', function(e) {
-             _tStartY = e.touches[0].clientY;
-         }, { passive: true });
-         btn.addEventListener('touchend', function(e) {
+         btn.addEventListener('click', function() {
              if (!btn.classList.contains('call-btn-offline')) return;
-             var dy = Math.abs(e.changedTouches[0].clientY - _tStartY);
-             if (dy > 10) return; // скролл — игнорируем
              showTip(btn);
              hideTip(2500);
-         }, { passive: true });
+         });
      });
  }, 0);
 </script>
