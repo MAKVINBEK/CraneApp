@@ -4236,6 +4236,20 @@
                             statusEl.textContent = 'был(а) недавно';
                             statusEl.style.color = 'var(--text-muted)';
                         }
+                        // Обновляем кнопки звонка по WS-событию (для мобильной версии)
+                        if (activeChat.type !== 'group') {
+                            const _aBtn = document.getElementById('audioCallBtn');
+                            const _vBtn = document.getElementById('videoCallBtn');
+                            if (data.isOnline) {
+                                if (_aBtn) { _aBtn.classList.remove('call-btn-offline'); _aBtn.title = 'Аудиозвонок'; delete _aBtn.dataset.tooltip; }
+                                if (_vBtn) { _vBtn.classList.remove('call-btn-offline'); _vBtn.title = 'Видеозвонок'; delete _vBtn.dataset.tooltip; }
+                            } else {
+                                const _peerName = chatUsers[activeChat.id]?.name || activeChat.name || 'Собеседник';
+                                const _tip = _peerName + ' офлайн — звонок недоступен';
+                                if (_aBtn) { _aBtn.classList.add('call-btn-offline'); _aBtn.removeAttribute('title'); _aBtn.dataset.tooltip = _tip; }
+                                if (_vBtn) { _vBtn.classList.add('call-btn-offline'); _vBtn.removeAttribute('title'); _vBtn.dataset.tooltip = _tip; }
+                            }
+                        }
                     }
                     // Обновляем список чатов без полной перезагрузки
                     renderChatList();
