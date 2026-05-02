@@ -1518,7 +1518,10 @@
         async function _startCallFromChat(kind) {
             if (!activeChat) { try { showToast && showToast('info','Выберите чат'); } catch(_){} return; }
             const _callBtn = document.getElementById(kind === 'audio' ? 'audioCallBtn' : 'videoCallBtn');
-            if (_callBtn && _callBtn.classList.contains('call-btn-offline')) return;
+            if (_callBtn && _callBtn.classList.contains('call-btn-offline')) {
+                try { showToast('info', _callBtn.dataset.tooltip || 'Собеседник офлайн — звонок недоступен'); } catch(_) {}
+                return;
+            }
             const isGroup = activeChat.type === 'group';
             const kindLabel = kind === 'audio' ? 'Аудиозвонок' : 'Видеозвонок';
             const title = activeChat.name || (isGroup ? 'Групповой звонок' : kindLabel);
@@ -8106,19 +8109,9 @@
      ['audioCallBtn', 'videoCallBtn'].forEach(function(id) {
          var btn = document.getElementById(id);
          if (!btn) return;
-         // Десктоп: плавающий тултип при наведении (без изменений)
+         // Десктоп: плавающий тултип при наведении
          btn.addEventListener('mouseenter', function() { showTip(btn); });
          btn.addEventListener('mouseleave', function() { hideTip(0); });
-         // Мобильный: showToast через touchend — надёжнее любого click на реальном устройстве
-         var _ty = 0;
-         btn.addEventListener('touchstart', function(e) {
-             _ty = e.touches[0].clientY;
-         }, { passive: true });
-         btn.addEventListener('touchend', function(e) {
-             if (!btn.classList.contains('call-btn-offline')) return;
-             if (Math.abs(e.changedTouches[0].clientY - _ty) > 10) return;
-             try { showToast('info', btn.dataset.tooltip || 'Собеседник офлайн — звонок недоступен'); } catch(_) {}
-         }, { passive: true });
      });
  }, 0);
 </script>
