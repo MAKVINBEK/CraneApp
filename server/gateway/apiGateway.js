@@ -242,6 +242,13 @@ app.use(security.sqlInjectionMiddleware);
 // Применяем API лимит ко всем /api/ роутам
 app.use('/api/', apiLimiter);
 
+// call.html разрешаем встраивать в iframe с того же домена (CSP frame-ancestors имеет приоритет над X-Frame-Options в браузерах)
+app.use('/client/mobile/screens/calls/call.html', (req, res, next) => {
+    res.removeHeader('X-Frame-Options');
+    res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
+    next();
+});
+
 app.use('/client', express.static(path.join(__dirname, '../../client')));
 app.use('/uploads', express.static(uploadsDir, {
     setHeaders: (res, filePath) => {
