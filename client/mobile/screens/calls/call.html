@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geologica:wght@400;500;600;700&display=swap">
+    <script>(function(){try{var s=JSON.parse(localStorage.getItem('craneapp_settings')||'{}');if(s.accentColor){document.documentElement.style.setProperty('--accent',s.accentColor);document.documentElement.style.setProperty('--accent-2',s.accentColor);}}catch(_){}})()</script>
     <style>
     :root{
         --bg:#07070a;
@@ -308,21 +309,32 @@
         .ac-name{font-size:26px;}
     }
 
-    /* Кнопка "← в чат" — только в embedded-режиме */
+    /* Кнопка "← Чат" — только в embedded-режиме */
     .call-back-btn{
         display:none;align-items:center;justify-content:center;
-        width:36px;height:36px;border-radius:50%;
-        background:var(--bg-elev);border:1px solid var(--stroke);
-        color:#fff;cursor:pointer;flex-shrink:0;
+        gap:4px;
+        height:32px;padding:0 12px;border-radius:20px;
+        background:color-mix(in srgb, var(--accent) 18%, transparent);
+        border:1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+        color:var(--accent);
+        cursor:pointer;flex-shrink:0;
         backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
-        transition:background 0.15s;
+        font-family:'Geologica','SF Pro Display',-apple-system,system-ui,sans-serif;
+        font-size:13px;font-weight:600;letter-spacing:-0.01em;
+        white-space:nowrap;
+        transition:background 0.15s,box-shadow 0.15s,transform 0.12s;
     }
-    .call-back-btn:hover{background:var(--bg-elev-2);}
-    .call-back-btn svg{width:18px;height:18px;}
+    .call-back-btn:hover{
+        background:color-mix(in srgb, var(--accent) 28%, transparent);
+        box-shadow:0 4px 14px color-mix(in srgb, var(--accent) 24%, transparent);
+    }
+    .call-back-btn:active{transform:scale(0.96);}
+    .call-back-btn svg{width:15px;height:15px;flex-shrink:0;}
     body.embedded .call-back-btn{display:flex;}
-    /* В audio-top кнопка выровнена по левому краю */
+    /* В audio-top кнопка выровнена вертикально по левому краю */
     .audio-top{position:relative;}
-    .audio-top .call-back-btn{position:absolute;left:0;top:0;}
+    .audio-top .call-back-btn{position:absolute;left:0;top:50%;transform:translateY(-50%);}
+    .audio-top .call-back-btn:active{transform:translateY(-50%) scale(0.96);}
 
     /* Video 1-on-1 — PiP-раскладка (собеседник на весь экран, своя камера в углу) */
     .pip-mode .tiles{
@@ -378,7 +390,8 @@
     <main class="audio-call" id="audioCallView">
         <div class="audio-top">
             <button class="call-back-btn" id="audioCtrlBack" title="Вернуться в чат">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                Чат
             </button>
             <div class="ac-kind" id="audioKind">Аудиозвонок</div>
         </div>
@@ -406,7 +419,8 @@
     <main class="call" id="callView" style="display:none;">
         <header class="call-header">
             <button class="call-back-btn" id="ctrlBack" title="Вернуться в чат">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                Чат
             </button>
             <div class="call-meta">
                 <div class="call-title" id="callTitle">Видеовстреча</div>
