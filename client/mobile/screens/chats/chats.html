@@ -1565,6 +1565,7 @@
         // Рингтон через WebAudio (имитация классического звонка) + вибрация
         let _ringtoneCtx = null, _ringtoneTimer = null, _vibrateTimer = null;
         function _startRingtone(){
+            _stopRingtone();
             try {
                 _ringtoneCtx = new (window.AudioContext || window.webkitAudioContext)();
                 const ctx = _ringtoneCtx;
@@ -1613,6 +1614,7 @@
         }
 
         function _showIncomingCall(payload) {
+            if (_incomingCall && _incomingCall.roomId === payload.roomId) return;
             _incomingCall = payload;
             const banner = document.getElementById('incomingCallBanner');
             const nameEl = document.getElementById('incomingName');
