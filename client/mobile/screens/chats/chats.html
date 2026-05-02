@@ -1453,9 +1453,11 @@
             const chatView = document.getElementById('chatView');
             chatView.classList.remove('active');
             document.body.classList.remove('chat-open');
+            document.body.classList.add('call-open');
         }
 
         function _hideCallPanel() {
+            document.body.classList.remove('call-open');
             document.getElementById('callPanel').style.display = 'none';
             if (_activeCallRoomId) {
                 const bar = document.getElementById('activeCallBar');
@@ -1472,6 +1474,7 @@
         }
 
         function _endCall(fromBar) {
+            document.body.classList.remove('call-open');
             if (fromBar) {
                 // Команда завершить — передаём в iframe
                 try { document.getElementById('callFrame').contentWindow.postMessage({ type: 'crane_hangup' }, '*'); } catch(_) {}

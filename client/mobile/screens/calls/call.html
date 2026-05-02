@@ -313,21 +313,18 @@
     .call-back-btn{
         display:none;align-items:center;justify-content:center;
         gap:4px;
-        height:32px;padding:0 12px;border-radius:20px;
-        background:color-mix(in srgb, var(--accent) 18%, transparent);
-        border:1px solid color-mix(in srgb, var(--accent) 40%, transparent);
-        color:var(--accent);
+        height:32px;padding:0 14px;border-radius:20px;
+        background:linear-gradient(135deg, var(--accent), var(--accent-2));
+        border:none;
+        color:#fff;
         cursor:pointer;flex-shrink:0;
-        backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
         font-family:'Geologica','SF Pro Display',-apple-system,system-ui,sans-serif;
         font-size:13px;font-weight:600;letter-spacing:-0.01em;
         white-space:nowrap;
-        transition:background 0.15s,box-shadow 0.15s,transform 0.12s;
+        box-shadow:0 4px 14px color-mix(in srgb, var(--accent) 35%, transparent);
+        transition:filter 0.15s,transform 0.12s;
     }
-    .call-back-btn:hover{
-        background:color-mix(in srgb, var(--accent) 28%, transparent);
-        box-shadow:0 4px 14px color-mix(in srgb, var(--accent) 24%, transparent);
-    }
+    .call-back-btn:hover{filter:brightness(1.1);}
     .call-back-btn:active{transform:scale(0.96);}
     .call-back-btn svg{width:15px;height:15px;flex-shrink:0;}
     body.embedded .call-back-btn{display:flex;}
