@@ -1150,8 +1150,10 @@ body {
 @media (min-width: 768px) { .tab-bar { display: none; } }
 body.chat-open .tab-bar  { display: none !important; }
 body.chat-open #navRail  { display: none !important; }
-body.call-open .tab-bar  { display: none !important; }
-body.call-open #navRail  { display: none !important; }
+@media (max-width: 767px) {
+    body.call-open .tab-bar { display: none !important; }
+    body.call-open #navRail { display: none !important; }
+}
 
 .tab-item {
     display: flex;
