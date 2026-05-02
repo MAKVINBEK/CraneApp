@@ -39,7 +39,8 @@ global.wss = wss;
 // Helmet — базовые HTTP-заголовки безопасности
 app.use(helmet({
     contentSecurityPolicy: false, // отключаем CSP чтобы не ломать клиент
-    crossOriginEmbedderPolicy: false
+    crossOriginEmbedderPolicy: false,
+    frameguard: { action: 'sameorigin' } // разрешаем iframe с того же домена (для встроенного звонка)
 }));
 
 // Хранилище для отслеживания IP
