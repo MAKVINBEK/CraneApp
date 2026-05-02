@@ -693,10 +693,9 @@ body {
     color: var(--text-primary);
 }
 
-.chat-action-btn:disabled {
+.chat-action-btn.call-btn-offline {
     opacity: 0.35;
     cursor: not-allowed;
-    pointer-events: all;
 }
 
 .call-tooltip-popup {
@@ -714,20 +713,18 @@ body {
     line-height: 1.45;
     pointer-events: none;
     opacity: 0;
-    transform: translateY(3px) scale(0.97);
-    transition: opacity 0.12s ease, transform 0.12s ease;
+    transform: translateY(4px) scale(0.96);
+    transition: opacity 0.13s ease, transform 0.13s ease;
     z-index: 9999;
     white-space: nowrap;
     max-width: 260px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35), 0 1px 4px rgba(0, 0, 0, 0.2);
     border: 1px solid rgba(255, 255, 255, 0.09);
-    display: none;
 }
 
 .call-tooltip-popup.visible {
     opacity: 1;
     transform: translateY(0) scale(1);
-    display: block;
 }
 
 /* ============================================
