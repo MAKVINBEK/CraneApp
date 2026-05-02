@@ -443,6 +443,35 @@
     let dialingTimer = null;
     let inCall = false;
     let wsReconnectTimer = null;
+    let ringbackCtx = null;
+
+    function startRingback(){
+        if (ringbackCtx) return;
+        try {
+            ringbackCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const ctx = ringbackCtx;
+            const RING = 1.5, GAP = 3.0, CYCLES = 25;
+            for (let i = 0; i < CYCLES; i++){
+                const t = ctx.currentTime + i * (RING + GAP);
+                const o1 = ctx.createOscillator();
+                const o2 = ctx.createOscillator();
+                const gain = ctx.createGain();
+                o1.frequency.value = 440;
+                o2.frequency.value = 480;
+                gain.gain.setValueAtTime(0, t);
+                gain.gain.linearRampToValueAtTime(0.07, t + 0.04);
+                gain.gain.setValueAtTime(0.07, t + RING - 0.04);
+                gain.gain.linearRampToValueAtTime(0, t + RING);
+                o1.connect(gain); o2.connect(gain); gain.connect(ctx.destination);
+                o1.start(t); o2.start(t);
+                o1.stop(t + RING); o2.stop(t + RING);
+            }
+        } catch(_) {}
+    }
+
+    function stopRingback(){
+        if (ringbackCtx){ try { ringbackCtx.close(); } catch(_) {} ringbackCtx = null; }
+    }
 
     // ---------- Лобби: предпросмотр камеры ----------
     const lobbyVideo = document.getElementById('lobbyVideo');
@@ -661,6 +690,7 @@
             if (!connected) {
                 connected = true;
                 clearTimeout(dialingTimer); dialingTimer = null;
+                stopRingback();
                 startTimer();
             }
         };
@@ -803,9 +833,7 @@
     }
 
     // ---------- Вход в комнату ----------
-    document.getElementById('lobbyJoinBtn').onclick = async () => {
-        const btn = document.getElementById('lobbyJoinBtn');
-        btn.disabled = true; btn.textContent = 'Подключение...';
+    async function joinCall(){
         if (!localStream) await startLocalStream();
         await fetchRoomConfig();
         inCall = true;
@@ -820,6 +848,7 @@
         if (IS_P2P) {
             const callTimeEl = document.getElementById('callTime');
             if (callTimeEl) callTimeEl.textContent = 'Звоним...';
+            startRingback();
             dialingTimer = setTimeout(() => {
                 if (peers.size === 0) {
                     if (callTimeEl) callTimeEl.textContent = 'Нет ответа';
@@ -829,11 +858,18 @@
         } else {
             startTimer();
         }
+    }
+
+    document.getElementById('lobbyJoinBtn').onclick = async () => {
+        const btn = document.getElementById('lobbyJoinBtn');
+        btn.disabled = true; btn.textContent = 'Подключение...';
+        await joinCall();
     };
 
     function leaveCall(returnHome){
         inCall = false;
         clearTimeout(wsReconnectTimer);
+        stopRingback();
         try { wsSend({ type:'call_leave', roomId: ROOM_ID }); } catch(_) {}
         try { ws && ws.close(); } catch(_) {}
         for (const pid of Array.from(peers.keys())) removePeer(pid);
@@ -860,8 +896,13 @@
         try { wsSend({ type:'call_leave', roomId: ROOM_ID }); } catch(_) {}
     });
 
-    // Старт
-    startLocalStream();
+    // Старт: для одиночных звонков лобби пропускаем, сразу заходим
+    if (IS_P2P) {
+        document.getElementById('lobby').classList.add('hidden');
+        joinCall();
+    } else {
+        startLocalStream();
+    }
 
 })();
 </script>
