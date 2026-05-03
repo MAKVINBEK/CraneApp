@@ -51,6 +51,16 @@ router.get('/search', (req, res) => {
   userController.searchUsers(req, res);
 });
 
+// Получить все настройки
+router.get('/all-settings', (req, res) => {
+  userController.getAllSettings(req, res);
+});
+
+// Обновить все настройки
+router.put('/all-settings', (req, res) => {
+  userController.updateAllSettings(req, res);
+});
+
 // Удалить аккаунт
 router.delete('/account', (req, res) => {
   userController.deleteAccount(req, res);

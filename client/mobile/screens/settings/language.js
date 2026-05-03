@@ -27,7 +27,7 @@ const token = localStorage.getItem('craneapp_auth_token');
             const rest   = LANGUAGES.filter(l => !PINNED.includes(l.code) && match(l));
 
             if (!pinned.length && !rest.length) {
-                content.innerHTML = '<div class="no-results">Ничего не найдено</div>';
+                content.innerHTML = '<div class="no-results">' + (window.i18n?.t('noResults') || 'Ничего не найдено') + '</div>';
                 return;
             }
 
@@ -35,10 +35,10 @@ const token = localStorage.getItem('craneapp_auth_token');
 
             if (!q) {
                 if (pinned.length) {
-                    html += '<div class="section-label">Закреплённые</div><div class="section">' + pinned.map(row).join('') + '</div>';
+                    html += '<div class="section-label">' + (window.i18n?.t('pinned') || 'Закреплённые') + '</div><div class="section">' + pinned.map(row).join('') + '</div>';
                 }
                 if (rest.length) {
-                    html += '<div class="section-label" style="margin-top:8px;">Все языки</div><div class="section">' + rest.map(row).join('') + '</div>';
+                    html += '<div class="section-label" style="margin-top:8px;">' + (window.i18n?.t('allLanguages') || 'Все языки') + '</div><div class="section">' + rest.map(row).join('') + '</div>';
                 }
             } else {
                 html += '<div class="section">' + [...pinned, ...rest].map(row).join('') + '</div>';
@@ -76,10 +76,14 @@ const token = localStorage.getItem('craneapp_auth_token');
             localStorage.setItem('craneapp_settings', JSON.stringify(s));
             localStorage.setItem('craneapp_language', code);
 
-            if (window.i18n) window.i18n.setLanguage(code);
+            if (window.i18n) {
+                window.i18n.setLanguage(code);
+                document.getElementById('headerTitle').textContent = window.i18n.t('language');
+                document.getElementById('searchInput').placeholder = window.i18n.t('searchLanguage');
+            }
 
             render(document.getElementById('searchInput').value);
-            toast('Язык изменён', '✓');
+            toast(window.i18n?.t('languageChangedToast') || 'Язык изменён', '✓');
 
             try {
                 await fetch('/api/v1/users/all-settings', {
@@ -110,6 +114,10 @@ const token = localStorage.getItem('craneapp_auth_token');
                 }
             } catch (e) {}
             render('');
+            if (window.i18n) {
+                document.getElementById('headerTitle').textContent = window.i18n.t('language');
+                document.getElementById('searchInput').placeholder = window.i18n.t('searchLanguage');
+            }
         }
 
         init();

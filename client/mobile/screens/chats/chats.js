@@ -279,6 +279,20 @@
         // ============================================
         let _incomingCall = null;
 
+        // Координация звонков между вкладками одного браузера
+        const _callTabChannel = (typeof BroadcastChannel !== 'undefined')
+            ? new BroadcastChannel('crane_calls') : null;
+        if (_callTabChannel) {
+            _callTabChannel.onmessage = (e) => {
+                if (!e.data) return;
+                if (e.data.type === 'call_tab_handled' && _incomingCall && _incomingCall.roomId === e.data.roomId) {
+                    try { _stopRingtone(); } catch(_) {}
+                    _hideIncomingCallBanner();
+                    _incomingCall = null;
+                }
+            };
+        }
+
         function _genRoomId() { return 'rm_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
 
         let _activeCallRoomId = null;
@@ -555,6 +569,8 @@
             } catch(_){}
             try { _stopRingtone(); } catch(_){}
             _hideIncomingCallBanner();
+            // Сообщаем другим вкладкам — они прекратят звонить
+            try { _callTabChannel && _callTabChannel.postMessage({ type: 'call_tab_handled', roomId: c.roomId }); } catch(_) {}
             const kind = (c.kind === 'audio') ? 'audio' : 'video';
             const callType = c.callType || 'p2p';
             _openCallWindow(c.roomId, callType, c.title || c.fromName || (kind === 'audio' ? 'Аудиозвонок' : 'Видеозвонок'), kind);
@@ -571,6 +587,8 @@
                     ws.send(JSON.stringify({ type:'call_invite_response', to: c.from, roomId: c.roomId, accepted: false }));
                 }
             } catch(_){}
+            // Сообщаем другим вкладкам — они прекратят звонить
+            try { _callTabChannel && _callTabChannel.postMessage({ type: 'call_tab_handled', roomId: c.roomId }); } catch(_) {}
             _hideIncomingCallBanner();
             _incomingCall = null;
         }

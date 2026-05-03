@@ -116,12 +116,12 @@
                 case 'syncing':
                     indicator.className = 'sync-indicator syncing';
                     icon.textContent = '🔄';
-                    text.textContent = 'Синхронизация...';
+                    text.textContent = window.i18n?.t('syncing') || 'Синхронизация...';
                     break;
                 case 'synced':
                     indicator.className = 'sync-indicator synced';
                     icon.textContent = '✓';
-                    text.textContent = 'Синхронизировано';
+                    text.textContent = window.i18n?.t('synchronized') || 'Синхронизировано';
                     setTimeout(function() {
                         indicator.style.opacity = '0.5';
                     }, 2000);

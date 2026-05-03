@@ -134,6 +134,8 @@
             openFolder: 'Открыть',
             // settings main
             chatNotifications: 'Уведомления в чатах', channelSounds: 'Звук в каналах',
+            // language page
+            pinned: 'Закреплённые', allLanguages: 'Все языки', searchLanguage: 'Поиск языка...', languageChangedToast: 'Язык изменён', noResults: 'Ничего не найдено',
             // chats
             chatsTitle: 'Чаты', findUser: 'Найти собеседника', searchChats: 'Поиск чатов...',
             noChatsYet: 'Нет чатов', selectChatPrompt: 'Выберите чат',
@@ -304,6 +306,12 @@
             openFolder: 'Open',
             // settings main
             chatNotifications: 'Chat Notifications', channelSounds: 'Channel Sounds',
+            // language page
+            pinned: 'Pinned', allLanguages: 'All languages', searchLanguage: 'Search language...', languageChangedToast: 'Language changed', noResults: 'No results found',
+            // settings page
+            syncing: 'Syncing...', synchronized: 'Synchronized', syncError: 'Sync error', editProfile: 'Edit profile', synchronize: 'Synchronize', logout: 'Log out', loading: 'Loading...', online: 'online', profile: 'Profile', favorites: 'Favorites', recentCalls: 'Recent calls', devices: 'Devices', chatFolders: 'Chat folders', notificationsSounds: 'Notifications and sounds', privacy: 'Privacy', dataStorage: 'Data and storage', appearance: 'Appearance', dark: 'Dark', light: 'Light', energySaving: 'Energy saving', language: 'Language', russian: 'Russian', english: 'English', german: 'German', french: 'French', additional: 'Additional', craneAppPremium: 'CraneApp Premium', help: 'Help', faq: 'FAQ', features: 'Features', backToChats: '← Back to chats', logoutAccount: 'Log out of account', user: 'User', syncingText: 'Syncing...', synchronizedText: 'Synchronized', syncErrorText: 'Sync error', enabled: 'Enabled', disabled: 'Disabled', sureLogout: 'Are you sure you want to log out?', logoutDone: 'Logout completed', contacts: 'Contacts', calls: 'Calls', chats: 'Chats', settings: 'Settings',
+            // settings page
+            syncing: 'Syncing...', synchronized: 'Synchronized', syncError: 'Sync error', editProfile: 'Edit profile', synchronize: 'Synchronize', logout: 'Log out', loading: 'Loading...', online: 'online', profile: 'Profile', favorites: 'Favorites', recentCalls: 'Recent calls', devices: 'Devices', chatFolders: 'Chat folders', notificationsSounds: 'Notifications and sounds', privacy: 'Privacy', dataStorage: 'Data and storage', appearance: 'Appearance', dark: 'Dark', light: 'Light', energySaving: 'Energy saving', language: 'Language', russian: 'Russian', english: 'English', german: 'German', french: 'French', additional: 'Additional', craneAppPremium: 'CraneApp Premium', help: 'Help', faq: 'FAQ', features: 'Features', backToChats: '← Back to chats', logoutAccount: 'Log out of account', user: 'User', syncingText: 'Syncing...', synchronizedText: 'Synchronized', syncErrorText: 'Sync error', enabled: 'Enabled', disabled: 'Disabled', sureLogout: 'Are you sure you want to log out?', logoutDone: 'Logout completed', contacts: 'Contacts', calls: 'Calls', chats: 'Chats', settings: 'Settings',
             // chats
             chatsTitle: 'Chats', findUser: 'Find a contact', searchChats: 'Search chats...',
             noChatsYet: 'No chats', selectChatPrompt: 'Select a chat',

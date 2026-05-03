@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Язык - CraneApp</title>
     <script src="../../scripts/theme.js"></script>
-    
+    <script src="../../scripts/i18n.js"></script>
     <link rel="stylesheet" href="./language.css">
 </head>
 <body>
@@ -13,12 +13,12 @@
 
     <div class="header">
         <button class="back-btn" onclick="history.back()">←</button>
-        <span class="header-title">Язык</span>
+        <span class="header-title" id="headerTitle">Язык</span>
     </div>
 
     <div class="search-bar">
         <div class="search-inner">
-            <input class="search-input" type="search" placeholder="Поиск языка..." id="searchInput" oninput="render(this.value)" autocomplete="off">
+            <input class="search-input" type="search" placeholder="" id="searchInput" oninput="render(this.value)" autocomplete="off">
         </div>
     </div>
 

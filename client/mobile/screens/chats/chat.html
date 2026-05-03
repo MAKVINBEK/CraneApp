@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title >CraneApp - Чат</title>
-    
+    <script src="../../scripts/theme.js"></script>
+    <script src="../../scripts/i18n.js"></script>
     <link rel="stylesheet" href="./chat.css">
 </head>
 <body>
@@ -13,14 +14,14 @@
             <button class="back-btn" onclick="history.back()">←</button>
             <div class="chat-avatar" id="chatAvatar">🤖</div>
             <div class="chat-info">
-                <div class="chat-name" id="chatName">Загрузка...</div>
-                <div class="chat-status">онлайн</div>
+                <div class="chat-name" id="chatName" data-i18n="loading">Загрузка...</div>
+                <div class="chat-status" data-i18n="online">онлайн</div>
             </div>
         </div>
         <div class="messages-area" id="messages"></div>
         <div class="input-area">
             <button style="background:none;border:none;font-size:20px;cursor:pointer;">📎</button>
-            <label for="msgInput"></label><input type="text" class="msg-input" placeholder="Сообщение..." id="msgInput">
+            <label for="msgInput"></label><input type="text" class="msg-input" placeholder="" id="msgInput">
             <button class="send-btn" onclick="sendMessage()">➤</button>
         </div>
     </div>

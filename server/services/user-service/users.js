@@ -13,14 +13,14 @@ const bcrypt = require('bcrypt');
 async function getUserById(userId) {
   try {
     const result = await query(
-      'SELECT id, phone, username, first_name, last_name, avatar_url, bio, is_bot, is_premium, last_seen, created_at FROM users WHERE id = $1',
+      'SELECT id, phone, username, first_name, last_name, avatar_url, bio, is_bot, is_premium, language, last_seen, created_at FROM users WHERE id = $1',
       [userId]
     );
-    
+
     if (result.rows.length === 0) {
       return null;
     }
-    
+
     return result.rows[0];
   } catch (error) {
     logger.error('Get user by ID error:', error);
@@ -34,14 +34,14 @@ async function getUserById(userId) {
 async function getUserByPhone(phone) {
   try {
     const result = await query(
-      'SELECT id, phone, username, first_name, last_name, avatar_url, bio, is_bot, is_premium, last_seen, created_at FROM users WHERE phone = $1',
+      'SELECT id, phone, username, first_name, last_name, avatar_url, bio, is_bot, is_premium, language, last_seen, created_at FROM users WHERE phone = $1',
       [phone]
     );
-    
+
     if (result.rows.length === 0) {
       return null;
     }
-    
+
     return result.rows[0];
   } catch (error) {
     logger.error('Get user by phone error:', error);
@@ -55,14 +55,14 @@ async function getUserByPhone(phone) {
 async function getUserByUsername(username) {
   try {
     const result = await query(
-      'SELECT id, phone, username, first_name, last_name, avatar_url, bio, is_bot, is_premium, last_seen, created_at FROM users WHERE username = $1',
+      'SELECT id, phone, username, first_name, last_name, avatar_url, bio, is_bot, is_premium, language, last_seen, created_at FROM users WHERE username = $1',
       [username]
     );
-    
+
     if (result.rows.length === 0) {
       return null;
     }
-    
+
     return result.rows[0];
   } catch (error) {
     logger.error('Get user by username error:', error);
@@ -76,12 +76,12 @@ async function getUserByUsername(username) {
 async function createUser(phone, firstName = null, lastName = null, username = null) {
   try {
     const result = await query(
-      `INSERT INTO users (phone, first_name, last_name, username, created_at, last_seen)
-       VALUES ($1, $2, $3, $4, NOW(), NOW())
-       RETURNING id, phone, username, first_name, last_name, avatar_url, bio, is_bot, is_premium, last_seen, created_at`,
+      `INSERT INTO users (phone, first_name, last_name, username, language, created_at, last_seen)
+       VALUES ($1, $2, $3, $4, 'ru', NOW(), NOW())
+       RETURNING id, phone, username, first_name, last_name, avatar_url, bio, is_bot, is_premium, language, last_seen, created_at`,
       [phone, firstName, lastName, username]
     );
-    
+
     return result.rows[0];
   } catch (error) {
     logger.error('Create user error:', error);
@@ -94,21 +94,22 @@ async function createUser(phone, firstName = null, lastName = null, username = n
  */
 async function updateUserProfile(userId, data) {
   try {
-    const { firstName, lastName, username, bio, avatarUrl } = data;
-    
+    const { firstName, lastName, username, bio, avatarUrl, language } = data;
+
     const result = await query(
-      `UPDATE users 
+      `UPDATE users
        SET first_name = COALESCE($1, first_name),
            last_name = COALESCE($2, last_name),
            username = COALESCE($3, username),
            bio = COALESCE($4, bio),
            avatar_url = COALESCE($5, avatar_url),
+           language = COALESCE($6, language),
            updated_at = NOW()
-       WHERE id = $6
-       RETURNING id, phone, username, first_name, last_name, avatar_url, bio, is_bot, is_premium, last_seen, created_at`,
-      [firstName, lastName, username, bio, avatarUrl, userId]
+       WHERE id = $7
+       RETURNING id, phone, username, first_name, last_name, avatar_url, bio, is_bot, is_premium, language, last_seen, created_at`,
+      [firstName, lastName, username, bio, avatarUrl, language, userId]
     );
-    
+
     return result.rows[0];
   } catch (error) {
     logger.error('Update user profile error:', error);
@@ -138,14 +139,14 @@ async function updateLastSeen(userId) {
 async function getUserContacts(userId) {
   try {
     const result = await query(
-      `SELECT u.id, u.phone, u.username, u.first_name, u.last_name, u.avatar_url, u.last_seen
+      `SELECT u.id, u.phone, u.username, u.first_name, u.last_name, u.avatar_url, u.language, u.last_seen
        FROM contacts c
        JOIN users u ON c.contact_user_id = u.id
        WHERE c.user_id = $1
        ORDER BY u.first_name, u.last_name`,
       [userId]
     );
-    
+
     return result.rows;
   } catch (error) {
     logger.error('Get user contacts error:', error);
@@ -239,19 +240,83 @@ async function deleteUser(userId) {
 }
 
 /**
+ * Get all user settings
+ */
+async function getAllSettings(userId) {
+  try {
+    const result = await query(
+      'SELECT settings, privacy_settings, notification_settings, sound_settings, storage_settings, advanced_settings FROM user_settings WHERE user_id = $1',
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      // Create default settings if not exist
+      await query(
+        'INSERT INTO user_settings (user_id) VALUES ($1)',
+        [userId]
+      );
+      return {
+        theme: 'dark',
+        notifications: true,
+        sounds: true,
+        language: 'ru'
+      };
+    }
+
+    return result.rows[0];
+  } catch (error) {
+    logger.error('Get all settings error:', error);
+    throw new Error('Failed to get settings');
+  }
+}
+
+/**
+ * Update all user settings
+ */
+async function updateAllSettings(userId, settings) {
+  try {
+    // Merge with existing settings
+    const existing = await getAllSettings(userId);
+    const updatedSettings = { ...existing.settings, ...settings };
+
+    await query(
+      `INSERT INTO user_settings (user_id, settings, updated_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (user_id) DO UPDATE SET
+         settings = EXCLUDED.settings,
+         updated_at = NOW()`,
+      [userId, JSON.stringify(updatedSettings)]
+    );
+
+    // Update language in users table if changed
+    if (settings.language) {
+      await query(
+        'UPDATE users SET language = $1 WHERE id = $2',
+        [settings.language, userId]
+      );
+    }
+
+    return updatedSettings;
+  } catch (error) {
+    logger.error('Update all settings error:', error);
+    throw new Error('Failed to update settings');
+  }
+}
+
+/**
  * Search users
  */
 async function searchUsers(queryText, limit = 20) {
   try {
     const result = await query(
-      `SELECT id, phone, username, first_name, last_name, avatar_url, bio, last_seen
+      `SELECT id, phone, username, first_name, last_name, avatar_url, bio, language, last_seen
        FROM users
        WHERE (username ILIKE $1 OR first_name ILIKE $1 OR last_name ILIKE $1)
        AND id NOT IN (SELECT blocked_user_id FROM blocked_users WHERE user_id = $2)
        LIMIT $3`,
       [`%${queryText}%`, queryText, limit]
     );
-    
+
     return result.rows;
   } catch (error) {
     logger.error('Search users error:', error);
@@ -272,5 +337,7 @@ module.exports = {
   unblockUser,
   getBlockedUsers,
   deleteUser,
-  searchUsers
+  searchUsers,
+  getAllSettings,
+  updateAllSettings
 };

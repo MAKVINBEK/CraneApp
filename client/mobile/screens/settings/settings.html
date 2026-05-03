@@ -24,7 +24,7 @@
             <div style="display: flex; align-items: center; gap: 8px;">
                 <div class="sync-indicator" id="syncIndicator">
                     <span id="syncIcon">🔄</span>
-                    <span id="syncText">Синхронизация...</span>
+                    <span id="syncText" data-i18n="syncing">Синхронизация...</span>
                 </div>
                 <button class="header-btn pc-header-menu" id="pcMenuBtn">⋮</button>
             </div>
@@ -32,7 +32,7 @@
         
         <div class="dropdown-menu" id="pcDropdown">
             <div class="dropdown-item" onclick="location.href='./editProfile.html'">
-                <span>✏</span><span>Изменить профиль</span>
+                <span>✏</span><span data-i18n="editProfile">Изменить профиль</span>
             </div>
             <div class="dropdown-item" onclick="syncNow()">
                 <span>🔄</span><span>Синхронизировать</span>
@@ -47,10 +47,10 @@
                 <span class="profile-avatar-placeholder">👤</span>
             </div>
             <div class="profile-info">
-                <div class="profile-name" id="profileName">Загрузка...</div>
+                <div class="profile-name" id="profileName" data-i18n="loading">Загрузка...</div>
                 <div class="profile-username" id="profileUsername">@username</div>
                 <div class="profile-bio" id="profileBio"></div>
-                <div class="profile-status">онлайн</div>
+                <div class="profile-status" data-i18n="online">онлайн</div>
             </div>
         </div>
         
@@ -60,7 +60,7 @@
                 <div class="settings-icon" style="background:rgba(255,0,127,0.2);">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF007F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                 </div>
-                <div class="settings-label">Профиль</div>
+                <div class="settings-label" data-i18n="profile">Профиль</div>
                 <div class="settings-value" id="accountUsername"></div>
                 <div class="settings-arrow">›</div>
             </a>
@@ -68,7 +68,7 @@
                 <div class="settings-icon" style="background:rgba(255,215,0,0.2);">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFD700" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
                 </div>
-                <div class="settings-label">Избранное</div>
+                <div class="settings-label" data-i18n="favorites">Избранное</div>
                 <div class="settings-arrow">›</div>
             </a>
             <a href="./recentCalls.html" class="settings-item">
