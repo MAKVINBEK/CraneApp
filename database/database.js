@@ -49,6 +49,7 @@ async function ensureTablesExist() {
         is_bot BOOLEAN DEFAULT FALSE,
         is_premium BOOLEAN DEFAULT FALSE,
         is_blocked BOOLEAN DEFAULT FALSE,
+        language VARCHAR(10) DEFAULT 'ru',
         last_seen TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
