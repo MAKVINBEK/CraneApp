@@ -7,19 +7,26 @@ const logger = require('../logger');
 const getMe = async (req, res) => {
   try {
     const userId = req.user.userId;
-    
+
     const user = await userService.getUserById(userId);
-    
+
     if (!user) {
       return res.status(404).json({
         error: 'User not found',
         status: 404
       });
     }
-    
+
+    // Fetch user settings to include language
+    const settings = await userService.getAllSettings(userId);
+    const language = settings.language || 'ru';
+
     res.status(200).json({
       success: true,
-       user
+      user: {
+        ...user,
+        language
+      }
     });
   } catch (error) {
     logger.error('Get me controller error:', error);
@@ -241,14 +248,69 @@ const searchUsers = async (req, res) => {
 };
 
 /**
+ * Get all user settings
+ */
+const getAllSettings = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const settings = await userService.getAllSettings(userId);
+
+    res.status(200).json({
+      success: true,
+      settings
+    });
+  } catch (error) {
+    logger.error('Get all settings controller error:', error);
+    res.status(500).json({
+      error: 'Failed to get settings',
+      message: error.message,
+      status: 500
+    });
+  }
+};
+
+/**
+ * Update all user settings
+ */
+const updateAllSettings = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { settings } = req.body;
+
+    if (!settings) {
+      return res.status(400).json({
+        error: 'Settings are required',
+        status: 400
+      });
+    }
+
+    const updatedSettings = await userService.updateAllSettings(userId, settings);
+
+    res.status(200).json({
+      success: true,
+      message: 'Settings updated successfully',
+      settings: updatedSettings
+    });
+  } catch (error) {
+    logger.error('Update all settings controller error:', error);
+    res.status(400).json({
+      error: 'Failed to update settings',
+      message: error.message,
+      status: 400
+    });
+  }
+};
+
+/**
  * Delete account
  */
 const deleteAccount = async (req, res) => {
   try {
     const userId = req.user.userId;
-    
+
     await userService.deleteUser(userId);
-    
+
     res.status(200).json({
       success: true,
       message: 'Account deleted successfully'
@@ -273,5 +335,7 @@ module.exports = {
   unblockUser,
   getBlockedUsers,
   searchUsers,
-  deleteAccount
+  deleteAccount,
+  getAllSettings,
+  updateAllSettings
 };
