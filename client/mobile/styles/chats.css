@@ -121,6 +121,17 @@ body {
     min-height: 0;
 }
 
+/* Минимизированный звонок: iframe скрыт визуально, но продолжает работать */
+.call-panel.minimized {
+    position: fixed !important;
+    top: -9999px !important;
+    left: -9999px !important;
+    width: 1px !important;
+    height: 1px !important;
+    overflow: hidden !important;
+    pointer-events: none !important;
+}
+
 .call-frame {
     flex: 1;
     border: none;

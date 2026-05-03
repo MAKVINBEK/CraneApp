@@ -1447,7 +1447,9 @@
         }
 
         function _showCallPanel() {
-            document.getElementById('callPanel').style.display = 'flex';
+            const _panel = document.getElementById('callPanel');
+            _panel.classList.remove('minimized');
+            _panel.style.display = 'flex';
             document.getElementById('activeCallBar').style.display = 'none';
             document.getElementById('noChat').style.display = 'none';
             const chatView = document.getElementById('chatView');
@@ -1458,7 +1460,9 @@
 
         function _hideCallPanel() {
             document.body.classList.remove('call-open');
-            document.getElementById('callPanel').style.display = 'none';
+            const _panel = document.getElementById('callPanel');
+            _panel.style.display = 'flex'; // iframe должен продолжать работать
+            _panel.classList.add('minimized');
             if (_activeCallRoomId) {
                 const bar = document.getElementById('activeCallBar');
                 document.getElementById('activeCallBarTitle').textContent = _activeCallTitle;
@@ -1480,7 +1484,9 @@
                 try { document.getElementById('callFrame').contentWindow.postMessage({ type: 'crane_hangup' }, '*'); } catch(_) {}
             }
             _activeCallRoomId = null;
-            document.getElementById('callPanel').style.display = 'none';
+            const _panel = document.getElementById('callPanel');
+            _panel.classList.remove('minimized');
+            _panel.style.display = 'none';
             document.getElementById('callFrame').src = '';
             document.getElementById('activeCallBar').style.display = 'none';
             if (typeof activeChat !== 'undefined' && activeChat) {
