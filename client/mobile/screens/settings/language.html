@@ -69,12 +69,12 @@
 
         <div class="header">
             <button class="back-btn" onclick="history.back()">←</button>
-            <span class="header-title">Язык</span>
+            <span class="header-title" id="headerTitle">Язык</span>
         </div>
 
         <div class="search-bar">
             <div class="search-inner">
-                <input class="search-input" type="search" placeholder="Поиск языка..." id="searchInput" oninput="render(this.value)" autocomplete="off">
+                <input class="search-input" type="search" placeholder="" id="searchInput" oninput="render(this.value)" autocomplete="off">
             </div>
         </div>
 
@@ -110,7 +110,7 @@
             const rest   = LANGUAGES.filter(l => !PINNED.includes(l.code) && match(l));
 
             if (!pinned.length && !rest.length) {
-                content.innerHTML = '<div class="no-results">Ничего не найдено</div>';
+                content.innerHTML = '<div class="no-results">' + window.i18n.t('noResults') + '</div>';
                 return;
             }
 
@@ -118,10 +118,10 @@
 
             if (!q) {
                 if (pinned.length) {
-                    html += '<div class="section-label">Закреплённые</div><div class="section">' + pinned.map(row).join('') + '</div>';
+                    html += '<div class="section-label">' + window.i18n.t('pinned') + '</div><div class="section">' + pinned.map(row).join('') + '</div>';
                 }
                 if (rest.length) {
-                    html += '<div class="section-label" style="margin-top:8px;">Все языки</div><div class="section">' + rest.map(row).join('') + '</div>';
+                    html += '<div class="section-label" style="margin-top:8px;">' + window.i18n.t('allLanguages') + '</div><div class="section">' + rest.map(row).join('') + '</div>';
                 }
             } else {
                 html += '<div class="section">' + [...pinned, ...rest].map(row).join('') + '</div>';
@@ -162,7 +162,11 @@
             if (window.i18n) window.i18n.setLanguage(code);
 
             render(document.getElementById('searchInput').value);
-            toast('Язык изменён', '✓');
+            if (window.i18n) {
+                document.getElementById('headerTitle').textContent = window.i18n.t('language');
+                document.getElementById('searchInput').placeholder = window.i18n.t('searchLanguage');
+            }
+            toast(window.i18n.t('languageChangedToast'), '✓');
 
             try {
                 await fetch('/api/v1/users/all-settings', {
@@ -189,9 +193,14 @@
                     if (d.settings?.language) {
                         current = d.settings.language;
                         localStorage.setItem('craneapp_language', current);
+                        if (window.i18n) window.i18n.setLanguage(current);
                     }
                 }
             } catch (e) {}
+            if (window.i18n) {
+                document.getElementById('headerTitle').textContent = window.i18n.t('language');
+                document.getElementById('searchInput').placeholder = window.i18n.t('searchLanguage');
+            }
             render('');
         }
 
