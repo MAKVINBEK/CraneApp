@@ -100,7 +100,7 @@ const token = localStorage.getItem('craneapp_auth_token');
             el.classList.toggle('active');
             settings[key] = el.classList.contains('active');
             await saveSettings();
-            showToast(settings[key] ? 'Включено' : 'Выключено', '✓');
+            showToast(settings[key] ? (window.i18n?.t('enabledToast') || 'Включено') : (window.i18n?.t('disabledToast') || 'Выключено'), '✓');
         }
         
         function openSoundPicker(type) {

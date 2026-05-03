@@ -62,7 +62,9 @@ const token = localStorage.getItem('craneapp_auth_token');
                     const res = await fetch(`/api/v1/users/check-username?username=${encodeURIComponent(val)}`, { headers: { 'Authorization': 'Bearer ' + token } });
                     if (res.ok) {
                         const d = await res.json();
-                        statusEl.textContent = d.available ? '✓ Доступен' : 'Уже занят';
+                    statusEl.textContent = d.available
+                        ? (window.i18n?.t('usernameAvailable') || '✓ Доступен')
+                        : (window.i18n?.t('usernameTaken') || 'Уже занят');
                         statusEl.className = 'username-status ' + (d.available ? 'ok' : 'error');
                         usernameValid = d.available;
                     }

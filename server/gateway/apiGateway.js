@@ -15,6 +15,7 @@ const rateLimit = require('express-rate-limit');
 const logger = require('../services/logger');
 const { pool, query, initDatabase, ensureTablesExist } = require('../../database/database');
 const security = require('../middleware/security');
+const i18n = require('../i18n');
 const QRCode = require('qrcode');
 const callRoom = require('../services/call-service/callRoom');
 
@@ -59,7 +60,7 @@ const globalLimiter = rateLimit({
         const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.ip;
         logger.warn(`🚫 Rate limit exceeded: ${ip}`);
         res.set('Retry-After', '60');
-        res.status(429).json({ error: 'Too many requests. Please slow down.' });
+        res.status(429).json({ error: i18n.t(i18n.languageFromHeaders(req), 'tooManyRequests') });
     }
 });
 
@@ -75,7 +76,7 @@ const authLimiter = rateLimit({
         logger.warn(`🚫 Auth rate limit exceeded: ${ip}`);
         ipBlockList.set(ip, Date.now() + 30 * 60 * 1000);
         res.set('Retry-After', '1800');
-        res.status(429).json({ error: 'Too many login attempts. Try again in 30 minutes.' });
+        res.status(429).json({ error: i18n.t(i18n.languageFromHeaders(req), 'tooManyFailedAttempts', { minutes: 30 }) });
     }
 });
 
@@ -88,7 +89,7 @@ const apiLimiter = rateLimit({
     keyGenerator: (req) => req.headers['x-forwarded-for']?.split(',')[0].trim() || req.ip,
     handler: (req, res) => {
         res.set('Retry-After', '60');
-        res.status(429).json({ error: 'API rate limit exceeded.' });
+        res.status(429).json({ error: (req.t || ((key) => i18n.t(i18n.languageFromHeaders(req), key)))('tooManyRequests') });
     }
 });
 
@@ -99,7 +100,7 @@ const uploadLimiter = rateLimit({
     keyGenerator: (req) => req.headers['x-forwarded-for']?.split(',')[0].trim() || req.ip,
     handler: (req, res) => {
         res.set('Retry-After', '60');
-        res.status(429).json({ error: 'Upload rate limit exceeded.' });
+        res.status(429).json({ error: (req.t || ((key) => i18n.t(i18n.languageFromHeaders(req), key)))('tooManyRequests') });
     }
 });
 
@@ -110,7 +111,7 @@ function ipBlockMiddleware(req, res, next) {
     if (blockUntil && Date.now() < blockUntil) {
         const remaining = Math.ceil((blockUntil - Date.now()) / 60000);
         res.set('Retry-After', String(remaining * 60));
-        return res.status(403).json({ error: `IP blocked. Try again in ${remaining} minutes.` });
+        return res.status(403).json({ error: i18n.t(i18n.languageFromHeaders(req), 'tooManyFailedAttempts', { minutes: remaining }) });
     }
     if (blockUntil && Date.now() >= blockUntil) {
         ipBlockList.delete(ip);
@@ -140,7 +141,7 @@ function floodDetectionMiddleware(req, res, next) {
             if (data.count > maxPerSecond) {
                 ipBlockList.set(ip, now + 2 * 60 * 1000);
                 logger.warn(`🚫 Flood detected, blocking IP: ${ip} (${data.count} API req/s)`);
-                return res.status(429).json({ error: 'Flood detected. IP blocked for 2 minutes.' });
+                return res.status(429).json({ error: i18n.t(i18n.languageFromHeaders(req), 'tooManyFailedAttempts', { minutes: 2 }) });
             }
         }
     }
@@ -152,7 +153,7 @@ function bodySizeMiddleware(req, res, next) {
     const contentLength = parseInt(req.headers['content-length'] || '0');
     const maxSize = 105 * 1024 * 1024; // 105MB
     if (contentLength > maxSize) {
-        return res.status(413).json({ error: 'Request body too large.' });
+        return res.status(413).json({ error: i18n.t(i18n.languageFromHeaders(req), 'tooManyRequests') });
     }
     next();
 }
@@ -231,11 +232,12 @@ app.use(cors({
     origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:3000'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Crane-Language']
 }));
 
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ extended: true, limit: '100mb' }));
+app.use(i18n.middleware({ query, jwt, secret: process.env.JWT_SECRET }));
 app.use(security.massAssignmentMiddleware);
 app.use(security.sqlInjectionMiddleware);
 
@@ -386,7 +388,7 @@ async function saveCallMessage(r) {
 // Создать комнату (1-на-1 или групповую)
 app.post('/api/v1/calls/rooms', async (req, res) => {
     const u = await authFromHeader(req);
-    if (!u) return res.status(401).json({ error: 'Unauthorized' });
+    if (!u) return res.status(401).json({ error: req.t('unauthorized') });
     const { type = 'group', chatId = null, title = null, callKind = 'video' } = req.body || {};
     const room = callRoom.createRoom(u.userId, { type, chatId, title, callKind });
     res.json({
@@ -400,7 +402,7 @@ app.post('/api/v1/calls/rooms', async (req, res) => {
 // Получить инфу о комнате
 app.get('/api/v1/calls/rooms/:roomId', async (req, res) => {
     const u = await authFromHeader(req);
-    if (!u) return res.status(401).json({ error: 'Unauthorized' });
+    if (!u) return res.status(401).json({ error: req.t('unauthorized') });
     const room = callRoom.getRoom(req.params.roomId);
     if (!room) return res.status(404).json({ error: 'Room not found' });
     res.json({
@@ -441,7 +443,7 @@ app.get('/api/v1/calls/ice-servers', async (req, res) => {
 // Список активных комнат (для раздела «Встречи»)
 app.get('/api/v1/calls/rooms', async (req, res) => {
     const u = await authFromHeader(req);
-    if (!u) return res.status(401).json({ error: 'Unauthorized' });
+    if (!u) return res.status(401).json({ error: req.t('unauthorized') });
     res.json({ success: true, rooms: callRoom.listRooms() });
 });
 
@@ -454,32 +456,39 @@ async function authMiddleware(req, res, next) {
         const authHeader = req.headers.authorization;
 
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return res.status(401).json({ error: 'No token provided' });
+            return res.status(401).json({ error: req.t ? req.t('noToken') : i18n.t(i18n.languageFromHeaders(req), 'noToken') });
         }
 
         const token = authHeader.split(' ')[1];
         if (!process.env.JWT_SECRET) {
             logger.error('JWT_SECRET is not configured');
-            return res.status(500).json({ error: 'Server configuration error' });
+            return res.status(500).json({ error: req.t ? req.t('serverConfigError') : i18n.t(i18n.languageFromHeaders(req), 'serverConfigError') });
         }
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
         const result = await query(
-            'SELECT id, username, first_name, last_name, avatar_url, bio, badge, badges, is_bot, is_blocked, is_muted, muted_until, is_premium, block_reason, mute_reason FROM users WHERE id = $1',
+            `SELECT u.id, u.username, u.first_name, u.last_name, u.avatar_url, u.bio, u.badge, u.badges,
+                    u.is_bot, u.is_blocked, u.is_muted, u.muted_until, u.is_premium,
+                    u.block_reason, u.mute_reason, u.language, us.settings->>'language' AS settings_language
+             FROM users u
+             LEFT JOIN user_settings us ON us.user_id = u.id
+             WHERE u.id = $1`,
             [decoded.userId]
         );
 
         if (result.rows.length === 0) {
-            return res.status(401).json({ error: 'User not found' });
+            return res.status(401).json({ error: req.t('userNotFound') });
         }
 
         req.user = result.rows[0];
+        req.locale = i18n.normalizeLanguage(req.user.settings_language) || i18n.normalizeLanguage(req.user.language) || req.locale;
+        req.t = (key, vars) => i18n.t(req.locale, key, vars);
 
         // Проверяем бан
         if (req.user.is_blocked) {
             const errorMessage = req.user.block_reason
-                ? `Аккаунт заблокирован. Причина: ${req.user.block_reason}`
-                : 'Аккаунт заблокирован';
+                ? req.t('accountBlockedReason', { reason: req.user.block_reason })
+                : req.t('accountBlocked');
             return res.status(403).json({ error: errorMessage });
         }
 
@@ -491,7 +500,7 @@ async function authMiddleware(req, res, next) {
         next();
     } catch (error) {
         logger.error('Auth middleware error:', error);
-        return res.status(401).json({ error: 'Invalid token' });
+        return res.status(401).json({ error: req.t ? req.t('invalidToken') : i18n.t(i18n.languageFromHeaders(req), 'invalidToken') });
     }
 }
 
@@ -948,42 +957,43 @@ async function cleanDuplicatePrivateChats() {
 app.post('/api/v1/auth/register', authLimiter, async (req, res) => {
     try {
         const { username, password, firstName, lastName } = req.body;
+        const lang = i18n.normalizeLanguage(req.body.language) || req.locale || 'ru';
 
         if (!username || username.length < 5 || username.length > 32) {
-            return res.status(400).json({ error: 'Username must be 5-32 characters' });
+            return res.status(400).json({ error: req.t('usernameLength') });
         }
 
         if (!/^[a-zA-Z0-9_]+$/.test(username)) {
-            return res.status(400).json({ error: 'Username can only contain letters, numbers, and underscores' });
+            return res.status(400).json({ error: req.t('usernameFormat') });
         }
 
         if (!password || password.length < 6) {
-            return res.status(400).json({ error: 'Password must be at least 6 characters' });
+            return res.status(400).json({ error: req.t('passwordMin') });
         }
 
         if (!firstName) {
-            return res.status(400).json({ error: 'First name is required' });
+            return res.status(400).json({ error: req.t('firstNameRequired') });
         }
 
         const existing = await query('SELECT id FROM users WHERE username = $1', [username.toLowerCase()]);
         if (existing.rows.length > 0) {
-            return res.status(400).json({ error: 'Username already taken' });
+            return res.status(400).json({ error: req.t('usernameTaken') });
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
         const userId = uuidv4();
 
         const result = await query(
-            `INSERT INTO users (id, username, password_hash, first_name, last_name, phone, bio, avatar_url, created_at, last_seen)
-             VALUES ($1, $2, $3, $4, $5, NULL, '', '', NOW(), NOW())
+            `INSERT INTO users (id, username, password_hash, first_name, last_name, phone, bio, avatar_url, language, created_at, last_seen)
+             VALUES ($1, $2, $3, $4, $5, NULL, '', '', $6, NOW(), NOW())
              RETURNING id, username, first_name, last_name, bio, avatar_url`,
-            [userId, username.toLowerCase(), hashedPassword, firstName, lastName || '']
+            [userId, username.toLowerCase(), hashedPassword, firstName, lastName || '', lang]
         );
 
         const user = result.rows[0];
         if (!process.env.JWT_SECRET) {
             logger.error('JWT_SECRET is not configured');
-            return res.status(500).json({ error: 'Server configuration error' });
+            return res.status(500).json({ error: req.t('serverConfigError') });
         }
         const token = jwt.sign(
             { userId: user.id, username: user.username },
@@ -995,7 +1005,7 @@ app.post('/api/v1/auth/register', authLimiter, async (req, res) => {
             `INSERT INTO user_settings (user_id, settings, privacy_settings, notification_settings, sound_settings, storage_settings, advanced_settings, folders)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
             [user.id, 
-             JSON.stringify({ theme: 'dark', notifications: true, sounds: true, language: 'ru' }),
+             JSON.stringify({ theme: 'dark', notifications: true, sounds: true, language: lang }),
              JSON.stringify({ lastSeen: 'all', phoneVisibility: 'contacts', photoVisibility: 'all', messagesFromStrangers: true, groupsAdd: 'all', twoFactorAuth: false, autoDeleteAccount: true }),
              JSON.stringify({ privateChats: true, groups: true, channels: true, calls: true, videoCalls: true, inAppNotifications: true, messagePreview: true, readReceipts: false, reactions: true, newContacts: true }),
              JSON.stringify({ notificationsVolume: 80, mediaVolume: 100, notificationsSound: true, messagesSound: true, sendSound: true, callsSound: true, vibrateOnCall: true, notificationSound: 'default', messageSound: 'default', ringtone: 'default' }),
@@ -1026,7 +1036,7 @@ app.post('/api/v1/auth/register', authLimiter, async (req, res) => {
 });
 
 // Отправка уведомления о входе через CraneApp бот
-async function sendLoginNotification(userId, ip, deviceName, location) {
+async function sendLoginNotification(userId, ip, deviceName, location, lang = 'ru') {
     try {
         const botResult = await query("SELECT id FROM users WHERE username = 'craneapp_bot'");
         if (!botResult.rows.length) return;
@@ -1042,8 +1052,14 @@ async function sendLoginNotification(userId, ip, deviceName, location) {
         if (!chatResult.rows.length) return;
         const chatId = chatResult.rows[0].id;
 
-        const time = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' });
-        const msg = `🔐 Новый вход в аккаунт\n\n📱 Устройство: ${deviceName || 'Неизвестно'}\n🌍 Местоположение: ${location || 'Неизвестно'}\n🌐 IP-адрес: ${ip || 'Неизвестно'}\n🕐 Время: ${time}\n\nЕсли это были не вы — немедленно смените пароль.`;
+        const localeMap = { ru: 'ru-RU', en: 'en-US', de: 'de-DE', fr: 'fr-FR', es: 'es-ES', it: 'it-IT', pt: 'pt-PT', pl: 'pl-PL', uk: 'uk-UA', tr: 'tr-TR' };
+        const time = new Date().toLocaleString(localeMap[lang] || 'ru-RU', { timeZone: 'Europe/Moscow' });
+        const msg = i18n.t(lang, 'loginNotification', {
+            device: deviceName || i18n.t(lang, 'unknown'),
+            location: location || i18n.t(lang, 'unknown'),
+            ip: ip || i18n.t(lang, 'unknown'),
+            time
+        });
 
         await query(
             `INSERT INTO messages (id, chat_id, sender_id, content, created_at) VALUES ($1, $2, $3, $4, NOW())`,
@@ -1067,7 +1083,7 @@ app.post('/api/v1/auth/login', authLimiter, async (req, res) => {
         const ip = security.getIP(req);
 
         if (!username || !password) {
-            return res.status(400).json({ error: 'Username and password required' });
+            return res.status(400).json({ error: req.t('usernamePasswordRequired') });
         }
 
         // Проверка brute-force
@@ -1075,7 +1091,7 @@ app.post('/api/v1/auth/login', authLimiter, async (req, res) => {
         if (bruteCheck.blocked) {
             logger.warn(`🔒 Login blocked for ${username} from ${ip}`);
             return res.status(429).json({
-                error: `Too many failed attempts. Try again in ${bruteCheck.remaining} minutes.`
+                error: req.t('tooManyFailedAttempts', { minutes: bruteCheck.remaining })
             });
         }
 
@@ -1088,14 +1104,14 @@ app.post('/api/v1/auth/login', authLimiter, async (req, res) => {
         if (result.rows.length === 0) {
             security.recordFailedLogin(ip, username);
             security.addSuspiciousScore(ip, 3);
-            return res.status(401).json({ error: 'Invalid username or password' });
+            return res.status(401).json({ error: req.t('invalidUsernamePassword') });
         }
 
         const user = result.rows[0];
 
         // Проверяем бан ДО проверки пароля
         if (user.is_blocked) {
-            return res.status(403).json({ error: 'Ваш аккаунт заблокирован. Обратитесь в поддержку.' });
+            return res.status(403).json({ error: req.t('accountBlockedSupport') });
         }
 
         const isValid = await bcrypt.compare(password, user.password_hash);
@@ -1105,7 +1121,7 @@ app.post('/api/v1/auth/login', authLimiter, async (req, res) => {
             security.addSuspiciousScore(ip, 3);
             const remaining = MAX_LOGIN_ATTEMPTS - attempts;
             return res.status(401).json({
-                error: 'Invalid username or password',
+                error: req.t('invalidUsernamePassword'),
                 attemptsLeft: remaining > 0 ? remaining : 0
             });
         }
@@ -1128,13 +1144,13 @@ app.post('/api/v1/auth/login', authLimiter, async (req, res) => {
             }
             const twoFAMatch = await bcrypt.compare(twoFAPassword, user.two_fa_hash);
             if (!twoFAMatch) {
-                return res.status(401).json({ error: 'Неверный доп. пароль 2FA' });
+                return res.status(401).json({ error: req.t('invalid2FA') });
             }
         }
 
         if (!process.env.JWT_SECRET) {
             logger.error('JWT_SECRET is not configured');
-            return res.status(500).json({ error: 'Server configuration error' });
+            return res.status(500).json({ error: req.t('serverConfigError') });
         }
         const token = jwt.sign(
             { userId: user.id, username: user.username },
@@ -1149,7 +1165,8 @@ app.post('/api/v1/auth/login', authLimiter, async (req, res) => {
         const serverIP = (req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim();
         const loginIp = bodyClientIP || serverIP;
         const ua = req.headers['user-agent'] || '';
-        let deviceName = 'Браузер';
+        const lang = await i18n.languageForUser(user.id, query) || req.locale || 'ru';
+        let deviceName = i18n.t(lang, 'browser');
         if (/iPhone/.test(ua)) deviceName = 'iPhone';
         else if (/iPad/.test(ua)) deviceName = 'iPad';
         else if (/Android/.test(ua)) deviceName = 'Android';
@@ -1158,13 +1175,13 @@ app.post('/api/v1/auth/login', authLimiter, async (req, res) => {
 
         // Геолокация и уведомление (не блокируем ответ)
         (async () => {
-            let location = 'Локальная сеть';
+            let location = i18n.t(lang, 'localNetwork');
             const isLocal = !loginIp || loginIp === '::1' || loginIp === '127.0.0.1' || loginIp.startsWith('192.168.') || loginIp.startsWith('10.');
             if (!isLocal) {
                 try {
                     const http = require('http');
                     const geo = await new Promise((resolve) => {
-                        http.get(`http://ip-api.com/json/${loginIp}?fields=city,country&lang=ru`, r => {
+                        http.get(`http://ip-api.com/json/${loginIp}?fields=city,country&lang=${lang}`, r => {
                             let d = ''; r.on('data', c => d += c); r.on('end', () => { try { resolve(JSON.parse(d)); } catch { resolve({}); } });
                         }).on('error', () => resolve({}));
                     });
@@ -1172,7 +1189,7 @@ app.post('/api/v1/auth/login', authLimiter, async (req, res) => {
                     else if (geo.country) location = geo.country;
                 } catch (_) {}
             }
-            await sendLoginNotification(user.id, loginIp, deviceName, location);
+            await sendLoginNotification(user.id, loginIp, deviceName, location, lang);
         })();
 
         logger.info('✅ User logged in: ' + user.username);
@@ -1381,13 +1398,13 @@ app.get('/api/v1/auth/me', async (req, res) => {
  try {
  const authHeader = req.headers.authorization;
  if (!authHeader || !authHeader.startsWith('Bearer ')) {
- return res.status(401).json({ error: 'No token' });
+ return res.status(401).json({ error: req.t('noToken') });
  }
 
  const token = authHeader.split(' ')[1];
  if (!process.env.JWT_SECRET) {
      logger.error('JWT_SECRET is not configured');
-     return res.status(500).json({ error: 'Server configuration error' });
+     return res.status(500).json({ error: req.t('serverConfigError') });
  }
  const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
@@ -1397,7 +1414,7 @@ app.get('/api/v1/auth/me', async (req, res) => {
  );
 
  if (result.rows.length ===0) {
- return res.status(401).json({ error: 'User not found' });
+ return res.status(401).json({ error: req.t('userNotFound') });
  }
 
  res.status(200).json({ 
@@ -1413,7 +1430,7 @@ app.get('/api/v1/auth/me', async (req, res) => {
  } 
  });
  } catch (error) {
- res.status(401).json({ error: 'Invalid token' });
+ res.status(401).json({ error: req.t('invalidToken') });
  }
 });
 
@@ -1774,7 +1791,7 @@ app.delete('/api/v1/stickers/:stickerId', authMiddleware, async (req, res) => {
         }
 
         if (stickerCheck.rows[0].user_id !== req.user.id) {
-            return res.status(403).json({ error: 'Access denied' });
+            return res.status(403).json({ error: req.t('accessDenied') });
         }
 
         // Delete physical file
@@ -2012,7 +2029,7 @@ app.post('/api/v1/auth/change-password', authMiddleware, async (req, res) => {
             return res.status(400).json({ error: 'Password too short' });
         }
         const result = await query('SELECT password_hash FROM users WHERE id = $1', [req.user.id]);
-        if (!result.rows[0]) return res.status(404).json({ error: 'User not found' });
+        if (!result.rows[0]) return res.status(404).json({ error: req.t('userNotFound') });
 
         const valid = await bcrypt.compare(currentPassword, result.rows[0].password_hash);
         if (!valid) return res.status(401).json({ error: 'Неверный текущий пароль' });
@@ -2074,7 +2091,7 @@ app.post('/api/v1/auth/2fa/verify', authMiddleware, async (req, res) => {
         const row = result.rows[0];
         if (!row?.two_fa_enabled) return res.json({ success: true, required: false });
         const match = await bcrypt.compare(password, row.two_fa_hash);
-        if (!match) return res.status(401).json({ error: 'Неверный доп. пароль' });
+        if (!match) return res.status(401).json({ error: req.t('invalidAdditionalPassword') });
         res.json({ success: true, required: true });
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -2152,6 +2169,14 @@ app.put('/api/v1/users/all-settings', authMiddleware, async (req, res) => {
             ]
         );
 
+        if (settings?.language) {
+            const lang = i18n.normalizeLanguage(settings.language);
+            if (lang) {
+                await query('UPDATE users SET language = $1 WHERE id = $2', [lang, req.user.id]);
+                req.locale = lang;
+            }
+        }
+
         // Уведомляем другие устройства пользователя через WebSocket
         wss.clients.forEach(client => {
             if (client.readyState === WebSocket.OPEN && client.userId === req.user.id) {
@@ -2218,6 +2243,11 @@ app.put('/api/v1/users/settings', authMiddleware, async (req, res) => {
              DO UPDATE SET settings = $2, updated_at = NOW()`,
             [req.user.id, JSON.stringify(settings)]
         );
+
+        if (language !== undefined) {
+            const lang = i18n.normalizeLanguage(language);
+            if (lang) await query('UPDATE users SET language = $1 WHERE id = $2', [lang, req.user.id]);
+        }
         
         logger.info('✅ Settings updated for:', req.user.id);
         res.json({ success: true, settings });
@@ -2330,7 +2360,7 @@ app.post('/api/v1/users/blocked', authMiddleware, async (req, res) => {
         
         const userCheck = await query('SELECT id FROM users WHERE id = $1', [userId]);
         if (userCheck.rows.length === 0) {
-            return res.status(404).json({ error: 'User not found' });
+            return res.status(404).json({ error: req.t('userNotFound') });
         }
         
         const alreadyBlocked = await query(
@@ -2824,7 +2854,7 @@ app.post('/api/v1/users/passcode/verify', authMiddleware, async (req, res) => {
             'SELECT passcode_hash FROM user_settings WHERE user_id = $1',
             [req.user.id]
         );
-        if (!result.rows[0]?.passcode_hash) return res.status(400).json({ error: 'No passcode set' });
+        if (!result.rows[0]?.passcode_hash) return res.status(400).json({ error: req.t('noPasscodeSet') });
         const match = await bcrypt.compare(passcode, result.rows[0].passcode_hash);
         if (match) res.json({ success: true });
         else res.status(401).json({ error: 'Wrong passcode' });
@@ -2840,7 +2870,7 @@ app.post('/api/v1/users/passcode/disable', authMiddleware, async (req, res) => {
             'SELECT passcode_hash FROM user_settings WHERE user_id = $1',
             [req.user.id]
         );
-        if (!result.rows[0]?.passcode_hash) return res.status(400).json({ error: 'No passcode set' });
+        if (!result.rows[0]?.passcode_hash) return res.status(400).json({ error: req.t('noPasscodeSet') });
         const match = await bcrypt.compare(passcode, result.rows[0].passcode_hash);
         if (!match) return res.status(401).json({ error: 'Wrong passcode' });
         await query(
@@ -3156,7 +3186,7 @@ app.get('/api/v1/users/:userId/profile', authMiddleware, async (req, res) => {
         );
 
         if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'User not found' });
+            return res.status(404).json({ error: req.t('userNotFound') });
         }
 
         const user = result.rows[0];
@@ -3197,7 +3227,7 @@ app.get('/api/v1/users/:userId/status', authMiddleware, async (req, res) => {
         );
         
         if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'User not found' });
+            return res.status(404).json({ error: req.t('userNotFound') });
         }
         
         const user = result.rows[0];
@@ -3255,7 +3285,7 @@ app.get('/api/v1/users/qr-code', authMiddleware, async (req, res) => {
         );
         
         if (userResult.rows.length === 0) {
-            return res.status(404).json({ error: 'User not found' });
+            return res.status(404).json({ error: req.t('userNotFound') });
         }
         
         // Формируем URL для QR-кода (deep link для приложения)
@@ -3293,7 +3323,7 @@ app.post('/api/v1/reports', authMiddleware, async (req, res) => {
         );
         
         if (userResult.rows.length === 0) {
-            return res.status(404).json({ error: 'User not found' });
+            return res.status(404).json({ error: req.t('userNotFound') });
         }
         
         // Создаём жалобу
@@ -3598,7 +3628,7 @@ app.get('/api/v1/chats/:chatId/members', authMiddleware, async (req, res) => {
         );
 
         if (memberCheck.rows.length === 0) {
-            return res.status(403).json({ error: 'Access denied' });
+            return res.status(403).json({ error: req.t('accessDenied') });
         }
 
         const result = await query(
@@ -3639,8 +3669,8 @@ app.get('/api/v1/chats/:chatId/members', authMiddleware, async (req, res) => {
 app.post('/api/v1/chats/create-group', authMiddleware, async (req, res) => {
     try {
         const { title, description, members, avatar } = req.body;
-        if (!title || !title.trim()) return res.status(400).json({ error: 'Title required' });
-        if (!members || !Array.isArray(members) || members.length === 0) return res.status(400).json({ error: 'Members required' });
+        if (!title || !title.trim()) return res.status(400).json({ error: req.t('titleRequired') });
+        if (!members || !Array.isArray(members) || members.length === 0) return res.status(400).json({ error: req.t('membersRequired') });
 
         // Проверяем настройки приватности участников
         const allMembers = [...new Set([req.user.id, ...members])];
@@ -3656,8 +3686,8 @@ app.post('/api/v1/chats/create-group', authMiddleware, async (req, res) => {
             const groupsAdd = privacy.groupsAdd || 'all';
             if (groupsAdd === 'none') {
                 const userInfo = await query('SELECT first_name, username FROM users WHERE id = $1', [memberId]);
-                const name = userInfo.rows[0]?.first_name || userInfo.rows[0]?.username || 'Пользователь';
-                return res.status(403).json({ error: `${name} не разрешает добавлять себя в группы` });
+                const name = userInfo.rows[0]?.first_name || userInfo.rows[0]?.username || req.t('user');
+                return res.status(403).json({ error: req.t('groupAddPrivacyNone', { name }) });
             }
             if (groupsAdd === 'contacts') {
                 // Проверяем есть ли чат между создателем и участником
@@ -3670,8 +3700,8 @@ app.post('/api/v1/chats/create-group', authMiddleware, async (req, res) => {
                 );
                 if (!chatCheck.rows.length) {
                     const userInfo = await query('SELECT first_name, username FROM users WHERE id = $1', [memberId]);
-                    const name = userInfo.rows[0]?.first_name || userInfo.rows[0]?.username || 'Пользователь';
-                    return res.status(403).json({ error: `${name} разрешает добавление только своим контактам` });
+                    const name = userInfo.rows[0]?.first_name || userInfo.rows[0]?.username || req.t('user');
+                    return res.status(403).json({ error: req.t('groupAddPrivacyContacts', { name }) });
                 }
             }
         }
@@ -3701,7 +3731,7 @@ app.post('/api/v1/chats/create-group', authMiddleware, async (req, res) => {
         const systemSenderId = botResult.rows.length ? botResult.rows[0].id : req.user.id;
         await query(
             `INSERT INTO messages (id, chat_id, sender_id, content, created_at) VALUES ($1, $2, $3, $4, NOW())`,
-            [uuidv4(), chatId, systemSenderId, `Группа "${title.trim()}" создана`]
+            [uuidv4(), chatId, systemSenderId, req.t('groupCreatedSystem', { name: `"${title.trim()}"` })]
         );
 
         // Уведомляем участников
@@ -3860,7 +3890,7 @@ app.delete('/api/v1/chats/:chatId', authMiddleware, async (req, res) => {
         );
         
         if (memberCheck.rows.length === 0) {
-            return res.status(403).json({ error: 'Access denied' });
+            return res.status(403).json({ error: req.t('accessDenied') });
         }
         
         const chatInfo = await query('SELECT type, owner_id FROM chats WHERE id = $1', [chatId]);
@@ -3900,7 +3930,7 @@ app.post('/api/v1/chats/:chatId/pin', authMiddleware, async (req, res) => {
     try {
         const { chatId } = req.params;
         const memberCheck = await query('SELECT 1 FROM chat_members WHERE chat_id = $1 AND user_id = $2', [chatId, req.user.id]);
-        if (!memberCheck.rows.length) return res.status(403).json({ error: 'Access denied' });
+        if (!memberCheck.rows.length) return res.status(403).json({ error: req.t('accessDenied') });
 
         await query(`
             INSERT INTO user_chat_settings (user_id, chat_id, is_pinned, pinned_at)
@@ -3938,7 +3968,7 @@ app.post('/api/v1/chats/:chatId/archive', authMiddleware, async (req, res) => {
     try {
         const { chatId } = req.params;
         const memberCheck = await query('SELECT 1 FROM chat_members WHERE chat_id = $1 AND user_id = $2', [chatId, req.user.id]);
-        if (!memberCheck.rows.length) return res.status(403).json({ error: 'Access denied' });
+        if (!memberCheck.rows.length) return res.status(403).json({ error: req.t('accessDenied') });
 
         await query(`
             INSERT INTO user_chat_settings (user_id, chat_id, is_archived, archived_at)
@@ -4033,7 +4063,7 @@ app.get('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
         );
 
         if (memberCheck.rows.length === 0) {
-            return res.status(403).json({ error: 'Access denied' });
+            return res.status(403).json({ error: req.t('accessDenied') });
         }
 
         const result = await query(
@@ -4124,8 +4154,8 @@ app.post('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
         // Проверяем мут
         if (req.user.is_muted) {
             const errorMessage = req.user.mute_reason
-                ? `Вы замучены. Причина: ${req.user.mute_reason}`
-                : 'Вы замучены и не можете отправлять сообщения';
+                ? req.t('mutedReason', { reason: req.user.mute_reason })
+                : req.t('mutedCannotSend');
             return res.status(403).json({ error: errorMessage });
         }
 
@@ -4135,7 +4165,7 @@ app.post('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
         );
 
         if (memberCheck.rows.length === 0) {
-            return res.status(403).json({ error: 'Access denied' });
+            return res.status(403).json({ error: req.t('accessDenied') });
         }
 
         if (replyTo) {
@@ -4144,7 +4174,7 @@ app.post('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
                 [replyTo, chatId]
             );
             if (replyCheck.rows.length === 0) {
-                return res.status(400).json({ error: 'Reply message not found' });
+                return res.status(400).json({ error: req.t('replyNotFound') });
             }
         }
 
@@ -4153,7 +4183,7 @@ app.post('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
         // Формируем контент для пересланного сообщения
         let messageContent = content || '';
         if (forwardFrom) {
-            messageContent = '↪️ Переслано от ' + forwardFrom + ':\n' + messageContent;
+            messageContent = '↪️ ' + req.t('forwardedFrom', { name: forwardFrom }) + ':\n' + messageContent;
         }
 
         // Если сообщение не зашифровано, content_plain = content
@@ -4347,7 +4377,7 @@ app.post('/api/v1/messages/:messageId/pin', authMiddleware, async (req, res) => 
         );
 
         if (memberCheck.rows.length === 0) {
-            return res.status(403).json({ error: 'Access denied' });
+            return res.status(403).json({ error: req.t('accessDenied') });
         }
 
         // В группах/каналах — только owner и admin могут закреплять
@@ -4442,7 +4472,7 @@ app.get('/api/v1/chats/:chatId/pinned', authMiddleware, async (req, res) => {
         );
         
         if (memberCheck.rows.length === 0) {
-            return res.status(403).json({ error: 'Access denied' });
+            return res.status(403).json({ error: req.t('accessDenied') });
         }
         
         const result = await query(
@@ -4527,7 +4557,7 @@ app.get('/api/v1/encryption/chat-keys/:chatId', authMiddleware, async (req, res)
             'SELECT 1 FROM chat_members WHERE chat_id = $1 AND user_id = $2',
             [chatId, req.user.id]
         );
-        if (!memberCheck.rows.length) return res.status(403).json({ error: 'Access denied' });
+        if (!memberCheck.rows.length) return res.status(403).json({ error: req.t('accessDenied') });
 
         const result = await query(`
             SELECT upk.user_id, upk.public_key, upk.key_id
@@ -4553,7 +4583,7 @@ app.post('/api/v1/encryption/chat-keys/:chatId', authMiddleware, async (req, res
             'SELECT 1 FROM chat_members WHERE chat_id = $1 AND user_id = $2',
             [chatId, req.user.id]
         );
-        if (!memberCheck.rows.length) return res.status(403).json({ error: 'Access denied' });
+        if (!memberCheck.rows.length) return res.status(403).json({ error: req.t('accessDenied') });
 
         for (const { userId, encryptedKey, senderKeyId } of encryptedKeys) {
             await query(`
@@ -4615,7 +4645,7 @@ app.post('/api/v1/messages/:messageId/reactions', authMiddleware, async (req, re
     if (!msgCheck.rows.length) return res.status(404).json({ error: 'Message not found' });
     const chatId = msgCheck.rows[0].chat_id;
     const memberCheck = await query('SELECT 1 FROM chat_members WHERE chat_id = $1 AND user_id = $2', [chatId, req.user.id]);
-    if (!memberCheck.rows.length) return res.status(403).json({ error: 'Access denied' });
+    if (!memberCheck.rows.length) return res.status(403).json({ error: req.t('accessDenied') });
     
     const existing = await query('SELECT id FROM message_reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3', [messageId, req.user.id, emoji]);
     let added;
@@ -5153,7 +5183,7 @@ app.use((err, req, res, next) => {
 // ============================================
 
 app.get('/api/v1/support/requests', authMiddleware, async (req, res) => {
-    if (!isDeveloper(req.user.username)) return res.status(403).json({ error: 'Access denied' });
+    if (!isDeveloper(req.user.username)) return res.status(403).json({ error: req.t('accessDenied') });
     try {
         const result = await query(`
             SELECT sr.id, sr.message, sr.status, sr.created_at,
@@ -5171,7 +5201,7 @@ app.get('/api/v1/support/requests', authMiddleware, async (req, res) => {
 });
 
 app.put('/api/v1/support/requests/:id', authMiddleware, async (req, res) => {
-    if (!isDeveloper(req.user.username)) return res.status(403).json({ error: 'Access denied' });
+    if (!isDeveloper(req.user.username)) return res.status(403).json({ error: req.t('accessDenied') });
     try {
         const { status } = req.body;
         await query('UPDATE support_requests SET status = $1 WHERE id = $2', [status, req.params.id]);
@@ -5183,7 +5213,7 @@ app.put('/api/v1/support/requests/:id', authMiddleware, async (req, res) => {
 
 // Ответить на support request от имени бота
 app.post('/api/v1/support/requests/:id/reply', authMiddleware, async (req, res) => {
-    if (!isDeveloper(req.user.username)) return res.status(403).json({ error: 'Access denied' });
+    if (!isDeveloper(req.user.username)) return res.status(403).json({ error: req.t('accessDenied') });
     try {
         const { message } = req.body;
         if (!message) return res.status(400).json({ error: 'Message required' });
@@ -5233,7 +5263,7 @@ app.post('/api/v1/support/requests/:id/reply', authMiddleware, async (req, res) 
 
 // Получить историю чата пользователя с ботом (для разработчика)
 app.get('/api/v1/support/requests/:id/messages', authMiddleware, async (req, res) => {
-    if (!isDeveloper(req.user.username)) return res.status(403).json({ error: 'Access denied' });
+    if (!isDeveloper(req.user.username)) return res.status(403).json({ error: req.t('accessDenied') });
     try {
         const reqResult = await query('SELECT * FROM support_requests WHERE id = $1', [req.params.id]);
         if (!reqResult.rows.length) return res.status(404).json({ error: 'Not found' });

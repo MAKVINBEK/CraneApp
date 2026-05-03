@@ -49,7 +49,9 @@
     }
 
     document.getElementById('lobbyRoomCode').textContent = ROOM_ID;
-    document.getElementById('callTitle').textContent = ROOM_TITLE || (IS_AUDIO ? 'Аудиозвонок' : (IS_P2P ? 'Видеозвонок' : 'Видеовстреча'));
+        document.getElementById('callTitle').textContent = ROOM_TITLE || (IS_AUDIO
+            ? (window.i18n?.t('audioCall') || 'Аудиозвонок')
+            : (IS_P2P ? (window.i18n?.t('videoCall') || 'Видеозвонок') : (window.i18n?.t('videoMeeting') || 'Видеовстреча')));
 
     function showToast(text, ms=2200){
         const t = document.getElementById('toast');
@@ -295,7 +297,7 @@
                 await onRemoteIce(msg.from, msg.payload);
                 break;
             case 'call_error':
-                showToast(msg.reason === 'room_full' ? 'Комната заполнена (макс. 5)' : 'Ошибка звонка');
+        showToast(msg.reason === 'room_full' ? (window.i18n?.t('roomFull') || 'Комната заполнена (макс. 5)') : (window.i18n?.t('callError') || 'Ошибка звонка'));
                 setTimeout(()=>leaveCall(false), 1200);
                 break;
         }

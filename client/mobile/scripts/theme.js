@@ -248,10 +248,13 @@
             color: var(--text-primary, #fff);
         `;
 
+        const lockTitle = window.i18n?.t('passcodeLockedTitle') || 'CraneApp заблокирован';
+        const lockDesc = window.i18n?.t('passcodeLockedDesc') || 'Введите код-пароль для продолжения';
+
         overlay.innerHTML = `
             <div style="font-size:48px;margin-bottom:16px;">🔐</div>
-            <div style="font-size:22px;font-weight:700;margin-bottom:8px;">CraneApp заблокирован</div>
-            <div style="font-size:14px;color:#B0B0B0;margin-bottom:40px;">Введите код-пароль для продолжения</div>
+            <div style="font-size:22px;font-weight:700;margin-bottom:8px;">${lockTitle}</div>
+            <div style="font-size:14px;color:#B0B0B0;margin-bottom:40px;">${lockDesc}</div>
             <div id="lockDots" style="display:flex;gap:16px;margin-bottom:40px;">
                 <div id="ld0" style="width:16px;height:16px;border-radius:50%;border:2px solid #666;transition:all 0.15s;"></div>
                 <div id="ld1" style="width:16px;height:16px;border-radius:50%;border:2px solid #666;transition:all 0.15s;"></div>
@@ -313,7 +316,9 @@
             attempts++;
             updateDots('error');
             const errEl = overlay.querySelector('#lockError');
-            if (errEl) errEl.textContent = attempts >= 5 ? 'Слишком много попыток. Войдите заново.' : 'Неверный код';
+            if (errEl) errEl.textContent = attempts >= 5
+                ? (window.i18n?.t('passcodeTooMany') || 'Слишком много попыток. Войдите заново.')
+                : (window.i18n?.t('passcodeWrong') || 'Неверный код');
             const dots = overlay.querySelector('#lockDots');
             if (dots) {
                 dots.style.animation = 'lockShake 0.4s ease';
@@ -465,24 +470,27 @@
         document.head.appendChild(s);
     })();
 
-    // Применяем язык через i18n (загружаем для всех страниц кроме auth)
+    // Применяем язык через единый i18n runtime
     (function applyLanguage() {
-        const path = window.location.pathname;
-        if (path.includes('/auth/') || path.includes('login.html') || path.includes('register.html')) return;
-        
-        // Если i18n ещё не загружен, загружаем его
-        if (!window.i18n) {
-            const s = document.createElement('script');
-            s.src = '/client/mobile/scripts/i18n.js';
-            document.head.appendChild(s);
+        const apply = () => window.i18n && window.i18n.translatePage();
+
+        if (window.i18n) {
+            apply();
+            return;
         }
-        
-        // Применяем переводы после загрузки
-        setTimeout(() => {
-            if (window.i18n) {
-                window.i18n.translatePage();
-            }
-        }, 200);
+
+        const existing = document.querySelector('script[src$="/scripts/i18n.js"],script[src*="scripts/i18n.js"]');
+        if (existing) {
+            existing.addEventListener('load', apply, { once: true });
+            setTimeout(apply, 200);
+            return;
+        }
+
+        const s = document.createElement('script');
+        s.id = 'crane-i18n-script';
+        s.src = '/client/mobile/scripts/i18n.js';
+        s.onload = apply;
+        document.head.appendChild(s);
     })();
 
     // Заменяем эмодзи в иконках настроек на SVG
@@ -538,31 +546,4 @@
         new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.nodeType===1) apply(n); }))).observe(document.documentElement, {childList:true, subtree:true});
     })();
 
-// Load i18n for all pages
-(function() {
-    const i18nScript = document.createElement('script');
-    i18nScript.src = '../scripts/i18n.js';
-    i18nScript.onload = function() {
-        // Translate page after i18n loads
-        function translatePage() {
-            document.querySelectorAll('[data-i18n]').forEach(el => {
-                const key = el.getAttribute('data-i18n');
-                const translation = window.i18n.t(key);
-                if (translation !== key) { // Only translate if translation exists
-                    el.textContent = translation;
-                }
-            });
-            // Set placeholders
-            document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
-                const key = el.getAttribute('data-i18n-placeholder');
-                const translation = window.i18n.t(key);
-                if (translation !== key) {
-                    el.placeholder = translation;
-                }
-            });
-        }
-        translatePage();
-    };
-    document.head.appendChild(i18nScript);
-})();
 })();

@@ -34,7 +34,7 @@ const token = localStorage.getItem('craneapp_auth_token');
                     // Статус passcode
                     const passcodeEl = document.getElementById('passcodeValue');
                     if (passcodeEl) {
-                        passcodeEl.textContent = data.passcodeEnabled ? 'Вкл' : 'Выкл';
+                    passcodeEl.textContent = data.passcodeEnabled ? (window.i18n?.t('on') || 'Вкл') : (window.i18n?.t('off') || 'Выкл');
                     }
                 }
             } catch (e) {
@@ -122,7 +122,7 @@ const token = localStorage.getItem('craneapp_auth_token');
             el.classList.toggle('active');
             settings[key] = el.classList.contains('active');
             await saveSettings();
-            showToast('success', settings[key] ? 'Включено' : 'Выключено', '✓');
+            showToast('success', settings[key] ? (window.i18n?.t('enabledToast') || 'Включено') : (window.i18n?.t('disabledToast') || 'Выключено'), '✓');
         }
 
         // ── Picker ────────────────────────────────────────────────────────
@@ -166,7 +166,7 @@ const token = localStorage.getItem('craneapp_auth_token');
 
         // ── Разблокировка ─────────────────────────────────────────────────
         async function unblockUser(userId) {
-            if (!confirm('Разблокировать пользователя?')) return;
+            if (!confirm(window.i18n?.t('unblockUserConfirm') || 'Разблокировать пользователя?')) return;
             try {
                 const res = await fetch('/api/v1/users/blocked/' + userId, {
                     method: 'DELETE',
@@ -203,7 +203,7 @@ const token = localStorage.getItem('craneapp_auth_token');
             // Обновляем статус passcode при возврате со страницы passcode.html
             const enabled = localStorage.getItem('craneapp_passcode_enabled') === 'true';
             const el = document.getElementById('passcodeValue');
-            if (el) el.textContent = enabled ? 'Вкл' : 'Выкл';
+            if (el) el.textContent = enabled ? (window.i18n?.t('on') || 'Вкл') : (window.i18n?.t('off') || 'Выкл');
         });
 
         // ── 2FA ───────────────────────────────────────────────────────────
@@ -223,7 +223,7 @@ const token = localStorage.getItem('craneapp_auth_token');
         }
 
         function update2FAStatus() {
-            document.getElementById('twoFAStatus').textContent = twoFAEnabled ? 'Вкл' : 'Выкл';
+            document.getElementById('twoFAStatus').textContent = twoFAEnabled ? (window.i18n?.t('on') || 'Вкл') : (window.i18n?.t('off') || 'Выкл');
             document.getElementById('twoFASubtitle').textContent = twoFAEnabled
                 ? 'Дополнительный пароль установлен'
                 : 'Дополнительный пароль при входе';

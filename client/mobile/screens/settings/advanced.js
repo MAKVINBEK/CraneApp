@@ -32,18 +32,18 @@ const token = localStorage.getItem('craneapp_auth_token');
         function updateDevPanel() {
             const el = document.getElementById('devLog');
             if (!el) return;
-            el.textContent = devLogs.length ? devLogs.join('\n') : 'Нет записей';
+            el.textContent = devLogs.length ? devLogs.join('\n') : (window.i18n?.t('noLogEntries') || 'Нет записей');
             el.scrollTop = el.scrollHeight;
         }
 
         function copyDevLog() {
-            navigator.clipboard?.writeText(devLogs.join('\n')).then(() => showToast('Скопировано', '✓'));
+            navigator.clipboard?.writeText(devLogs.join('\n')).then(() => showToast(window.i18n?.t('copied') || 'Скопировано', '✓'));
         }
 
         function clearDevLog() {
             devLogs.length = 0;
             updateDevPanel();
-            showToast('Лог очищен', '✓');
+            showToast(window.i18n?.t('logCleared') || 'Лог очищен', '✓');
         }
 
         // ── Загрузка ──────────────────────────────────────────────────────
@@ -98,7 +98,7 @@ const token = localStorage.getItem('craneapp_auth_token');
             settings[key] = el.classList.contains('active');
             await saveSettings();
             updateUI();
-            showToast(settings[key] ? 'Включено' : 'Выключено', '✓');
+            showToast(settings[key] ? (window.i18n?.t('enabledToast') || 'Включено') : (window.i18n?.t('disabledToast') || 'Выключено'), '✓');
         }
 
         async function saveSettings() {
@@ -125,21 +125,21 @@ const token = localStorage.getItem('craneapp_auth_token');
                     a.download = 'craneapp_export_' + new Date().toISOString().split('T')[0] + '.json';
                     a.click();
                     URL.revokeObjectURL(url);
-                    showToast('Данные экспортированы', '✓');
+                    showToast(window.i18n?.t('dataExported') || 'Данные экспортированы', '✓');
                 } else {
-                    showToast('Ошибка экспорта', '❌');
+                    showToast(window.i18n?.t('exportError') || 'Ошибка экспорта', '❌');
                 }
             } catch (e) {
-                showToast('Ошибка сети', '❌');
+                showToast(window.i18n?.t('networkError') || 'Ошибка сети', '❌');
             }
         }
 
         async function resetSettings() {
-            if (!confirm('Сбросить расширенные настройки?')) return;
+            if (!confirm(window.i18n?.t('resetAdvancedConfirm') || 'Сбросить расширенные настройки?')) return;
             settings = { ...DEFAULTS };
             await saveSettings();
             updateUI();
-            showToast('Настройки сброшены', '✓');
+            showToast(window.i18n?.t('settingsReset') || 'Настройки сброшены', '✓');
         }
 
         function showToast(message, icon) {

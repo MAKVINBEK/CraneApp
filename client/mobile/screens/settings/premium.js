@@ -89,7 +89,7 @@ async function subscribe() {
 }
 
 function manageSubscription() {
-  if (confirm('Отменить подписку Премиум?')) {
+            if (confirm(window.i18n?.t('cancelPremiumConfirm') || 'Отменить подписку Премиум?')) {
     fetch('/api/v1/premium/cancel', { method: 'POST', headers: { Authorization: 'Bearer ' + token } })
       .catch(() => {});
     const userData = JSON.parse(localStorage.getItem('craneapp_user_data') || '{}');

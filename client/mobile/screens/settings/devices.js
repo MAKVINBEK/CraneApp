@@ -186,7 +186,7 @@ const token = localStorage.getItem('craneapp_auth_token');
         
         // Завершить одну сессию
         async function terminateDevice(sessionId) {
-            if (!confirm('Завершить сеанс на этом устройстве?')) return;
+            if (!confirm(window.i18n?.t('terminateSessionConfirm') || 'Завершить сеанс на этом устройстве?')) return;
             
             try {
                 const res = await fetch('/api/v1/users/devices/' + sessionId, {
@@ -221,7 +221,7 @@ const token = localStorage.getItem('craneapp_auth_token');
         
         // Завершить все остальные сессии
         async function terminateAll() {
-            if (!confirm('Завершить все остальные сеансы?')) return;
+            if (!confirm(window.i18n?.t('terminateAllConfirm') || 'Завершить все остальные сеансы?')) return;
             
             try {
                 const res = await fetch('/api/v1/users/devices/terminate-all', {
@@ -346,7 +346,7 @@ const token = localStorage.getItem('craneapp_auth_token');
                     }
                     const m = Math.floor(seconds / 60);
                     const s = seconds % 60;
-                    expEl.textContent = 'Код действителен ' + m + ':' + (s < 10 ? '0' : '') + s;
+                expEl.textContent = window.i18n?.t('qrValidFor', { time: m + ':' + (s < 10 ? '0' : '') + s }) || ('Код действителен ' + m + ':' + (s < 10 ? '0' : '') + s);
                 }, 1000);
 
                 // Polling — проверяем подтверждён ли QR каждые 2 секунды

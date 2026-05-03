@@ -28,7 +28,7 @@
             const btn = document.getElementById('loginBtn');
             
             btn.disabled = true;
-            btn.textContent = 'Вход...';
+            btn.textContent = window.i18n?.t('loginLoading') || 'Вход...';
 
             try {
                 // Получаем публичный IP для уведомления о входе
@@ -47,18 +47,18 @@
                 const data = await res.json();
                 
                 if (!res.ok) {
-                    throw new Error(data.error || 'Ошибка входа');
+                    throw new Error(data.error || window.i18n?.t('loginError') || 'Ошибка входа');
                 }
 
                 // 2FA — требуется доп. пароль
                 if (data.twoFARequired) {
                     btn.disabled = false;
-                    btn.textContent = 'Войти';
-                    const twoFAPwd = prompt('Введите дополнительный пароль (2FA):');
+                    btn.textContent = window.i18n?.t('login') || 'Войти';
+                    const twoFAPwd = prompt(window.i18n?.t('twoFAPrompt') || 'Введите дополнительный пароль (2FA):');
                     if (!twoFAPwd) return;
 
                     btn.disabled = true;
-                    btn.textContent = 'Проверка 2FA...';
+                    btn.textContent = window.i18n?.t('checking2FA') || 'Проверка 2FA...';
 
                     const res2 = await fetch('/api/v1/auth/login', {
                         method: 'POST',
@@ -66,7 +66,7 @@
                         body: JSON.stringify({ username, password, twoFAPassword: twoFAPwd, clientIP })
                     });
                     const data2 = await res2.json();
-                    if (!res2.ok) throw new Error(data2.error || 'Неверный доп. пароль');
+                    if (!res2.ok) throw new Error(data2.error || window.i18n?.t('invalid2FA') || 'Неверный доп. пароль');
                     Object.assign(data, data2);
                 }
                 
@@ -86,23 +86,23 @@
                     }));
                     
                     // Загружаем настройки
-                    btn.textContent = 'Загрузка...';
+                    btn.textContent = window.i18n?.t('loading') || 'Загрузка...';
                     const settings = await fetchUserSettings(data.token);
                     localStorage.setItem('craneapp_settings', JSON.stringify(settings));
                     
-                    showToast('success', 'Вход выполнен!', '✓');
+                    showToast('success', window.i18n?.t('loginDone') || 'Вход выполнен!', '✓');
                     
                     setTimeout(function() {
                         window.location.href = '/client/mobile/screens/chats/chats.html';
                     }, 500);
                 } else {
-                    throw new Error('Неверный формат ответа');
+                    throw new Error(window.i18n?.t('invalidResponse') || 'Неверный формат ответа');
                 }
             } catch (err) {
                 console.error('Login error:', err);
                 showToast('error', err.message, '❌');
                 btn.disabled = false;
-                btn.textContent = 'Войти';
+                btn.textContent = window.i18n?.t('login') || 'Войти';
             }
         });
 

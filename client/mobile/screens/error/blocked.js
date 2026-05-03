@@ -14,9 +14,9 @@ const params = new URLSearchParams(location.search);
 
   // Настраиваем текст под код ошибки
   if (code === '429') {
-    badgeText.textContent = 'Лимит запросов';
-    title.textContent = 'Притормози немного';
-    desc.textContent = 'Ты отправляешь запросы слишком быстро. Подожди — и всё заработает снова.';
+    badgeText.textContent = window.i18n?.t('rateLimitStatus') || 'Лимит запросов';
+    title.textContent = window.i18n?.t('rateLimitTitle') || 'Притормози немного';
+    desc.textContent = window.i18n?.t('rateLimitDesc') || 'Ты отправляешь запросы слишком быстро. Подожди — и всё заработает снова.';
     document.querySelector('.ring-bar').style.stroke = '#FFA500';
     document.querySelector('.status-dot').style.background = '#FFA500';
     document.querySelector('.status-badge').style.background = 'rgba(255,165,0,0.12)';
@@ -25,17 +25,17 @@ const params = new URLSearchParams(location.search);
     document.querySelector('.emoji-wrap').textContent = '🚦';
   } else if (code === '403' && retryMin > 0) {
     // Временный бан IP
-    badgeText.textContent = 'Временная блокировка';
-    title.textContent = 'Доступ временно закрыт';
-    desc.textContent = msg || 'Твой IP был временно заблокирован из-за подозрительной активности.';
+    badgeText.textContent = window.i18n?.t('temporaryBlock') || 'Временная блокировка';
+    title.textContent = window.i18n?.t('blockedTitle') || 'Доступ временно закрыт';
+    desc.textContent = msg || window.i18n?.t('blockedDesc') || 'Твой IP был временно заблокирован из-за подозрительной активности.';
   } else if (code === '403') {
     // Перманентный бан аккаунта
-    badgeText.textContent = 'Аккаунт заблокирован';
-    title.textContent = 'Аккаунт заблокирован';
-    desc.textContent = msg || 'Ваш аккаунт был заблокирован администратором. Обратитесь в поддержку для уточнения деталей.';
+    badgeText.textContent = window.i18n?.t('accountBlocked') || 'Аккаунт заблокирован';
+    title.textContent = window.i18n?.t('accountBlocked') || 'Аккаунт заблокирован';
+    desc.textContent = msg || window.i18n?.t('accountBlockedDesc') || 'Ваш аккаунт был заблокирован администратором. Обратитесь в поддержку для уточнения деталей.';
     timerWrap.style.display = 'none';
     btnEl.disabled = false;
-    btnEl.textContent = 'Выйти из аккаунта';
+    btnEl.textContent = window.i18n?.t('logoutAccount') || 'Выйти из аккаунта';
     btnEl.onclick = logout;
   }
   if (msg && code !== '403') desc.textContent = msg;
@@ -52,7 +52,9 @@ const params = new URLSearchParams(location.search);
       const m = Math.floor(remaining / 60);
       const s = remaining % 60;
       numEl.textContent = m > 0 ? m + ':' + String(s).padStart(2,'0') : s;
-      document.getElementById('timerLabel').textContent = m > 0 ? 'минут до разблокировки' : 'секунд до разблокировки';
+      document.getElementById('timerLabel').textContent = m > 0
+        ? (window.i18n?.t('minutesUntilUnlock') || 'минут до разблокировки')
+        : (window.i18n?.t('secondsUntilUnlock') || 'секунд до разблокировки');
       barEl.style.strokeDashoffset = CIRCUMFERENCE * (1 - remaining / totalSec);
       if (remaining <= 0) {
         numEl.textContent = '✓'; barEl.style.stroke = '#00E676';

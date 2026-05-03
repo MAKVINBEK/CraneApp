@@ -6,6 +6,7 @@
 
 const crypto = require('crypto');
 const logger = require('../services/logger');
+const i18n = require('../i18n');
 
 // ============================================
 // ХРАНИЛИЩА (in-memory, можно заменить на Redis)
@@ -345,7 +346,7 @@ function suspiciousIPMiddleware(req, res, next) {
     const ip = getIP(req);
     if (isSuspiciousIP(ip)) {
         logger.warn(`🚫 Blocked suspicious IP: ${ip}`);
-        return res.status(403).json({ error: 'Access denied' });
+        return res.status(403).json({ error: i18n.t(i18n.languageFromHeaders(req), 'accessDenied') });
     }
     next();
 }
@@ -373,7 +374,7 @@ function validateContentType(req, res, next) {
     if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
         const ct = req.headers['content-type'] || '';
         if (req.path.startsWith('/api/') && !ct.includes('application/json') && !ct.includes('multipart/form-data')) {
-            return res.status(415).json({ error: 'Unsupported Media Type' });
+            return res.status(415).json({ error: i18n.t(i18n.languageFromHeaders(req), 'unsupportedMediaType') });
         }
     }
     next();

@@ -541,7 +541,7 @@
                 ? '<img src="'+payload.fromAvatar+'" alt="">'
                 : initial;
             const isAudio = payload.kind === 'audio';
-            kindLabel.textContent = isAudio ? 'Аудиозвонок' : 'Видеозвонок';
+        kindLabel.textContent = isAudio ? (window.i18n?.t('audioCall') || 'Аудиозвонок') : (window.i18n?.t('videoCall') || 'Видеозвонок');
             kindIcon.innerHTML = isAudio
                 ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>'
                 : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>';
@@ -748,7 +748,7 @@
             
         function logout() {
             closeSideMenu();
-            if (confirm('Выйти из аккаунта?')) {
+            if (confirm(window.i18n?.t('logoutConfirm') || 'Выйти из аккаунта?')) {
                 localStorage.removeItem('craneapp_auth_token');
                 localStorage.removeItem('craneapp_user_data');
                 window.location.href = '../auth/login.html';
@@ -816,7 +816,7 @@
             notifications[currentProfileUser.id] = checkbox.checked;
             localStorage.setItem('chatNotifications', JSON.stringify(notifications));
             
-            showToast('success', checkbox.checked ? 'Уведомления включены' : 'Уведомления отключены', '🔔');
+            showToast('success', checkbox.checked ? (window.i18n?.t('notificationsOn') || 'Уведомления включены') : (window.i18n?.t('notificationsOff') || 'Уведомления отключены'), '🔔');
         }
         
         function reportUser() {
@@ -1214,9 +1214,9 @@
                 avatarEl.innerHTML = '<span>' + (userData.name || userData.username || '👤')[0].toUpperCase() + '</span>';
             }
 
-            nameEl.textContent = isBlocked ? 'Заблокированный аккаунт' : (userData.name || 'Пользователь');
+            nameEl.textContent = isBlocked ? (window.i18n?.t('blockedAccount') || 'Заблокированный аккаунт') : (userData.name || window.i18n?.t('user') || 'Пользователь');
             usernameEl.textContent = isBlocked ? '' : ('@' + (userData.username || 'unknown'));
-            statusEl.textContent = isBlocked ? 'Аккаунт заблокирован' : (userData.online ? 'онлайн' : (userData.isBot ? 'бот' : 'был(а) недавно'));
+            statusEl.textContent = isBlocked ? (window.i18n?.t('accountBlocked') || 'Аккаунт заблокирован') : (userData.online ? (window.i18n?.t('online') || 'онлайн') : (userData.isBot ? (window.i18n?.t('bot') || 'бот') : (window.i18n?.t('lastSeenRecently') || 'был(а) недавно')));
             statusEl.style.color = isBlocked ? '#FF4B4B' : (userData.isBot ? 'var(--accent-color)' : (userData.online ? 'var(--success-color)' : 'var(--text-muted)'));
             
             // Описание (только если есть)
@@ -1242,7 +1242,7 @@
                     const cu = chatUsers[c.id];
                     return cu && cu.id === userData.id;
                 });
-                chatBtn.querySelector('span').textContent = existingChat ? 'Перейти в чат' : 'Начать переписку';
+            chatBtn.querySelector('span').textContent = existingChat ? (window.i18n?.t('goToChat') || 'Перейти в чат') : (window.i18n?.t('startChat') || 'Начать переписку');
                 chatBtn.onclick = () => profileStartChat(userData.id, userData.name || userData.username, existingChat);
             } else if (chatBtn) {
                 chatBtn.style.display = 'none';
@@ -1381,7 +1381,7 @@
                     ? '<img src="' + m.avatar_url + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">'
                     : '<span style="font-size:16px;font-weight:600;">' + mName[0].toUpperCase() + '</span>';
                 const onlineDot = m.is_online && !m.is_bot ? '<span style="width:8px;height:8px;border-radius:50%;background:#00E676;display:inline-block;margin-left:6px;flex-shrink:0;"></span>' : '';
-                const roleLabel = m.role === 'owner' ? '<span style="font-size:11px;color:var(--accent-color);margin-left:4px;">Создатель</span>' : '';
+                const roleLabel = m.role === 'owner' ? '<span style="font-size:11px;color:var(--accent-color);margin-left:4px;">' + (window.i18n?.t('creator') || 'Создатель') + '</span>' : '';
                 const isMe = m.id === user.id;
                 const isBot = m.is_bot;
                 const clickable = !isMe && !isBot;
@@ -2426,7 +2426,7 @@
                 grid.appendChild(wrap);
             });
             if (!pack.stickers || !pack.stickers.length) {
-                grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:16px;color:var(--text-muted);font-size:13px">' + (pack.isCommon ? 'Скоро здесь появятся стикеры' : 'Нет стикеров. Нажмите «+ Стикер»') + '</div>';
+            grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:16px;color:var(--text-muted);font-size:13px">' + (pack.isCommon ? (window.i18n?.t('stickersSoon') || 'Скоро здесь появятся стикеры') : (window.i18n?.t('noStickers') || 'Нет стикеров. Нажмите «+ Стикер»')) + '</div>';
             }
         }
 
@@ -4099,7 +4099,7 @@
                     headers: { 'Authorization': 'Bearer ' + token }
                 }).then(r => r.ok ? r.json() : null).then(data => {
                     if (data && data.total > 0) {
-                        statusEl.textContent = data.total + ' ' + pluralMembers(data.total) + (data.online > 0 ? ', ' + data.online + ' онлайн' : '');
+        statusEl.textContent = (window.i18n?.tc ? window.i18n.tc('membersCount', data.total) : (data.total + ' ' + pluralMembers(data.total))) + (data.online > 0 ? ', ' + data.online + ' ' + (window.i18n?.t('online') || 'онлайн') : '');
                         statusEl.style.color = 'var(--text-muted)';
                     }
                 }).catch(() => { statusEl.textContent = ''; });
@@ -4294,7 +4294,7 @@
             const copyLabel = document.getElementById('copyItemLabel');
             const isMedia = msg && (msg.type === 'image' || msg.type === 'photo' || msg.type === 'gif');
             if (downloadItem) downloadItem.style.display = isMedia ? 'flex' : 'none';
-            if (copyLabel) copyLabel.textContent = isMedia ? 'Скопировать фото' : 'Копировать текст';
+        if (copyLabel) copyLabel.textContent = isMedia ? (window.i18n?.t('copyPhoto') || 'Скопировать фото') : (window.i18n?.t('copyText') || 'Копировать текст');
             if (copyItem) copyItem.onclick = isMedia ? copyMessagePhoto : copyMessageText;
             
             const menu = document.getElementById('messageContextMenu');
@@ -4428,7 +4428,7 @@
             }
             document.getElementById('messageContextMenu').classList.remove('active');
             
-            document.getElementById('confirmTitle').textContent = forEveryone ? 'Удалить для всех?' : 'Удалить?';
+            document.getElementById('confirmTitle').textContent = forEveryone ? (window.i18n?.t('deleteForEveryoneQuestion') || 'Удалить для всех?') : (window.i18n?.t('deleteQuestion') || 'Удалить?');
             document.getElementById('confirmText').textContent = 'Это действие нельзя отменить.';
             
             document.getElementById('confirmBtn').onclick = function() {
@@ -4559,7 +4559,7 @@
                 pinnedText.innerHTML = '<span>🎤</span> Голосовое';
             } else {
                 const text = msg.content || '';
-                pinnedText.innerHTML = '<span>📌</span> <strong>' + (msg.senderFirstName || msg.senderUsername || 'Вы') + ':</strong> ' + (text.length > 60 ? text.substring(0, 60) + '...' : text);
+            pinnedText.innerHTML = '<span>📌</span> <strong>' + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ':</strong> ' + (text.length > 60 ? text.substring(0, 60) + '...' : text);
             }
             
             pinnedBar.classList.add('active');
@@ -4886,7 +4886,7 @@
         function deleteCurrentChat() {
             if (!activeChat) return;
             
-            document.getElementById('confirmTitle').textContent = 'Удалить чат?';
+        document.getElementById('confirmTitle').textContent = window.i18n?.t('deleteChatQuestion') || 'Удалить чат?';
             document.getElementById('confirmText').textContent = 'Чат "' + activeChat.name + '" будет удалён.';
             
             document.getElementById('confirmBtn').onclick = async function() {
@@ -6293,7 +6293,7 @@
             currentDurationAction = action;
             const modal = document.getElementById('durationModal');
             const title = document.getElementById('durationModalTitle');
-            title.textContent = action === 'mute' ? '🔇 Выберите время мута' : '🚫 Выберите время бана';
+            title.textContent = action === 'mute' ? (window.i18n?.t('muteDurationTitle') || '🔇 Выберите время мута') : (window.i18n?.t('banDurationTitle') || '🚫 Выберите время бана');
             modal.classList.add('active');
         }
 
@@ -6320,8 +6320,7 @@
                     body: JSON.stringify({ duration, reason })
                 });
                 if (res.ok) {
-                    const actionName = action === 'mute' ? 'замучен' : 'заблокирован';
-                    showToast('success', 'Пользователь ' + actionName, action === 'mute' ? '🔇' : '🚫');
+            showToast('success', action === 'mute' ? (window.i18n?.t('userMuted') || 'Пользователь замучен') : (window.i18n?.t('userBlocked') || 'Пользователь заблокирован'), action === 'mute' ? '🔇' : '🚫');
                     closeUserProfileModal();
                     // Обновляем список жалоб
                     loadReports();
@@ -6628,7 +6627,7 @@
                 const sendBtn = modal.querySelector('button[onclick="sendSupportReply()"]');
                 const isClosed = d.status === 'closed';
                 input.disabled = isClosed;
-                input.placeholder = isClosed ? 'Запрос закрыт — ответить нельзя' : 'Ответить от имени CraneApp...';
+            input.placeholder = isClosed ? (window.i18n?.t('requestClosedPlaceholder') || 'Запрос закрыт — ответить нельзя') : (window.i18n?.t('supportReplyPlaceholder') || 'Ответить от имени CraneApp...');
                 input.style.opacity = isClosed ? '0.5' : '1';
                 if (sendBtn) sendBtn.style.opacity = isClosed ? '0.4' : '1';
 

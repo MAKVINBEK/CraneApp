@@ -406,7 +406,7 @@
                 return;
             }
 
-            if (confirm('Удалить это медиа?')) {
+        if (confirm(window.i18n?.t('deleteMediaConfirm') || 'Удалить это медиа?')) {
                 // Send delete request
                 fetch(`/api/v1/messages/${messageId}?forEveryone=true`, {
                     method: 'DELETE',

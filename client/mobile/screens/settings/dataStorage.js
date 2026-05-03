@@ -18,7 +18,14 @@ const token = localStorage.getItem('craneapp_auth_token');
             togAdult: 'showAdultContent'
         };
 
-        const SAVE_LABELS = { no: 'Нет', yes: 'Да', photos: 'Фото', all: 'Все' };
+        function saveLabels() {
+            return {
+                no: window.i18n?.t('no') || 'Нет',
+                yes: window.i18n?.t('yes') || 'Да',
+                photos: window.i18n?.t('photos') || 'Фото',
+                all: window.i18n?.t('all') || 'Все'
+            };
+        }
         const SAVE_OPTIONS = ['no','photos','all'];
 
         async function load() {
@@ -51,9 +58,10 @@ const token = localStorage.getItem('craneapp_auth_token');
                 const el = document.getElementById(id);
                 if (el) el.classList.toggle('active', !!s[key]);
             });
-            document.getElementById('savePrivateVal').textContent = SAVE_LABELS[s.savePrivate] || 'Нет';
-            document.getElementById('saveGroupsVal').textContent = SAVE_LABELS[s.saveGroups] || 'Нет';
-            document.getElementById('saveChannelsVal').textContent = SAVE_LABELS[s.saveChannels] || 'Нет';
+            const SAVE_LABELS = saveLabels();
+            document.getElementById('savePrivateVal').textContent = SAVE_LABELS[s.savePrivate] || SAVE_LABELS.no;
+            document.getElementById('saveGroupsVal').textContent = SAVE_LABELS[s.saveGroups] || SAVE_LABELS.no;
+            document.getElementById('saveChannelsVal').textContent = SAVE_LABELS[s.saveChannels] || SAVE_LABELS.no;
 
             const total = storageData.messages + storageData.media + storageData.files + storageData.cache;
             document.getElementById('totalSize').textContent = formatSize(total);
@@ -63,17 +71,18 @@ const token = localStorage.getItem('craneapp_auth_token');
             el.classList.toggle('active');
             s[key] = el.classList.contains('active');
             save();
-            toast(s[key] ? 'Включено' : 'Выключено');
+            toast(s[key] ? (window.i18n?.t('enabledToast') || 'Включено') : (window.i18n?.t('disabledToast') || 'Выключено'));
         }
 
         // Picker
         let currentPickerKey = null;
         function showPicker(key) {
             currentPickerKey = key;
-            const titles = { mobile: 'Мобильная сеть', wifi: 'Wi-Fi', savePrivate: 'Личные чаты', saveGroups: 'Группы', saveChannels: 'Каналы' };
-            document.getElementById('pickerTitle').textContent = titles[key] || 'Выберите';
+            const titles = { mobile: window.i18n?.t('mobileNetwork') || 'Мобильная сеть', wifi: 'Wi-Fi', savePrivate: window.i18n?.t('privateChats') || 'Личные чаты', saveGroups: window.i18n?.t('groups') || 'Группы', saveChannels: window.i18n?.t('channels') || 'Каналы' };
+            document.getElementById('pickerTitle').textContent = titles[key] || window.i18n?.t('choose') || 'Выберите';
 
             let options = [];
+            const SAVE_LABELS = saveLabels();
             if (['savePrivate','saveGroups','saveChannels'].includes(key)) {
                 options = SAVE_OPTIONS.map(v => ({
                     label: SAVE_LABELS[v],
@@ -84,7 +93,7 @@ const token = localStorage.getItem('craneapp_auth_token');
                 options = [
                     { label: 'Медиа (10 МБ), Файлы (1.0 МБ)', value: 'low', selected: true },
                     { label: 'Медиа (50 МБ), Файлы (5.0 МБ)', value: 'medium' },
-                    { label: 'Без ограничений', value: 'high' }
+                    { label: window.i18n?.t('unlimited') || 'Без ограничений', value: 'high' }
                 ];
             }
 
@@ -106,7 +115,7 @@ const token = localStorage.getItem('craneapp_auth_token');
                 render();
             }
             closePicker();
-            toast('Сохранено');
+            toast(window.i18n?.t('saved') || 'Сохранено');
         }
 
         function closePicker() {
@@ -117,20 +126,20 @@ const token = localStorage.getItem('craneapp_auth_token');
         function resetAutoDownload() {
             document.getElementById('mobileDesc').textContent = 'Медиа (10 МБ), Файлы (1.0 МБ)';
             document.getElementById('wifiDesc').textContent = 'Медиа (15 МБ), Файлы (3.0 МБ)';
-            toast('Настройки сброшены');
+            toast(window.i18n?.t('settingsReset') || 'Настройки сброшены');
         }
 
         function showStorageDetail() {
             const total = storageData.messages + storageData.media + storageData.files + storageData.cache;
-            alert('Использование памяти: ' + formatSize(total)
-                + '\n\nСообщения: ' + formatSize(storageData.messages)
-                + '\nМедиа: ' + formatSize(storageData.media)
-                + '\nФайлы: ' + formatSize(storageData.files)
-                + '\nКэш: ' + formatSize(storageData.cache));
+            alert((window.i18n?.t('storageUsage') || 'Использование памяти') + ': ' + formatSize(total)
+                + '\n\n' + (window.i18n?.t('messagesSection') || 'Сообщения') + ': ' + formatSize(storageData.messages)
+                + '\n' + (window.i18n?.t('media') || 'Медиа') + ': ' + formatSize(storageData.media)
+                + '\n' + (window.i18n?.t('files') || 'Файлы') + ': ' + formatSize(storageData.files)
+                + '\n' + (window.i18n?.t('cache') || 'Кэш') + ': ' + formatSize(storageData.cache));
         }
 
         function showTrafficDetail() {
-            toast('Статистика трафика недоступна');
+            toast(window.i18n?.t('trafficUnavailable') || 'Статистика трафика недоступна');
         }
 
         async function save() {
@@ -141,7 +150,7 @@ const token = localStorage.getItem('craneapp_auth_token');
         }
 
         async function exportData() {
-            toast('Подготовка данных...');
+            toast(window.i18n?.t('preparingData') || 'Подготовка данных...');
             try {
                 const res = await fetch('/api/v1/users/export', { headers: { Authorization: 'Bearer ' + token } });
                 if (!res.ok) throw new Error();
@@ -153,17 +162,17 @@ const token = localStorage.getItem('craneapp_auth_token');
                 a.download = 'craneapp_export_' + new Date().toISOString().slice(0,10) + '.json';
                 a.click();
                 URL.revokeObjectURL(url);
-                toast('Данные экспортированы');
+                toast(window.i18n?.t('dataExported') || 'Данные экспортированы');
             } catch (e) {
-                toast('Ошибка экспорта', true);
+                toast(window.i18n?.t('exportError') || 'Ошибка экспорта', true);
             }
         }
 
-        function formatSize(b) {            if (!b) return '0 Б';
-            if (b < 1024) return b + ' Б';
-            if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' КБ';
-            if (b < 1024 * 1024 * 1024) return (b / 1024 / 1024).toFixed(1) + ' МБ';
-            return (b / 1024 / 1024 / 1024).toFixed(2) + ' ГБ';
+        function formatSize(b) {            if (!b) return '0 ' + (window.i18n?.t('bytesShort') || 'Б');
+            if (b < 1024) return b + ' ' + (window.i18n?.t('bytesShort') || 'Б');
+            if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' ' + (window.i18n?.t('kbShort') || 'КБ');
+            if (b < 1024 * 1024 * 1024) return (b / 1024 / 1024).toFixed(1) + ' ' + (window.i18n?.t('mbShort') || 'МБ');
+            return (b / 1024 / 1024 / 1024).toFixed(2) + ' ' + (window.i18n?.t('gbShort') || 'ГБ');
         }
 
         function toast(msg, err) {
@@ -175,3 +184,4 @@ const token = localStorage.getItem('craneapp_auth_token');
         }
 
         load();
+        window.addEventListener('craneapp:languagechange', render);

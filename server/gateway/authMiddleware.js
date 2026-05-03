@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const logger = require('../services/logger');
+const i18n = require('../i18n');
 
 /**
  * Authentication Middleware
@@ -11,8 +12,8 @@ const authMiddleware = async (req, res, next) => {
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({
-        error: 'Access denied',
-        message: 'No token provided or invalid format'
+        error: i18n.t(i18n.languageFromHeaders(req), 'accessDenied'),
+        message: i18n.t(i18n.languageFromHeaders(req), 'noToken')
       });
     }
 
@@ -20,8 +21,8 @@ const authMiddleware = async (req, res, next) => {
     if (!process.env.JWT_SECRET) {
       logger.error('JWT_SECRET is not configured');
       return res.status(500).json({
-        error: 'Server configuration error',
-        message: 'Authentication system not properly configured'
+        error: i18n.t(i18n.languageFromHeaders(req), 'serverConfigError'),
+        message: i18n.t(i18n.languageFromHeaders(req), 'authSystemConfigError')
       });
     }
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -40,21 +41,21 @@ const authMiddleware = async (req, res, next) => {
 
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({
-        error: 'Token expired',
-        message: 'Please login again'
+        error: i18n.t(i18n.languageFromHeaders(req), 'tokenExpired'),
+        message: i18n.t(i18n.languageFromHeaders(req), 'loginAgain')
       });
     }
 
     if (error.name === 'JsonWebTokenError') {
       return res.status(401).json({
-        error: 'Invalid token',
-        message: 'Token verification failed'
+        error: i18n.t(i18n.languageFromHeaders(req), 'invalidToken'),
+        message: i18n.t(i18n.languageFromHeaders(req), 'invalidToken')
       });
     }
 
     return res.status(500).json({
-      error: 'Authentication error',
-      message: 'Internal server error'
+      error: i18n.t(i18n.languageFromHeaders(req), 'authenticationError'),
+      message: i18n.t(i18n.languageFromHeaders(req), 'internalServerError')
     });
   }
 };

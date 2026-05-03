@@ -130,7 +130,7 @@
                     indicator.className = 'sync-indicator';
                     indicator.style.color = '#FF4B4B';
                     icon.textContent = '⚠';
-                    text.textContent = 'Ошибка синхронизации';
+                    text.textContent = window.i18n?.t('syncError') || 'Ошибка синхронизации';
                     break;
             }
         }
@@ -168,7 +168,7 @@
             const avatarEl = document.getElementById('profileAvatar');
 
             const badgeHtml = renderSettingsBadges(user.badges || [], user.isPremium);
-            nameEl.innerHTML = (user.firstName || 'Пользователь') + badgeHtml;
+            nameEl.innerHTML = (user.firstName || window.i18n?.t('user') || 'Пользователь') + badgeHtml;
             usernameEl.textContent = user.username ? '@' + user.username : '@username';
             accountEl.textContent = user.username ? '@' + user.username : '';
             bioEl.textContent = user.bio || '';
@@ -190,13 +190,12 @@
         // THEME & SETTINGS DISPLAY
         // ============================================
         function updateThemeDisplay(theme) {
-            const themeNames = { dark: 'Тёмная', light: 'Светлая', auto: 'Как в системе' };
-            document.getElementById('themeValue').textContent = themeNames[theme] || 'Тёмная';
+            const themeNames = { dark: 'dark', light: 'light', auto: 'auto' };
+            document.getElementById('themeValue').textContent = window.i18n?.t(themeNames[theme] || 'dark') || 'Тёмная';
         }
         
         function updateLanguageDisplay(language) {
-            const langNames = { ru: 'Русский', en: 'English', de: 'Deutsch', fr: 'Français' };
-            document.getElementById('languageValue').textContent = langNames[language] || 'Русский';
+            document.getElementById('languageValue').textContent = window.i18n?.languageNames?.[language] || 'Русский';
         }
 
         function updateToggles(settings) {
@@ -222,7 +221,7 @@
             localStorage.setItem('craneapp_settings', JSON.stringify(settings));
             
             await saveSettingsToServer(settings);
-            showToast('success', isActive ? 'Включено' : 'Выключено', '✓');
+            showToast('success', isActive ? (window.i18n?.t('enabledToast') || 'Включено') : (window.i18n?.t('disabledToast') || 'Выключено'), '✓');
         }
 
         // ============================================
@@ -248,10 +247,10 @@
         // LOGOUT
         // ============================================
         function doLogout() {
-            if (confirm('Вы уверены, что хотите выйти?')) {
+            if (confirm(window.i18n?.t('sureLogout') || 'Вы уверены, что хотите выйти?')) {
                 localStorage.removeItem('craneapp_auth_token');
                 localStorage.removeItem('craneapp_user_data');
-                showToast('success', 'Выход выполнен', '✓');
+                showToast('success', window.i18n?.t('logoutDone') || 'Выход выполнен', '✓');
                 setTimeout(function() {
                     window.location.href = '../auth/login.html';
                 }, 500);
@@ -266,16 +265,16 @@
         // ============================================
         const tabBar = document.getElementById('tabBar');
         const tabs = [
-            { icon: '👥', label: 'Контакты', page: '../contacts/contacts.html' },
-            { icon: '📞', label: 'Звонки', page: '../calls/calls.html' },
-            { icon: '💬', label: 'Чаты', page: '../chats/chats.html' },
-            { icon: '⚙', label: 'Настройки', page: './settings.html', active: true }
+            { icon: '👥', labelKey: 'contacts', label: 'Контакты', page: '../contacts/contacts.html' },
+            { icon: '📞', labelKey: 'calls', label: 'Звонки', page: '../calls/calls.html' },
+            { icon: '💬', labelKey: 'chats', label: 'Чаты', page: '../chats/chats.html' },
+            { icon: '⚙', labelKey: 'settings', label: 'Настройки', page: './settings.html', active: true }
         ];
         
         tabs.forEach(function(t) {
             const div = document.createElement('div');
             div.className = 'tab-item' + (t.active ? ' active' : '');
-            div.innerHTML = '<span class="tab-icon">' + t.icon + '</span><span class="tab-label">' + t.label + '</span>';
+            div.innerHTML = '<span class="tab-icon">' + t.icon + '</span><span class="tab-label" data-i18n="' + t.labelKey + '">' + (window.i18n?.t(t.labelKey) || t.label) + '</span>';
             div.onclick = function() { if (!t.active) window.location.href = t.page; };
             tabBar.appendChild(div);
         });
@@ -318,3 +317,10 @@
                 window.i18n.translatePage();
             }
         }, 100);
+
+        window.addEventListener('craneapp:languagechange', function() {
+            const localSettings = JSON.parse(localStorage.getItem('craneapp_settings') || '{}');
+            updateThemeDisplay(localSettings.theme || 'dark');
+            updateLanguageDisplay(localSettings.language || localStorage.getItem('craneapp_language') || 'ru');
+            updateSyncIndicator('synced');
+        });

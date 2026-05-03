@@ -1408,38 +1408,526 @@
         },
     };
 
-    window.i18n = {
-        currentLang: localStorage.getItem('craneapp_language') || 'ru',
-
-        t(key) {
-            return translations[this.currentLang]?.[key]
-                || translations['ru'][key]
-                || key;
+    const extraTranslations = {
+        ru: {
+            syncing: 'Синхронизация...', synchronized: 'Синхронизировано', syncError: 'Ошибка синхронизации',
+            favorite: 'Избранное', favorites: 'Избранное', favourite: 'Избранное',
+            loginTitle: 'Вход', loginSubtitle: 'Войдите в аккаунт', password: 'Пароль', login: 'Войти',
+            loginLoading: 'Вход...', loginDone: 'Вход выполнен!', loginError: 'Ошибка входа',
+            noAccount: 'Нет аккаунта?', registerAction: 'Зарегистрироваться', register: 'Регистрация',
+            firstName: 'Имя', lastName: 'Фамилия', repeatPassword: 'Повторите пароль',
+            passwordMin: 'Минимум 6 символов', usernamePlaceholder: '@username', firstNamePlaceholder: 'Ваше имя',
+            twoFAPrompt: 'Введите дополнительный пароль (2FA):', checking2FA: 'Проверка 2FA...',
+            invalidResponse: 'Неверный формат ответа', invalid2FA: 'Неверный доп. пароль',
+            phoneVerification: 'Подтверждение', blockedStatus: 'Заблокировано', rateLimitStatus: 'Лимит запросов',
+            blockedTitle: 'Доступ временно закрыт', rateLimitTitle: 'Притормози немного',
+            blockedDesc: 'Твой IP был временно заблокирован из-за подозрительной активности. Подожди немного.',
+            rateLimitDesc: 'Ты отправляешь запросы слишком быстро. Подожди — и всё заработает снова.',
+            accountBlocked: 'Аккаунт заблокирован', accountBlockedDesc: 'Ваш аккаунт был заблокирован администратором. Обратитесь в поддержку для уточнения деталей.',
+            temporaryBlock: 'Временная блокировка', secondsUntilUnlock: 'секунд до разблокировки',
+            minutesUntilUnlock: 'минут до разблокировки', backReturn: 'Вернуться назад', logoutAccount: 'Выйти из аккаунта',
+            serverUnavailable: 'Сервер недоступен', tooManyRequests: 'Слишком много запросов',
+            callTitle: 'Звонок', audioCall: 'Аудиозвонок', videoCall: 'Видеозвонок', videoMeeting: 'Видеовстреча',
+            roomFull: 'Комната заполнена (макс. 5)', callError: 'Ошибка звонка',
+            groupChatsEmpty: 'Групповых чатов пока нет', directMessagesEmpty: 'Личных сообщений пока нет',
+            logoutConfirm: 'Выйти из аккаунта?', sureLogout: 'Вы уверены, что хотите выйти?',
+            notificationsOn: 'Уведомления включены', notificationsOff: 'Уведомления отключены',
+            on: 'Вкл', off: 'Выкл', yes: 'Да', no: 'Нет', all: 'Все',
+            user: 'Пользователь', blockedAccount: 'Заблокированный аккаунт', bot: 'бот', lastSeenRecently: 'был(а) недавно',
+            goToChat: 'Перейти в чат', startChat: 'Начать переписку', creator: 'Создатель',
+            membersCount_one: '{count} участник', membersCount_few: '{count} участника', membersCount_many: '{count} участников', membersCount_other: '{count} участников',
+            chatsCount_one: '{count} чат', chatsCount_few: '{count} чата', chatsCount_many: '{count} чатов', chatsCount_other: '{count} чатов',
+            alreadyInFolder: 'уже в папке', folderHint: 'Папки отображаются как вкладки в списке чатов.',
+            folderUpdated: 'Папка обновлена', folderCreated: 'Папка создана', deleteFolderConfirm: 'Удалить папку «{name}»?',
+            editFolderShort: 'Редактировать', newFolder: 'Новая папка', choose: 'Выберите',
+            enabledToast: 'Включено', disabledToast: 'Выключено', copied: 'Скопировано', noLogEntries: 'Нет записей',
+            resetAdvancedConfirm: 'Сбросить расширенные настройки?', terminateSessionConfirm: 'Завершить сеанс на этом устройстве?',
+            terminateAllConfirm: 'Завершить все остальные сеансы?', qrValidFor: 'Код действителен {time}',
+            usernameAvailable: '✓ Доступен', usernameTaken: 'Уже занят',
+            cancelPremiumConfirm: 'Отменить подписку Премиум?', unblockUserConfirm: 'Разблокировать пользователя?',
+            passcodeLockedTitle: 'CraneApp заблокирован', passcodeLockedDesc: 'Введите код-пароль для продолжения',
+            passcodeWrong: 'Неверный код', passcodeTooMany: 'Слишком много попыток. Войдите заново.',
+            batteryCharging: '⚡ Зарядка', batteryLow: '⚠️ Низкий заряд', batteryWorking: 'Работает от батареи',
+            copyPhoto: 'Скопировать фото', deleteForEveryoneQuestion: 'Удалить для всех?', deleteQuestion: 'Удалить?',
+            deleteChatQuestion: 'Удалить чат?', you: 'Вы', remainingDays_one: 'Остался {count} день',
+            remainingDays_few: 'Осталось {count} дня', remainingDays_many: 'Осталось {count} дней', remainingDays_other: 'Осталось {count} дней',
+            remainingHours_one: 'Остался {count} час', remainingHours_few: 'Осталось {count} часа', remainingHours_many: 'Осталось {count} часов', remainingHours_other: 'Осталось {count} часов',
+            muteDurationTitle: '🔇 Выберите время мута', banDurationTitle: '🚫 Выберите время бана',
+            userMuted: 'Пользователь замучен', userBlocked: 'Пользователь заблокирован',
+            requestOpen: 'Открыт', requestClosed: 'Закрыт', requestClosedPlaceholder: 'Запрос закрыт — ответить нельзя',
+            supportReplyPlaceholder: 'Ответить от имени CraneApp...', searchChatsPeople: 'Поиск чатов и людей...',
+            searchEmoji: 'Поиск эмодзи...', searchGif: 'Поиск GIF...', searchChatsForward: 'Поиск чатов...',
+            editMessagePlaceholder: 'Введите текст сообщения...', groupTitlePlaceholder: 'Введите название...',
+            groupAboutPlaceholder: 'О чём эта группа...', captionPlaceholder: 'Подпись...',
+            privateMessages: 'Личные сообщения', communities: 'Сообщества', meetings: 'Встречи', menu: 'Меню',
+            dataStorageTitle: 'Данные и память', storageTraffic: 'Использование трафика', autoDownloadMedia: 'Автозагрузка медиа',
+            mobileNetwork: 'Через мобильную сеть', viaWifi: 'Через Wi-Fi', resetOptions: 'Сбросить настройки',
+            saveToGallery: 'Сохранение в галерею', saveToGalleryNote: 'Автоматическое сохранение всех новых фотографий и видео из этих чатов в галерею.',
+            reduceCallTraffic: 'Сократить трафик звонков', reduceCallTrafficNote: 'Экономия трафика может помочь при плохом соединении, но немного ухудшит качество звука и видео.',
+            otherSection: 'Другие', saveEditedPhotos: 'Сохранять отред. фото', pauseMusicOnRecord: 'Пауза музыки при записи',
+            raiseToListen: 'Поднять, чтобы слушать', raiseToListenNote: 'Функция «Поднять, чтобы слушать» позволяет быстро прослушать и ответить на входящие голосовые сообщения, просто поднеся телефон к уху.',
+            showAdultContent: 'Показывать материалы 18+', showAdultContentNote: 'Не скрывать медиа, предназначенные только для взрослых.',
+            exportDataSection: 'Экспорт данных', exportDataAction: 'Экспортировать данные',
+            notificationsAndSounds: 'Уведомления и звуки', messageNotifications: 'Уведомления о сообщениях',
+            inAppNotificationsSection: 'Уведомления в приложении', sound: 'Звук', vibration: 'Вибрация',
+            showText: 'Показывать текст', showTextDesc: 'Показывать текст сообщения в уведомлении',
+            appBadgeCounter: 'Счётчик на иконке', messageCount: 'Число сообщений',
+            messageCountDesc: 'Когда выкл — показывает число непрочитанных чатов',
+            newContactsDesc: 'Уведомлять когда контакт появляется в CraneApp',
+            profileTitle: 'Профиль', editProfileTitle: 'Редактировать профиль', enterName: 'Введите имя',
+            optional: 'Необязательно', tellAboutYourself: 'Расскажите о себе...',
+            currentPassword: 'Текущий пароль', newPassword: 'Новый пароль', confirmPassword: 'Подтвердите пароль',
+            channelTitle: 'Канал', newGroupTitle: 'Новая группа', enterGroupName: 'Введите название', aboutGroup: 'О группе',
+            mediaViewTitle: 'Просмотр', deleteMediaConfirm: 'Удалить это медиа?', contactsTitle: 'Контакты', searchTitle: 'Поиск',
+            auto: 'Как в системе', logoutDone: 'Выход выполнен', logCleared: 'Лог очищен', dataExported: 'Данные экспортированы',
+            exportError: 'Ошибка экспорта', networkError: 'Ошибка сети', settingsReset: 'Настройки сброшены',
+            saved: 'Сохранено', photos: 'Фото', unlimited: 'Без ограничений', cache: 'Кэш',
+            trafficUnavailable: 'Статистика трафика недоступна', preparingData: 'Подготовка данных...',
+            bytesShort: 'Б', kbShort: 'КБ', mbShort: 'МБ', gbShort: 'ГБ',
+            stickersSoon: 'Скоро здесь появятся стикеры', noStickers: 'Нет стикеров. Нажмите «+ Стикер»'
         },
-
-        translatePage() {
-            document.querySelectorAll('[data-i18n]').forEach(el => {
-                const val = this.t(el.getAttribute('data-i18n'));
-                if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') el.placeholder = val;
-                else el.textContent = val;
-            });
-            document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
-                el.placeholder = this.t(el.getAttribute('data-i18n-placeholder'));
-            });
-            document.documentElement.lang = this.currentLang;
-        },
-
-        setLanguage(lang) {
-            if (!translations[lang]) return;
-            this.currentLang = lang;
-            localStorage.setItem('craneapp_language', lang);
-            const s = JSON.parse(localStorage.getItem('craneapp_settings') || '{}');
-            s.language = lang;
-            localStorage.setItem('craneapp_settings', JSON.stringify(s));
-            this.translatePage();
+        en: {
+            syncing: 'Syncing...', synchronized: 'Synchronized', syncError: 'Sync error',
+            favorite: 'Favorites', favorites: 'Favorites', favourite: 'Favorites',
+            loginTitle: 'Log In', loginSubtitle: 'Log in to your account', password: 'Password', login: 'Log in',
+            loginLoading: 'Logging in...', loginDone: 'Logged in!', loginError: 'Login error',
+            noAccount: 'No account?', registerAction: 'Create account', register: 'Registration',
+            firstName: 'First name', lastName: 'Last name', repeatPassword: 'Repeat password',
+            passwordMin: 'At least 6 characters', usernamePlaceholder: '@username', firstNamePlaceholder: 'Your name',
+            twoFAPrompt: 'Enter additional password (2FA):', checking2FA: 'Checking 2FA...',
+            invalidResponse: 'Invalid response format', invalid2FA: 'Invalid 2FA password',
+            phoneVerification: 'Verification', blockedStatus: 'Blocked', rateLimitStatus: 'Request limit',
+            blockedTitle: 'Access temporarily closed', rateLimitTitle: 'Slow down a little',
+            blockedDesc: 'Your IP was temporarily blocked due to suspicious activity. Please wait a bit.',
+            rateLimitDesc: 'You are sending requests too quickly. Wait a little and try again.',
+            accountBlocked: 'Account blocked', accountBlockedDesc: 'Your account was blocked by an administrator. Contact support for details.',
+            temporaryBlock: 'Temporary block', secondsUntilUnlock: 'seconds until unlock',
+            minutesUntilUnlock: 'minutes until unlock', backReturn: 'Go back', logoutAccount: 'Log out',
+            serverUnavailable: 'Server unavailable', tooManyRequests: 'Too many requests',
+            callTitle: 'Call', audioCall: 'Audio call', videoCall: 'Video call', videoMeeting: 'Video meeting',
+            roomFull: 'Room is full (max. 5)', callError: 'Call error',
+            groupChatsEmpty: 'No group chats yet', directMessagesEmpty: 'No direct messages yet',
+            logoutConfirm: 'Log out?', sureLogout: 'Are you sure you want to log out?',
+            notificationsOn: 'Notifications enabled', notificationsOff: 'Notifications disabled',
+            on: 'On', off: 'Off', yes: 'Yes', no: 'No', all: 'All',
+            user: 'User', blockedAccount: 'Blocked account', bot: 'bot', lastSeenRecently: 'last seen recently',
+            goToChat: 'Go to chat', startChat: 'Start chat', creator: 'Creator',
+            membersCount_one: '{count} member', membersCount_few: '{count} members', membersCount_many: '{count} members', membersCount_other: '{count} members',
+            chatsCount_one: '{count} chat', chatsCount_few: '{count} chats', chatsCount_many: '{count} chats', chatsCount_other: '{count} chats',
+            alreadyInFolder: 'already in folder', folderHint: 'Folders are shown as tabs in the chat list.',
+            folderUpdated: 'Folder updated', folderCreated: 'Folder created', deleteFolderConfirm: 'Delete folder "{name}"?',
+            editFolderShort: 'Edit', newFolder: 'New folder', choose: 'Choose',
+            enabledToast: 'Enabled', disabledToast: 'Disabled', copied: 'Copied', noLogEntries: 'No entries',
+            resetAdvancedConfirm: 'Reset advanced settings?', terminateSessionConfirm: 'Terminate this device session?',
+            terminateAllConfirm: 'Terminate all other sessions?', qrValidFor: 'Code valid for {time}',
+            usernameAvailable: '✓ Available', usernameTaken: 'Already taken',
+            cancelPremiumConfirm: 'Cancel Premium subscription?', unblockUserConfirm: 'Unblock user?',
+            passcodeLockedTitle: 'CraneApp is locked', passcodeLockedDesc: 'Enter passcode to continue',
+            passcodeWrong: 'Wrong code', passcodeTooMany: 'Too many attempts. Log in again.',
+            batteryCharging: '⚡ Charging', batteryLow: '⚠️ Low battery', batteryWorking: 'Running on battery',
+            copyPhoto: 'Copy photo', deleteForEveryoneQuestion: 'Delete for everyone?', deleteQuestion: 'Delete?',
+            deleteChatQuestion: 'Delete chat?', you: 'You', remainingDays_one: '{count} day left',
+            remainingDays_few: '{count} days left', remainingDays_many: '{count} days left', remainingDays_other: '{count} days left',
+            remainingHours_one: '{count} hour left', remainingHours_few: '{count} hours left', remainingHours_many: '{count} hours left', remainingHours_other: '{count} hours left',
+            muteDurationTitle: '🔇 Choose mute duration', banDurationTitle: '🚫 Choose ban duration',
+            userMuted: 'User muted', userBlocked: 'User blocked',
+            requestOpen: 'Open', requestClosed: 'Closed', requestClosedPlaceholder: 'Request is closed - replies are disabled',
+            supportReplyPlaceholder: 'Reply as CraneApp...', searchChatsPeople: 'Search chats and people...',
+            searchEmoji: 'Search emoji...', searchGif: 'Search GIF...', searchChatsForward: 'Search chats...',
+            editMessagePlaceholder: 'Enter message text...', groupTitlePlaceholder: 'Enter title...',
+            groupAboutPlaceholder: 'What is this group about...', captionPlaceholder: 'Caption...',
+            privateMessages: 'Direct messages', communities: 'Communities', meetings: 'Meetings', menu: 'Menu',
+            dataStorageTitle: 'Data and storage', storageTraffic: 'Traffic usage', autoDownloadMedia: 'Media auto-download',
+            mobileNetwork: 'On mobile data', viaWifi: 'On Wi-Fi', resetOptions: 'Reset settings',
+            saveToGallery: 'Save to gallery', saveToGalleryNote: 'Automatically save all new photos and videos from these chats to the gallery.',
+            reduceCallTraffic: 'Reduce call traffic', reduceCallTrafficNote: 'Traffic saving may help on poor connections, but slightly reduces audio and video quality.',
+            otherSection: 'Other', saveEditedPhotos: 'Save edited photos', pauseMusicOnRecord: 'Pause music while recording',
+            raiseToListen: 'Raise to listen', raiseToListenNote: 'Raise to listen lets you quickly listen and reply to incoming voice messages by bringing the phone to your ear.',
+            showAdultContent: 'Show 18+ materials', showAdultContentNote: 'Do not hide media intended for adults only.',
+            exportDataSection: 'Export data', exportDataAction: 'Export data',
+            notificationsAndSounds: 'Notifications and sounds', messageNotifications: 'Message notifications',
+            inAppNotificationsSection: 'In-app notifications', sound: 'Sound', vibration: 'Vibration',
+            showText: 'Show text', showTextDesc: 'Show message text in notifications',
+            appBadgeCounter: 'App icon counter', messageCount: 'Message count',
+            messageCountDesc: 'When off, shows the number of unread chats',
+            newContactsDesc: 'Notify when a contact appears in CraneApp',
+            profileTitle: 'Profile', editProfileTitle: 'Edit profile', enterName: 'Enter name',
+            optional: 'Optional', tellAboutYourself: 'Tell about yourself...',
+            currentPassword: 'Current password', newPassword: 'New password', confirmPassword: 'Confirm password',
+            channelTitle: 'Channel', newGroupTitle: 'New group', enterGroupName: 'Enter title', aboutGroup: 'About the group',
+            mediaViewTitle: 'Viewer', deleteMediaConfirm: 'Delete this media?', contactsTitle: 'Contacts', searchTitle: 'Search',
+            auto: 'System default', logoutDone: 'Logged out', logCleared: 'Log cleared', dataExported: 'Data exported',
+            exportError: 'Export error', networkError: 'Network error', settingsReset: 'Settings reset',
+            saved: 'Saved', photos: 'Photos', unlimited: 'Unlimited', cache: 'Cache',
+            trafficUnavailable: 'Traffic statistics unavailable', preparingData: 'Preparing data...',
+            bytesShort: 'B', kbShort: 'KB', mbShort: 'MB', gbShort: 'GB',
+            stickersSoon: 'Stickers will appear here soon', noStickers: 'No stickers. Tap "+ Sticker"',
+            questions: 'Questions', ability: 'Features', writeUsernameForSearch: 'Enter a username to search',
+            complain: '📮 Report', reasonComplain: 'Report reason', spam: '📢 Spam',
+            insults: '⚠️ Harassment', violence: '🔫 Violence threats', fraud: '💰 Fraud',
+            fakeAcc: '🎭 Fake account', other: '📝 Other', description: 'Description',
+            scanQr: 'Scan the QR code<br>to start chatting', addFolder: '📂 Add to folder',
+            chooseTime: 'Choose time', reason1: 'Reason (optional)', oneHour: '1 hour',
+            sixHours: '6 hours', oneDay: '1 day', oneWeek: '1 week', oneMonth: '1 month',
+            forever: '🚫 Forever', youMuting: '🔇 You are muted', accMuting: 'Account muted',
+            reason2: 'Reason:', understand: 'Got it', complain2: 'Report', addFolder2: 'Add to folder',
+            notify: '🔔 Notifications', files: 'Files', links: 'Links'
         }
     };
 
-    // Инициализируем сразу при загрузке
-    window.i18n.translatePage();
+    const languageNames = {
+        ru: 'Русский', en: 'English', de: 'Deutsch', fr: 'Français', es: 'Español',
+        it: 'Italiano', pt: 'Português', pl: 'Polski', uk: 'Українська', tr: 'Türkçe'
+    };
+
+    const derivedLanguages = {
+        de: {
+            loginTitle: 'Anmelden', loginSubtitle: 'Melde dich bei deinem Konto an', password: 'Passwort', login: 'Anmelden',
+            register: 'Registrierung', registerAction: 'Registrieren', noAccount: 'Noch kein Konto?', blockedStatus: 'Blockiert',
+            temporaryBlock: 'Vorübergehende Sperre', accountBlocked: 'Konto gesperrt', audioCall: 'Audioanruf', videoCall: 'Videoanruf',
+            videoMeeting: 'Videotreffen', user: 'Benutzer', bot: 'Bot', yes: 'Ja', no: 'Nein', on: 'Ein', off: 'Aus'
+        },
+        fr: {
+            loginTitle: 'Connexion', loginSubtitle: 'Connectez-vous à votre compte', password: 'Mot de passe', login: 'Se connecter',
+            register: 'Inscription', registerAction: 'Créer un compte', noAccount: 'Pas de compte ?', blockedStatus: 'Bloqué',
+            temporaryBlock: 'Blocage temporaire', accountBlocked: 'Compte bloqué', audioCall: 'Appel audio', videoCall: 'Appel vidéo',
+            videoMeeting: 'Réunion vidéo', user: 'Utilisateur', bot: 'bot', yes: 'Oui', no: 'Non', on: 'Activé', off: 'Désactivé'
+        },
+        es: {
+            loginTitle: 'Iniciar sesión', loginSubtitle: 'Entra en tu cuenta', password: 'Contraseña', login: 'Entrar',
+            register: 'Registro', registerAction: 'Registrarse', noAccount: '¿No tienes cuenta?', blockedStatus: 'Bloqueado',
+            temporaryBlock: 'Bloqueo temporal', accountBlocked: 'Cuenta bloqueada', audioCall: 'Llamada de audio', videoCall: 'Videollamada',
+            videoMeeting: 'Reunión de video', user: 'Usuario', bot: 'bot', yes: 'Sí', no: 'No', on: 'Activado', off: 'Desactivado'
+        },
+        it: {
+            loginTitle: 'Accedi', loginSubtitle: 'Accedi al tuo account', password: 'Password', login: 'Accedi',
+            register: 'Registrazione', registerAction: 'Registrati', noAccount: 'Non hai un account?', blockedStatus: 'Bloccato',
+            temporaryBlock: 'Blocco temporaneo', accountBlocked: 'Account bloccato', audioCall: 'Chiamata audio', videoCall: 'Videochiamata',
+            videoMeeting: 'Riunione video', user: 'Utente', bot: 'bot', yes: 'Sì', no: 'No', on: 'Attivo', off: 'Disattivo'
+        },
+        pt: {
+            loginTitle: 'Entrar', loginSubtitle: 'Entre na sua conta', password: 'Senha', login: 'Entrar',
+            register: 'Registro', registerAction: 'Criar conta', noAccount: 'Sem conta?', blockedStatus: 'Bloqueado',
+            temporaryBlock: 'Bloqueio temporário', accountBlocked: 'Conta bloqueada', audioCall: 'Chamada de áudio', videoCall: 'Chamada de vídeo',
+            videoMeeting: 'Reunião de vídeo', user: 'Usuário', bot: 'bot', yes: 'Sim', no: 'Não', on: 'Ativado', off: 'Desativado'
+        },
+        pl: {
+            loginTitle: 'Logowanie', loginSubtitle: 'Zaloguj się na konto', password: 'Hasło', login: 'Zaloguj',
+            register: 'Rejestracja', registerAction: 'Utwórz konto', noAccount: 'Nie masz konta?', blockedStatus: 'Zablokowano',
+            temporaryBlock: 'Tymczasowa blokada', accountBlocked: 'Konto zablokowane', audioCall: 'Połączenie audio', videoCall: 'Połączenie wideo',
+            videoMeeting: 'Spotkanie wideo', user: 'Użytkownik', bot: 'bot', yes: 'Tak', no: 'Nie', on: 'Wł.', off: 'Wył.'
+        },
+        uk: {
+            loginTitle: 'Вхід', loginSubtitle: 'Увійдіть в акаунт', password: 'Пароль', login: 'Увійти',
+            register: 'Реєстрація', registerAction: 'Зареєструватися', noAccount: 'Немає акаунту?', blockedStatus: 'Заблоковано',
+            temporaryBlock: 'Тимчасове блокування', accountBlocked: 'Акаунт заблоковано', audioCall: 'Аудіодзвінок', videoCall: 'Відеодзвінок',
+            videoMeeting: 'Відеозустріч', user: 'Користувач', bot: 'бот', yes: 'Так', no: 'Ні', on: 'Увімк', off: 'Вимк'
+        },
+        tr: {
+            loginTitle: 'Giriş', loginSubtitle: 'Hesabına giriş yap', password: 'Şifre', login: 'Giriş yap',
+            register: 'Kayıt', registerAction: 'Hesap oluştur', noAccount: 'Hesabın yok mu?', blockedStatus: 'Engellendi',
+            temporaryBlock: 'Geçici engel', accountBlocked: 'Hesap engellendi', audioCall: 'Sesli arama', videoCall: 'Görüntülü arama',
+            videoMeeting: 'Video toplantı', user: 'Kullanıcı', bot: 'bot', yes: 'Evet', no: 'Hayır', on: 'Açık', off: 'Kapalı'
+        }
+    };
+
+    const phraseKeys = {
+        'Войдите в аккаунт': 'loginSubtitle',
+        'Юзернейм': 'username',
+        'Пароль': 'password',
+        'Войти': 'login',
+        'Нет аккаунта?': 'noAccount',
+        'Зарегистрироваться': 'registerAction',
+        'Ваше имя': 'firstNamePlaceholder',
+        'Минимум 6 символов': 'passwordMin',
+        'Повторите пароль': 'repeatPassword',
+        'Заблокировано': 'blockedStatus',
+        'Доступ временно закрыт': 'blockedTitle',
+        'Твой IP был временно заблокирован из-за подозрительной активности. Подожди немного.': 'blockedDesc',
+        'секунд до разблокировки': 'secondsUntilUnlock',
+        'Вернуться назад': 'backReturn',
+        'Уведомления и звуки': 'notificationsAndSounds',
+        'Уведомления о сообщениях': 'messageNotifications',
+        'Уведомления в приложении': 'inAppNotificationsSection',
+        'Звук': 'sound',
+        'Вибрация': 'vibration',
+        'Показывать текст': 'showText',
+        'Показывать текст сообщения в уведомлении': 'showTextDesc',
+        'Счётчик на иконке': 'appBadgeCounter',
+        'Число сообщений': 'messageCount',
+        'Когда выкл — показывает число непрочитанных чатов': 'messageCountDesc',
+        'Уведомлять когда контакт появляется в CraneApp': 'newContactsDesc',
+        'Использование трафика': 'storageTraffic',
+        'Автозагрузка медиа': 'autoDownloadMedia',
+        'Через мобильную сеть': 'mobileNetwork',
+        'Через Wi-Fi': 'viaWifi',
+        'Сбросить настройки': 'resetOptions',
+        'Сохранение в галерею': 'saveToGallery',
+        'Автоматическое сохранение всех новых фотографий и видео из этих чатов в галерею.': 'saveToGalleryNote',
+        'Сократить трафик звонков': 'reduceCallTraffic',
+        'Экономия трафика может помочь при плохом соединении, но немного ухудшит качество звука и видео.': 'reduceCallTrafficNote',
+        'Другие': 'otherSection',
+        'Сохранять отред. фото': 'saveEditedPhotos',
+        'Пауза музыки при записи': 'pauseMusicOnRecord',
+        'Поднять, чтобы слушать': 'raiseToListen',
+        'Функция «Поднять, чтобы слушать» позволяет быстро прослушать и ответить на входящие голосовые сообщения, просто поднеся телефон к уху.': 'raiseToListenNote',
+        'Показывать материалы 18+': 'showAdultContent',
+        'Не скрывать медиа, предназначенные только для взрослых.': 'showAdultContentNote',
+        'Экспорт данных': 'exportDataSection',
+        'Экспортировать данные': 'exportDataAction',
+        'Скачать все ваши данные в JSON': 'exportDataDesc',
+        'Введите имя': 'enterName',
+        'Необязательно': 'optional',
+        'Расскажите о себе...': 'tellAboutYourself',
+        'Канал': 'channelTitle',
+        'Новая группа': 'newGroupTitle',
+        'Введите название': 'enterGroupName',
+        'О группе': 'aboutGroup',
+        'Просмотр': 'mediaViewTitle',
+        'Поиск чатов и людей...': 'searchChatsPeople',
+        'Личные сообщения': 'privateMessages',
+        'Сообщества': 'communities',
+        'Встречи': 'meetings',
+        'Меню': 'menu',
+        'Назад': 'back',
+        'Закрыть': 'close',
+        'Отклонить': 'cancel',
+        'Принять': 'confirm'
+    };
+
+    const phraseAttributes = ['placeholder', 'title', 'aria-label', 'data-tip', 'data-placeholder'];
+    const htmlKeys = new Set(['scanQr']);
+
+    function copyMissingFromEnglish(lang) {
+        translations[lang] = translations[lang] || {};
+        for (const [key, value] of Object.entries(translations.en)) {
+            if (translations[lang][key] === undefined) translations[lang][key] = value;
+        }
+        if (derivedLanguages[lang]) Object.assign(translations[lang], derivedLanguages[lang]);
+    }
+
+    Object.assign(translations.ru, extraTranslations.ru);
+    Object.assign(translations.en, extraTranslations.en);
+    Object.keys(translations).forEach(lang => {
+        if (lang !== 'ru' && lang !== 'en') copyMissingFromEnglish(lang);
+    });
+
+    const supportedLanguages = Object.keys(translations);
+    const reversePhraseKeys = {};
+
+    function rebuildReversePhraseKeys() {
+        Object.assign(reversePhraseKeys, phraseKeys);
+        for (const lang of supportedLanguages) {
+            for (const [key, value] of Object.entries(translations[lang])) {
+                if (typeof value === 'string' && value && !reversePhraseKeys[value]) {
+                    reversePhraseKeys[value] = key;
+                }
+            }
+        }
+    }
+
+    function format(template, vars) {
+        if (!vars || typeof template !== 'string') return template;
+        return template.replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? '');
+    }
+
+    function pluralCategory(lang, count) {
+        if (lang === 'ru' || lang === 'uk') {
+            const mod10 = count % 10;
+            const mod100 = count % 100;
+            if (mod10 === 1 && mod100 !== 11) return 'one';
+            if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'few';
+            return 'many';
+        }
+        return count === 1 ? 'one' : 'other';
+    }
+
+    function getSavedLanguage() {
+        try {
+            const fromSettings = JSON.parse(localStorage.getItem('craneapp_settings') || '{}').language;
+            const saved = localStorage.getItem('craneapp_language') || fromSettings || 'ru';
+            return translations[saved] ? saved : 'ru';
+        } catch (_) {
+            return localStorage.getItem('craneapp_language') || 'ru';
+        }
+    }
+
+    function getTranslation(lang, key) {
+        return translations[lang]?.[key]
+            ?? translations.en?.[key]
+            ?? translations.ru?.[key]
+            ?? key;
+    }
+
+    function safeParseJson(value, fallback) {
+        try { return value ? JSON.parse(value) : fallback; }
+        catch (_) { return fallback; }
+    }
+
+    function shouldSkipElement(el) {
+        if (!el || !el.tagName) return true;
+        const tag = el.tagName;
+        if (['SCRIPT', 'STYLE', 'NOSCRIPT', 'CODE', 'PRE'].includes(tag)) return true;
+        if (el.isContentEditable) return true;
+        if (el.closest('[data-i18n-skip], .message-content, .message-text, .chat-message, .media-content')) return true;
+        return false;
+    }
+
+    function applyElementKey(el, attr, key) {
+        if (!key) return;
+        const val = window.i18n.t(key);
+        if (attr === 'text') {
+            if (htmlKeys.has(key) || el.hasAttribute('data-i18n-html')) el.innerHTML = val;
+            else if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') el.placeholder = val;
+            else el.textContent = val;
+        } else if (attr === 'data-placeholder') {
+            el.setAttribute('data-placeholder', val);
+        } else {
+            el.setAttribute(attr, val);
+        }
+    }
+
+    function translateKnownPhrase(value) {
+        if (!value || typeof value !== 'string') return value;
+        const trimmed = value.trim();
+        const key = reversePhraseKeys[trimmed];
+        return key ? window.i18n.t(key) : value;
+    }
+
+    function translateTitleValue(value) {
+        if (!value) return value;
+        const exact = translateKnownPhrase(value);
+        if (exact !== value) return exact;
+        const appFirst = value.match(/^(CraneApp\s*[-—]\s*)(.+)$/);
+        if (appFirst) return appFirst[1] + translateKnownPhrase(appFirst[2].trim());
+        const appLast = value.match(/^(.+?)(\s*[-—]\s*CraneApp)$/);
+        if (appLast) return translateKnownPhrase(appLast[1].trim()) + appLast[2];
+        return value;
+    }
+
+    function translatePlainElement(el) {
+        if (shouldSkipElement(el)) return;
+        if (el.children.length > 0) return;
+        const text = el.textContent || '';
+        const translated = translateKnownPhrase(text);
+        if (translated !== text) el.textContent = translated;
+    }
+
+    function translateAttributes(root) {
+        const scope = root?.querySelectorAll ? root : document;
+        scope.querySelectorAll('*').forEach(el => {
+            if (shouldSkipElement(el)) return;
+            phraseAttributes.forEach(attr => {
+                if (!el.hasAttribute(attr)) return;
+                const value = el.getAttribute(attr);
+                const translated = translateKnownPhrase(value);
+                if (translated !== value) el.setAttribute(attr, translated);
+            });
+        });
+    }
+
+    function installFetchLanguageHeader() {
+        if (window.__craneI18nFetchInstalled || typeof window.fetch !== 'function') return;
+        window.__craneI18nFetchInstalled = true;
+        const originalFetch = window.fetch.bind(window);
+        window.fetch = function(input, init = {}) {
+            const lang = window.i18n?.currentLang || getSavedLanguage();
+            const headers = new Headers(init.headers || (input && input.headers) || {});
+            if (!headers.has('X-Crane-Language')) headers.set('X-Crane-Language', lang);
+            return originalFetch(input, { ...init, headers });
+        };
+    }
+
+    function installMutationObserver() {
+        if (window.__craneI18nObserverInstalled || !window.MutationObserver) return;
+        window.__craneI18nObserverInstalled = true;
+        const observer = new MutationObserver(mutations => {
+            if (window.__craneI18nTranslating) return;
+            for (const mutation of mutations) {
+                mutation.addedNodes.forEach(node => {
+                    if (node.nodeType === 1) window.i18n.translatePage(node);
+                });
+                if (mutation.type === 'characterData' && mutation.target.parentElement) {
+                    translatePlainElement(mutation.target.parentElement);
+                }
+            }
+        });
+        const start = () => observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+        if (document.documentElement) start();
+        else document.addEventListener('DOMContentLoaded', start, { once: true });
+    }
+
+    rebuildReversePhraseKeys();
+
+    window.i18n = {
+        currentLang: getSavedLanguage(),
+        translations,
+        languageNames,
+        supportedLanguages,
+
+        t(key, vars) {
+            return format(getTranslation(this.currentLang, key), vars);
+        },
+
+        tc(key, count, vars = {}) {
+            const suffix = pluralCategory(this.currentLang, Number(count));
+            return this.t(`${key}_${suffix}`, { ...vars, count });
+        },
+
+        keyForPhrase(value) {
+            return reversePhraseKeys[(value || '').trim()] || null;
+        },
+
+        localizeText(value, vars) {
+            const key = this.keyForPhrase(value);
+            return key ? this.t(key, vars) : value;
+        },
+
+        translatePage(root = document) {
+            if (!root || !document.documentElement) return;
+            window.__craneI18nTranslating = true;
+            try {
+                const scope = root.querySelectorAll ? root : document;
+                const direct = root.nodeType === 1 ? [root] : [];
+
+                [...direct, ...scope.querySelectorAll('[data-i18n]')].forEach(el => {
+                    if (el.hasAttribute?.('data-i18n')) applyElementKey(el, 'text', el.getAttribute('data-i18n'));
+                });
+                scope.querySelectorAll('[data-i18n-placeholder]').forEach(el => applyElementKey(el, 'placeholder', el.getAttribute('data-i18n-placeholder')));
+                scope.querySelectorAll('[data-i18n-title]').forEach(el => applyElementKey(el, 'title', el.getAttribute('data-i18n-title')));
+                scope.querySelectorAll('[data-i18n-aria-label]').forEach(el => applyElementKey(el, 'aria-label', el.getAttribute('data-i18n-aria-label')));
+                scope.querySelectorAll('[data-i18n-data-placeholder]').forEach(el => applyElementKey(el, 'data-placeholder', el.getAttribute('data-i18n-data-placeholder')));
+                scope.querySelectorAll('[data-i18n-html]').forEach(el => applyElementKey(el, 'text', el.getAttribute('data-i18n-html')));
+
+                translateAttributes(scope);
+                scope.querySelectorAll('button,label,option,h1,h2,h3,h4,h5,h6,p,span,div,a').forEach(translatePlainElement);
+                if (root.nodeType === 1) translatePlainElement(root);
+                document.title = translateTitleValue(document.title);
+
+                document.documentElement.lang = this.currentLang;
+                document.documentElement.dir = this.currentLang === 'ar' ? 'rtl' : 'ltr';
+            } finally {
+                window.__craneI18nTranslating = false;
+            }
+        },
+
+        setLanguage(lang) {
+            if (!translations[lang]) return false;
+            this.currentLang = lang;
+            localStorage.setItem('craneapp_language', lang);
+            const settings = safeParseJson(localStorage.getItem('craneapp_settings'), {});
+            settings.language = lang;
+            localStorage.setItem('craneapp_settings', JSON.stringify(settings));
+            this.translatePage();
+            window.dispatchEvent(new CustomEvent('craneapp:languagechange', { detail: { language: lang } }));
+            return true;
+        }
+    };
+
+    installFetchLanguageHeader();
+    installMutationObserver();
+
+    const init = () => window.i18n.translatePage();
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });
+    else init();
 })();

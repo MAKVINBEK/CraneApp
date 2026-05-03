@@ -57,7 +57,7 @@ const token = localStorage.getItem('craneapp_auth_token');
 
             applyPowerSave(settings.powerSave);
             save();
-            showToast(settings[key] ? 'Включено' : 'Выключено', '✓');
+            showToast(settings[key] ? (window.i18n?.t('enabledToast') || 'Включено') : (window.i18n?.t('disabledToast') || 'Выключено'), '✓');
         }
 
         function applyPowerSave(enabled) {
@@ -102,7 +102,9 @@ const token = localStorage.getItem('craneapp_auth_token');
             const charging = battery.charging;
 
             document.getElementById('batteryLevel').textContent = level + '%';
-            document.getElementById('batteryStatus').textContent = charging ? '⚡ Зарядка' : (level <= 20 ? '⚠️ Низкий заряд' : 'Работает от батареи');
+                document.getElementById('batteryStatus').textContent = charging
+                    ? (window.i18n?.t('batteryCharging') || '⚡ Зарядка')
+                    : (level <= 20 ? (window.i18n?.t('batteryLow') || '⚠️ Низкий заряд') : (window.i18n?.t('batteryWorking') || 'Работает от батареи'));
             document.getElementById('batteryFill').style.width = level + '%';
             document.getElementById('batteryFill').style.background = level <= 20 ? '#FF4B4B' : level <= 50 ? '#FFA500' : '#00C864';
             document.getElementById('batteryIcon').textContent = charging ? '🔌' : level <= 20 ? '🪫' : '🔋';

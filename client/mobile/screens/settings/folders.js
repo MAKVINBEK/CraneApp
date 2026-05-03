@@ -51,7 +51,7 @@ function renderList() {
   html+='<div class="row" onclick="openEdit(null)"><div class="ri" style="background:rgba(255,0,127,.15);color:var(--a);font-size:22px;font-weight:300">+</div><div class="rt"><div class="rn" style="color:var(--a)">Создать папку</div></div></div>';
 
   sec.innerHTML = html;
-  hint.textContent = folders.length ? 'Папки отображаются как вкладки в списке чатов.' : '';
+  hint.textContent = folders.length ? (window.i18n?.t('folderHint') || 'Папки отображаются как вкладки в списке чатов.') : '';
 }
 
 function openEdit(folderId) {
@@ -61,7 +61,7 @@ function openEdit(folderId) {
   selColor = f?.color || '#FF007F';
   selChats = new Set(f?.chatIds||[]);
 
-  document.getElementById('editTitle').textContent = f ? 'Редактировать' : 'Новая папка';
+  document.getElementById('editTitle').textContent = f ? (window.i18n?.t('editFolderShort') || 'Редактировать') : (window.i18n?.t('newFolder') || 'Новая папка');
   document.getElementById('fName').value = f?.name||'';
   document.getElementById('btnDel').style.display = f ? 'block' : 'none';
 
@@ -124,12 +124,12 @@ async function saveFolder() {
   await persist();
   backToList();
   renderList();
-  toast(editId ? 'Папка обновлена' : 'Папка создана');
+    toast(editId ? (window.i18n?.t('folderUpdated') || 'Папка обновлена') : (window.i18n?.t('folderCreated') || 'Папка создана'));
 }
 
 async function deleteFolder() {
   const f=folders.find(x=>x.id===editId);
-  if(!confirm('Удалить папку «'+(f?.name||'')+'»?'))return;
+    if(!confirm(window.i18n?.t('deleteFolderConfirm', { name: f?.name || '' }) || ('Удалить папку «'+(f?.name||'')+'»?')))return;
   folders=folders.filter(x=>x.id!==editId);
   await persist();
   backToList();

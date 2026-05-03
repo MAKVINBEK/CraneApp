@@ -35,7 +35,7 @@ const token = localStorage.getItem('craneapp_auth_token');
             el.classList.toggle('active');
             s[key] = el.classList.contains('active');
             save();
-            showToast(s[key] ? 'Включено' : 'Выключено');
+            showToast(s[key] ? (window.i18n?.t('enabledToast') || 'Включено') : (window.i18n?.t('disabledToast') || 'Выключено'));
         }
 
         async function save() {
