@@ -1,4 +1,4 @@
-(function(){try{var s=JSON.parse(localStorage.getItem('craneapp_settings')||'{}');if(s.accentColor){document.documentElement.style.setProperty('--accent',s.accentColor);document.documentElement.style.setProperty('--accent-2',s.accentColor);}}catch(_){}})()
+(function(){try{var s=JSON.parse(localStorage.getItem('craneapp_settings')||'{}');if(s.accentColor){document.documentElement.style.setProperty('--accent',s.accentColor);document.documentElement.style.setProperty('--accent-2',s.accentColor);}}catch(_){}})();
 
 (function(){
     'use strict';
