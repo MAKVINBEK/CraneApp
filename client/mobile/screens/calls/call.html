@@ -482,7 +482,7 @@
     async function startLocalStream(){
         try {
             const s = await navigator.mediaDevices.getUserMedia({
-                audio: true,
+                audio: { noiseSuppression: true, echoCancellation: true, autoGainControl: true },
                 video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' }
             });
             localStream = s;
@@ -492,7 +492,7 @@
         } catch(err) {
             console.warn('getUserMedia error', err);
             try {
-                const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                const s = await navigator.mediaDevices.getUserMedia({ audio: { noiseSuppression: true, echoCancellation: true, autoGainControl: true }, video: false });
                 localStream = s;
                 camEnabled = false;
                 applyTrackStates();
