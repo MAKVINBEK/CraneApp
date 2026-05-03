@@ -4919,10 +4919,13 @@ wss.on('connection', async (ws, req) => {
                         peer: { userId: ws.userId }
                     }, ws.userId);
                     if (lr && lr.ok) saveCallMessage(lr).catch(() => {});
-                    // Комната закрылась — зачищаем все pending invite на эту комнату
+                    // Комната закрылась — уведомляем pending-адресатов и зачищаем
                     if (lr && lr.closed) {
                         for (const [uid, inv] of pendingCallInvites) {
-                            if (inv.roomId === roomId) pendingCallInvites.delete(uid);
+                            if (inv.roomId === roomId) {
+                                sendToUser(uid, { type: 'call_cancelled', roomId });
+                                pendingCallInvites.delete(uid);
+                            }
                         }
                     }
                     ws.callRoomId = null;
@@ -4995,10 +4998,14 @@ wss.on('connection', async (ws, req) => {
                     peer: { userId: ws.userId }
                 }, ws.userId);
                 if (lr && lr.ok) saveCallMessage(lr).catch(() => {});
-                // Комната закрылась при дисконнекте — зачищаем pending invites
+                // Комната закрылась при дисконнекте — уведомляем pending-адресатов и зачищаем
                 if (lr && lr.closed) {
+                    const _closedRoomId = ws.callRoomId;
                     for (const [uid, inv] of pendingCallInvites) {
-                        if (inv.roomId === ws.callRoomId) pendingCallInvites.delete(uid);
+                        if (inv.roomId === _closedRoomId) {
+                            sendToUser(uid, { type: 'call_cancelled', roomId: _closedRoomId });
+                            pendingCallInvites.delete(uid);
+                        }
                     }
                 }
             } catch (_) {}

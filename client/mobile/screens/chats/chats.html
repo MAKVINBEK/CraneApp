@@ -4122,10 +4122,24 @@
                 if (window.__handleIncomingCallMessage) window.__handleIncomingCallMessage(data);
                 return;
             }
+            if (data && data.type === 'call_cancelled') {
+                // Звонящий отменил вызов до ответа — убираем баннер входящего звонка
+                if (_incomingCall && _incomingCall.roomId === data.roomId) {
+                    try { _stopRingtone(); } catch(_){}
+                    _hideIncomingCallBanner();
+                    _incomingCall = null;
+                }
+                return;
+            }
             if (data && data.type === 'call_invite_response') {
                 if (window._cancelCallInviteRetry) { window._cancelCallInviteRetry(); window._cancelCallInviteRetry = null; }
-                try { showToast && showToast(data.accepted ? 'success' : 'info',
-                    data.accepted ? 'Собеседник принял звонок' : 'Собеседник отклонил звонок'); } catch(_){}
+                if (data.accepted) {
+                    try { showToast && showToast('success', 'Собеседник принял звонок'); } catch(_){}
+                } else {
+                    try { showToast && showToast('info', 'Собеседник отклонил звонок'); } catch(_){}
+                    // Закрываем окно звонка через postMessage в iframe
+                    try { document.getElementById('callFrame').contentWindow.postMessage({ type: 'crane_hangup' }, '*'); } catch(_) {}
+                }
                 return;
             }
             switch (data.type) {
