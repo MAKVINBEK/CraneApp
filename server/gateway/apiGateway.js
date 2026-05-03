@@ -4736,6 +4736,9 @@ app.delete('/api/v1/messages/:messageId/favorite', authMiddleware, async (req, r
 // ============================================
 
 const connectedUsers = new Map();
+// userId -> { type, roomId, kind, from, fromName, fromAvatar, title }
+// Хранит call_incoming для пользователей, которых не было онлайн в момент звонка
+const pendingCallInvites = new Map();
 
 // Throttle last_seen updates: не чаще 1 раза в 30 секунд на пользователя
 const _lastSeenTs = new Map();
@@ -4804,6 +4807,20 @@ wss.on('connection', async (ws, req) => {
 
     ws.userId = userId;
     ws.isAlive = true;
+
+    // Если есть незакрытый звонок для этого пользователя — отправляем сразу
+    if (!userId.startsWith('anonymous')) {
+        const _pending = pendingCallInvites.get(userId);
+        if (_pending && callRoom.getRoom(_pending.roomId)) {
+            setTimeout(() => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    try { ws.send(JSON.stringify(_pending)); } catch (_) {}
+                }
+            }, 800);
+        } else if (_pending) {
+            pendingCallInvites.delete(userId);
+        }
+    }
 
     // Ping/pong для проверки соединения
     ws.on('pong', () => {
@@ -4902,6 +4919,12 @@ wss.on('connection', async (ws, req) => {
                         peer: { userId: ws.userId }
                     }, ws.userId);
                     if (lr && lr.ok) saveCallMessage(lr).catch(() => {});
+                    // Комната закрылась — зачищаем все pending invite на эту комнату
+                    if (lr && lr.closed) {
+                        for (const [uid, inv] of pendingCallInvites) {
+                            if (inv.roomId === roomId) pendingCallInvites.delete(uid);
+                        }
+                    }
                     ws.callRoomId = null;
                     break;
                 }
@@ -4920,7 +4943,7 @@ wss.on('connection', async (ws, req) => {
                 case 'call_invite': {
                     // Приглашение конкретного пользователя в комнату
                     if (!msg.to || !msg.roomId) break;
-                    sendToUser(msg.to, {
+                    const _invite = {
                         type: 'call_incoming',
                         roomId: msg.roomId,
                         kind: msg.kind || 'video',
@@ -4928,7 +4951,10 @@ wss.on('connection', async (ws, req) => {
                         fromName: msg.fromName || null,
                         fromAvatar: msg.fromAvatar || null,
                         title: msg.title || null
-                    });
+                    };
+                    sendToUser(msg.to, _invite);
+                    // Сохраняем invite — если адресат был офлайн, он получит его при подключении
+                    pendingCallInvites.set(msg.to, _invite);
                     break;
                 }
                 case 'call_invite_response': {
@@ -4940,6 +4966,8 @@ wss.on('connection', async (ws, req) => {
                         from: ws.userId,
                         accepted: !!msg.accepted
                     });
+                    // Invite обработан — убираем pending
+                    pendingCallInvites.delete(ws.userId);
                     break;
                 }
 
@@ -4967,6 +4995,12 @@ wss.on('connection', async (ws, req) => {
                     peer: { userId: ws.userId }
                 }, ws.userId);
                 if (lr && lr.ok) saveCallMessage(lr).catch(() => {});
+                // Комната закрылась при дисконнекте — зачищаем pending invites
+                if (lr && lr.closed) {
+                    for (const [uid, inv] of pendingCallInvites) {
+                        if (inv.roomId === ws.callRoomId) pendingCallInvites.delete(uid);
+                    }
+                }
             } catch (_) {}
             ws.callRoomId = null;
         }
