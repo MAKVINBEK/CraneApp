@@ -134,6 +134,8 @@
             openFolder: 'Открыть',
             // settings main
             chatNotifications: 'Уведомления в чатах', channelSounds: 'Звук в каналах',
+            // language page
+            pinned: 'Закреплённые', allLanguages: 'Все языки', searchLanguage: 'Поиск языка...', languageChangedToast: 'Язык изменён', noResults: 'Ничего не найдено',
             // chats
             chatsTitle: 'Чаты', findUser: 'Найти собеседника', searchChats: 'Поиск чатов...',
             noChatsYet: 'Нет чатов', selectChatPrompt: 'Выберите чат',
@@ -304,6 +306,8 @@
             openFolder: 'Open',
             // settings main
             chatNotifications: 'Chat Notifications', channelSounds: 'Channel Sounds',
+            // language page
+            pinned: 'Pinned', allLanguages: 'All languages', searchLanguage: 'Search language...', languageChangedToast: 'Language changed', noResults: 'No results found',
             // chats
             chatsTitle: 'Chats', findUser: 'Find a contact', searchChats: 'Search chats...',
             noChatsYet: 'No chats', selectChatPrompt: 'Select a chat',
