@@ -67,18 +67,18 @@
 <body>
     <div class="toast-container" id="toastContainer"></div>
 
-    <div class="header">
-        <button class="back-btn" onclick="history.back()">←</button>
-        <span class="header-title">Язык</span>
-    </div>
-
-    <div class="search-bar">
-        <div class="search-inner">
-            <input class="search-input" type="search" placeholder="Поиск языка..." id="searchInput" oninput="render(this.value)" autocomplete="off">
+        <div class="header">
+            <button class="back-btn" onclick="history.back()">←</button>
+            <span class="header-title">Язык</span>
         </div>
-    </div>
 
-    <div class="content" id="content"></div>
+        <div class="search-bar">
+            <div class="search-inner">
+                <input class="search-input" type="search" placeholder="Поиск языка..." id="searchInput" oninput="render(this.value)" autocomplete="off">
+            </div>
+        </div>
+
+        <div class="content" id="content"></div>
 
     <script>
         const token = localStorage.getItem('craneapp_auth_token');
