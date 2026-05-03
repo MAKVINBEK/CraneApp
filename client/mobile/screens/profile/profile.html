@@ -2,6 +2,7 @@
 <html lang="ru">
 <!-- ТЕМА И НАСТРОЙКИ -->
 <script src="../scripts/theme.js"></script>
+<script src="../scripts/i18n.js"></script>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -37,26 +38,26 @@
     <div class="app-wrapper">
         <div class="header">
             <button class="back-btn" onclick="history.back()">←</button>
-            <span style="font-weight: 600; font-size: 18px;">Профиль</span>
+            <span style="font-weight: 600; font-size: 18px;" id="profileTitle">Профиль</span>
         </div>
         <div class="profile-header">
             <div class="avatar" id="avatar">👤</div>
-            <div class="name" id="name">Загрузка...</div>
+            <div class="name" id="name" data-i18n="loading">Загрузка...</div>
             <div class="username" id="username">@username</div>
-            <div class="status" id="status">онлайн</div>
+            <div class="status" id="status" data-i18n="online">онлайн</div>
         </div>
         <div class="actions">
-            <button class="action-btn btn-primary" onclick="window.location.href='../chats/chat.html?id=new'">💬 Сообщение</button>
-            <button class="action-btn btn-secondary" onclick="alert('Звонок')">📞 Звонок</button>
+            <button class="action-btn btn-primary" onclick="window.location.href='../chats/chat.html?id=new'" id="messageBtn">💬 Сообщение</button>
+            <button class="action-btn btn-secondary" onclick="alert('Звонок')" id="callBtn">📞 Звонок</button>
         </div>
         <div class="info-section">
-            <div class="info-item"><span class="info-label">Имя</span><span class="info-value" id="displayName">-</span></div>
-            <div class="info-item"><span class="info-label">О себе</span><span class="info-value" id="bio">Нет информации</span></div>
-            <div class="info-item" onclick="location.href('./editProfile.html')"><span class="info-label">Изменить профиль</span><span class="arrow">›</span></div>
+            <div class="info-item"><span class="info-label" data-i18n="name">Имя</span><span class="info-value" id="displayName">-</span></div>
+            <div class="info-item"><span class="info-label" data-i18n="aboutMe">О себе</span><span class="info-value" id="bio">Нет информации</span></div>
+            <div class="info-item" onclick="location.href('./editProfile.html')"><span class="info-label" data-i18n="editProfile">Изменить профиль</span><span class="arrow">›</span></div>
         </div>
         <div class="info-section">
-            <div class="info-item" onclick="location.href('../settings/privacy.html')"><span class="info-label">Конфиденциальность</span><span class="arrow">›</span></div>
-            <div class="info-item" onclick="alert('Уведомления')"><span class="info-label">Уведомления</span><span class="arrow">›</span></div>
+            <div class="info-item" onclick="location.href('../settings/privacy.html')"><span class="info-label" data-i18n="privacy">Конфиденциальность</span><span class="arrow">›</span></div>
+            <div class="info-item" onclick="alert('Уведомления')"><span class="info-label" data-i18n="notifications">Уведомления</span><span class="arrow">›</span></div>
         </div>
     </div>
 
@@ -70,10 +71,25 @@
             document.getElementById('name').textContent = user.firstName || 'User';
             document.getElementById('displayName').textContent = user.firstName || 'User';
             document.getElementById('username').textContent = user.username ? '@' + user.username : '@username';
-            document.getElementById('bio').textContent = user.bio || 'Нет информации';
+            document.getElementById('bio').textContent = user.bio || window.i18n.t('noDescription');
             const firstLetter = (user.firstName || 'U')[0].toUpperCase();
             document.getElementById('avatar').textContent = firstLetter;
         }
+
+        function translatePage() {
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                el.textContent = window.i18n.t(el.getAttribute('data-i18n'));
+            });
+            document.getElementById('profileTitle').textContent = window.i18n.t('profile');
+            document.getElementById('messageBtn').textContent = '💬 ' + window.i18n.t('message');
+            document.getElementById('callBtn').textContent = '📞 ' + window.i18n.t('calls');
+            document.getElementById('name').textContent = user ? (user.firstName || window.i18n.t('name')) : window.i18n.t('loading');
+            if (user) {
+                document.getElementById('status').textContent = window.i18n.t('online');
+            }
+        }
+
+        translatePage();
     </script>
 </body>
 </html>

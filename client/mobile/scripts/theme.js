@@ -537,4 +537,32 @@
         else apply(document);
         new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.nodeType===1) apply(n); }))).observe(document.documentElement, {childList:true, subtree:true});
     })();
+
+// Load i18n for all pages
+(function() {
+    const i18nScript = document.createElement('script');
+    i18nScript.src = '../scripts/i18n.js';
+    i18nScript.onload = function() {
+        // Translate page after i18n loads
+        function translatePage() {
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                const translation = window.i18n.t(key);
+                if (translation !== key) { // Only translate if translation exists
+                    el.textContent = translation;
+                }
+            });
+            // Set placeholders
+            document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                const key = el.getAttribute('data-i18n-placeholder');
+                const translation = window.i18n.t(key);
+                if (translation !== key) {
+                    el.placeholder = translation;
+                }
+            });
+        }
+        translatePage();
+    };
+    document.head.appendChild(i18nScript);
+})();
 })();
