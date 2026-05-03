@@ -164,7 +164,14 @@
             chooseGif: 'Нажмите для выбора GIF', noGifs: 'Здесь будут ваши GIF',
             chooseSticker: 'Выберите или создайте стикерпак',
             logout2: 'Выйти из аккаунта', logoutConfirm: 'Выйти из аккаунта?',
-            noMessages: 'Нет сообщений'
+            noMessages: 'Нет сообщений',
+            favourite: 'Избранное', recentCalls: 'Недавние звонки', notificationsSounds: 'Уведомления и звуки',
+            energySaving: 'Энергосбережение', questions: 'Вопросы', ability: 'Возможности', writeUsernameForSearch: 'Введите юзернейм для поиска',
+            complain: '📮 Пожаловаться', reasonComplain: 'Причина жалобы', spam: '📢 Спам', insults: '⚠️ Оскорбления', violence: '🔫 Угрозы насилием',
+            fraud: '💰 Мошенничество', fakeAcc: '🎭 Фейковый аккаунт', other: '📝 Другое', description: 'Описание', scanQr: 'Отсканируйте QR-код<br>чтобы начать чат',
+            addFolder: '📂 Добавить в папку', chooseTime: 'Выберите время', reason1: 'Причина (необязательно)', oneHour: '1 час', sixHours: '6 часов', oneDay: '1 день', oneWeek: '1 неделя',
+            oneMonth: '1 месяц', forever: '🚫 Навсегда', youMuting: '🔇 Вы замучены', accMuting: 'Аккаунт замучен', reason2: 'Причина:', understand: 'Понятно', complain2: 'Пожаловаться',
+            addFolder2: 'Добавить в папку', notify: '🔔 Уведомления', files: 'Файлы', links: 'Ссылки'
         },
         en: {
             settings: 'Settings', account: 'Account', privacy: 'Privacy',
