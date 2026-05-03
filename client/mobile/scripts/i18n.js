@@ -16,8 +16,7 @@
             name: 'Имя', surname: 'Фамилия', bio: 'О себе', username: 'Юзернейм',
             changePassword: 'Сменить пароль', deleteAccount: 'Удалить аккаунт',
             chats: 'Чаты', contacts: 'Контакты', calls: 'Звонки', search: 'Поиск',
-            send: 'Отправить', message: 'Сообщение', reply: 'Ответить',
-            edit: 'Редактировать', delete: 'Удалить', forward: 'Переслать',
+            send: 'Отправить', message: 'Сообщение',
             online: 'онлайн', offline: 'не в сети', typing: 'печатает...',
             loading: 'Загрузка...', error: 'Ошибка',
             enabled: 'Включено', disabled: 'Выключено',
@@ -165,7 +164,7 @@
             chooseGif: 'Нажмите для выбора GIF', noGifs: 'Здесь будут ваши GIF',
             chooseSticker: 'Выберите или создайте стикерпак',
             logout2: 'Выйти из аккаунта', logoutConfirm: 'Выйти из аккаунта?',
-            noMessages: 'Нет сообщений',
+            noMessages: 'Нет сообщений'
         },
         en: {
             settings: 'Settings', account: 'Account', privacy: 'Privacy',
@@ -180,8 +179,7 @@
             name: 'First Name', surname: 'Last Name', bio: 'Bio', username: 'Username',
             changePassword: 'Change Password', deleteAccount: 'Delete Account',
             chats: 'Chats', contacts: 'Contacts', calls: 'Calls', search: 'Search',
-            send: 'Send', message: 'Message', reply: 'Reply',
-            edit: 'Edit', delete: 'Delete', forward: 'Forward',
+            send: 'Send', message: 'Message',
             online: 'online', offline: 'offline', typing: 'typing...',
             loading: 'Loading...', error: 'Error',
             enabled: 'Enabled', disabled: 'Disabled',

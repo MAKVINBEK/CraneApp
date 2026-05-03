@@ -26,7 +26,7 @@
             <div class="side-menu-avatar" id="sideMenuAvatar">
                 <span>👤</span>
             </div>
-            <div class="side-menu-name" id="sideMenuName">Загрузка...</div>
+            <div class="side-menu-name" id="sideMenuName" data-i18n="loading">Загрузка...</div>
             <div class="side-menu-username" id="sideMenuUsername">@username</div>
         </div>
         <div class="side-menu-items">
@@ -37,7 +37,7 @@
                     <span class="sm-ico ico-folder">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
                     </span>
-                    <span class="sm-label">Папки с чатами</span>
+                    <span class="sm-label" data-i18n="foldersTitle">Папки с чатами</span>
                     <span class="sm-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
                 </a>
             </div>
@@ -224,7 +224,7 @@
                 <button class="modal-close" onclick="closeSearchModal()">×</button>
             </div>
             <div class="modal-search">
-                <input type="text" class="modal-search-input" placeholder="@username" id="modalSearchInput" autocomplete="off">
+                <label for="modalSearchInput"></label><input type="text" class="modal-search-input" placeholder="@username" id="modalSearchInput" autocomplete="off">
             </div>
             <div class="modal-status" id="modalStatus"></div>
             <div class="modal-results" id="modalResults">
@@ -5508,8 +5508,7 @@
                 return;
             }
             document.getElementById('messageContextMenu').classList.remove('active');
-            const text = currentMessageElement.querySelector('.message-text').textContent;
-            document.getElementById('editMessageText').value = text;
+            document.getElementById('editMessageText').value = currentMessageElement.querySelector('.message-text').textContent;
             document.getElementById('editMessageModal').classList.add('active');
             setTimeout(function() {
                 document.getElementById('editMessageText').focus();
