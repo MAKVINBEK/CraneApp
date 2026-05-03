@@ -356,8 +356,8 @@
             <button class="control" id="ctrlScreen" data-tip="Демонстрация экрана">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
             </button>
-            <button class="control" id="ctrlInvite" data-tip="Скопировать ссылку">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            <button class="control" id="ctrlAddPeer" data-tip="Добавить участника">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
             </button>
             <button class="control hangup" id="ctrlHangup" data-tip="Завершить">
                 <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08c-.18-.17-.29-.42-.29-.7s.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71s-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.1-.7-.28-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg>
@@ -553,11 +553,13 @@
         } catch(_) {}
     }
 
-    // ---------- Ссылка-приглашение ----------
-    document.getElementById('ctrlInvite').onclick = () => {
-        const url = location.origin + '/client/mobile/screens/calls/call.html?room=' + encodeURIComponent(ROOM_ID) + (ROOM_TITLE?'&title='+encodeURIComponent(ROOM_TITLE):'') + '&type=' + ROOM_TYPE;
-        if (navigator.clipboard) navigator.clipboard.writeText(url).then(()=>showToast('Ссылка скопирована'),()=>showToast(url));
-        else showToast(url);
+    // ---------- Добавить участника ----------
+    document.getElementById('ctrlAddPeer').onclick = () => {
+        if (IS_EMBEDDED) {
+            window.parent.postMessage({ type: 'crane_add_peer' }, '*');
+        } else {
+            showToast('Откройте чат и нажмите кнопку звонка');
+        }
     };
 
     // ---------- Hangup ----------
@@ -794,6 +796,10 @@
             tileEl: tile
         });
         refreshTilesCount();
+        // Если был режим 1-на-1 (pip), при появлении 3-го участника переходим в сетку
+        if (IS_P2P && peers.size >= 2) {
+            document.body.classList.remove('pip-mode');
+        }
     }
 
     function removePeer(pid){

@@ -4950,6 +4950,7 @@ wss.on('connection', async (ws, req) => {
                         type: 'call_incoming',
                         roomId: msg.roomId,
                         kind: msg.kind || 'video',
+                        callType: msg.callType || 'p2p',
                         from: ws.userId,
                         fromName: msg.fromName || null,
                         fromAvatar: msg.fromAvatar || null,

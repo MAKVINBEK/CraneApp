@@ -1496,6 +1496,10 @@
             if (!e.data || typeof e.data !== 'object') return;
             if (e.data.type === 'crane_call_ended') _endCall(false);
             if (e.data.type === 'crane_call_minimize') _hideCallPanel();
+            if (e.data.type === 'crane_add_peer') {
+                _hideCallPanel();
+                try { showToast && showToast('info', 'Выберите чат и нажмите кнопку звонка'); } catch(_) {}
+            }
         });
 
         async function _createCallRoom(type, chatId, title) {
@@ -1517,6 +1521,34 @@
 
         async function _startCallFromChat(kind) {
             if (!activeChat) { try { showToast && showToast('info','Выберите чат'); } catch(_){} return; }
+
+            // Если уже идёт звонок — приглашаем собеседника присоединиться к нему
+            if (_activeCallRoomId) {
+                if (activeChat.type === 'group') {
+                    try { showToast && showToast('info', 'Групповое добавление из меню чата пока не поддерживается'); } catch(_){}
+                    return;
+                }
+                const peerId = chatUsers[activeChat.id]?.id;
+                if (!peerId || peerId === user.id) {
+                    try { showToast && showToast('info', 'Не удалось найти собеседника'); } catch(_){}
+                    return;
+                }
+                try {
+                    const ws = window.craneWs || window.ws;
+                    if (ws && ws.readyState === 1) {
+                        ws.send(JSON.stringify({
+                            type: 'call_invite', to: peerId, roomId: _activeCallRoomId,
+                            callType: 'group', kind,
+                            fromName: user.firstName || user.username, fromAvatar: user.avatarUrl || null,
+                            title: _activeCallTitle
+                        }));
+                        try { showToast && showToast('success', 'Приглашение отправлено'); } catch(_){}
+                    }
+                } catch(_) {}
+                _showCallPanel();
+                return;
+            }
+
             const _callBtn = document.getElementById(kind === 'audio' ? 'audioCallBtn' : 'videoCallBtn');
             const isGroup = activeChat.type === 'group';
             const kindLabel = kind === 'audio' ? 'Аудиозвонок' : 'Видеозвонок';
@@ -1668,7 +1700,7 @@
             try { _stopRingtone(); } catch(_){}
             _hideIncomingCallBanner();
             const kind = (c.kind === 'audio') ? 'audio' : 'video';
-            const callType = 'p2p';
+            const callType = c.callType || 'p2p';
             _openCallWindow(c.roomId, callType, c.title || c.fromName || (kind === 'audio' ? 'Аудиозвонок' : 'Видеозвонок'), kind);
             _incomingCall = null;
         }
