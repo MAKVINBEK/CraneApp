@@ -79,12 +79,18 @@
     let inCall = false;
     let wsReconnectTimer = null;
     let ringbackCtx = null;
+    let ringbackGain = null;
+    const CALL_VOLUME_STORAGE_KEY = 'craneapp_call_volume';
+    let callVolume = readInitialCallVolume();
 
     function startRingback(){
         if (ringbackCtx) return;
         try {
             ringbackCtx = new (window.AudioContext || window.webkitAudioContext)();
             const ctx = ringbackCtx;
+            ringbackGain = ctx.createGain();
+            ringbackGain.gain.value = callVolume / 100;
+            ringbackGain.connect(ctx.destination);
             const RING = 1.5, GAP = 3.0, CYCLES = 25;
             for (let i = 0; i < CYCLES; i++){
                 const t = ctx.currentTime + i * (RING + GAP);
@@ -97,7 +103,7 @@
                 gain.gain.linearRampToValueAtTime(0.07, t + 0.04);
                 gain.gain.setValueAtTime(0.07, t + RING - 0.04);
                 gain.gain.linearRampToValueAtTime(0, t + RING);
-                o1.connect(gain); o2.connect(gain); gain.connect(ctx.destination);
+                o1.connect(gain); o2.connect(gain); gain.connect(ringbackGain);
                 o1.start(t); o2.start(t);
                 o1.stop(t + RING); o2.stop(t + RING);
             }
@@ -106,6 +112,7 @@
 
     function stopRingback(){
         if (ringbackCtx){ try { ringbackCtx.close(); } catch(_) {} ringbackCtx = null; }
+        ringbackGain = null;
     }
 
     // ---------- Лобби: предпросмотр камеры ----------
@@ -199,6 +206,69 @@
 
     // ---------- Hangup ----------
     document.getElementById('ctrlHangup').onclick = () => leaveCall(true);
+
+    // ---------- Громкость звонка ----------
+    const volumeControlEl = document.getElementById('callVolumeControl');
+    const callVolumeBtn = document.getElementById('ctrlVolume');
+    const callVolumeSlider = document.getElementById('callVolumeSlider');
+    const callVolumeValue = document.getElementById('callVolumeValue');
+    if (callVolumeBtn && callVolumeSlider && volumeControlEl) {
+        setCallVolume(callVolume, false);
+        callVolumeBtn.onclick = (e) => {
+            e.stopPropagation();
+            volumeControlEl.classList.toggle('open');
+        };
+        callVolumeSlider.oninput = () => setCallVolume(callVolumeSlider.value, true);
+        callVolumeSlider.onclick = (e) => e.stopPropagation();
+        document.addEventListener('pointerdown', (e) => {
+            if (!volumeControlEl.contains(e.target)) volumeControlEl.classList.remove('open');
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') volumeControlEl.classList.remove('open');
+        });
+    }
+
+    function readInitialCallVolume(){
+        const stored = Number(localStorage.getItem(CALL_VOLUME_STORAGE_KEY));
+        if (Number.isFinite(stored)) return clampVolume(stored);
+        try {
+            const sounds = JSON.parse(localStorage.getItem('craneapp_sound_settings') || '{}');
+            if (Number.isFinite(Number(sounds.mediaVolume))) return clampVolume(Number(sounds.mediaVolume));
+        } catch(_) {}
+        return 100;
+    }
+
+    function clampVolume(value){
+        const n = Number(value);
+        if (!Number.isFinite(n)) return 100;
+        return Math.max(0, Math.min(100, Math.round(n)));
+    }
+
+    function setCallVolume(value, persist){
+        callVolume = clampVolume(value);
+        const normalized = callVolume / 100;
+        if (callVolumeSlider) callVolumeSlider.value = String(callVolume);
+        if (callVolumeValue) callVolumeValue.textContent = callVolume + '%';
+        if (callVolumeBtn) callVolumeBtn.classList.toggle('off', callVolume === 0);
+        for (const peer of peers.values()) {
+            applyCallVolumeToMedia(peer.videoEl);
+            applyCallVolumeToMedia(peer.audioEl);
+        }
+        if (ringbackGain && ringbackCtx) {
+            try { ringbackGain.gain.setTargetAtTime(normalized, ringbackCtx.currentTime, 0.02); } catch(_) {}
+        }
+        if (persist) {
+            try { localStorage.setItem(CALL_VOLUME_STORAGE_KEY, String(callVolume)); } catch(_) {}
+        }
+    }
+
+    function applyCallVolumeToMedia(el){
+        if (!el) return;
+        try {
+            el.volume = callVolume / 100;
+            el.muted = callVolume === 0;
+        } catch(_) {}
+    }
 
     // ---------- Демонстрация экрана ----------
     document.getElementById('ctrlScreen').onclick = async () => {
@@ -319,6 +389,7 @@
             if (peer.videoEl.srcObject !== stream) {
                 peer.videoEl.srcObject = stream;
             }
+            applyCallVolumeToMedia(peer.videoEl);
             // Убираем аватар-заглушку только когда получили видеотрек
             if (e.track.kind === 'video' && peer.tileEl) {
                 const ph = peer.tileEl.querySelector('.ph');
@@ -430,6 +501,7 @@
             videoEl: tile.querySelector('video'),
             tileEl: tile
         });
+        applyCallVolumeToMedia(peers.get(pid).videoEl);
         refreshTilesCount();
         // Если был режим 1-на-1 (pip), при появлении 3-го участника переходим в сетку
         if (IS_P2P && peers.size >= 2) {
