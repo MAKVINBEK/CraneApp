@@ -1,6 +1,7 @@
 const inputs = document.querySelectorAll('.code-input');
         const verifyBtn = document.getElementById('verifyBtn');
         const resendBtn = document.getElementById('resendBtn');
+        const tr = (key, fallback, vars) => window.i18n?.t(key, vars) || fallback;
 
         inputs.forEach((input, index) => {
             input.addEventListener('input', (e) => {
@@ -28,26 +29,26 @@ const inputs = document.querySelectorAll('.code-input');
             inputs.forEach(input => code += input.value);
             
             if (code.length !== 6) {
-                alert('Введите 6-значный код');
+                alert(tr('enterSixDigitCode', 'Введите 6-значный код'));
                 return;
             }
 
             verifyBtn.disabled = true;
-            verifyBtn.textContent = 'Проверка...';
+            verifyBtn.textContent = tr('checking', 'Проверка...');
 
             try {
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 window.location.href = '../chats/chats.html';
             } catch (err) {
-                alert('Неверный код');
+                alert(tr('wrongCode', 'Неверный код'));
                 verifyBtn.disabled = false;
-                verifyBtn.textContent = 'Подтвердить';
+                verifyBtn.textContent = tr('verify', 'Подтвердить');
             }
         });
 
         resendBtn.addEventListener('click', async () => {
-            resendBtn.textContent = 'Отправка...';
+            resendBtn.textContent = tr('sending', 'Отправка...');
             await new Promise(resolve => setTimeout(resolve, 1000));
-            resendBtn.textContent = 'Код отправлен';
-            setTimeout(() => resendBtn.textContent = 'Отправить код повторно', 3000);
+            resendBtn.textContent = tr('codeSent', 'Код отправлен');
+            setTimeout(() => resendBtn.textContent = tr('resendCode', 'Отправить код повторно'), 3000);
         });

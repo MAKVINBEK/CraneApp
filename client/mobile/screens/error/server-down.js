@@ -1,6 +1,7 @@
 let attempts = 0;
   let countdownTimer = null;
   let autoRetryIn = 15;
+  const tr = (key, fallback, vars) => window.i18n?.t(key, vars) || fallback;
 
   function updateTime() {
     document.getElementById('lastCheck').textContent =
@@ -10,7 +11,7 @@ let attempts = 0;
   async function retry() {
     const btn = document.getElementById('retryBtn');
     btn.classList.add('loading');
-    btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 0.8s linear infinite"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Проверяем...';
+    btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 0.8s linear infinite"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> ' + tr('checkingServer', 'Проверяем...');
 
     attempts++;
     document.getElementById('attempts').textContent = attempts;
@@ -20,8 +21,8 @@ let attempts = 0;
     try {
       const res = await fetch('/api/v1/health', { cache: 'no-store', signal: AbortSignal.timeout(5000) });
       if (res.ok) {
-        document.getElementById('statusText').textContent = '✅ Онлайн';
-        btn.innerHTML = '✅ Сервер работает! Перезагрузка...';
+        document.getElementById('statusText').textContent = tr('serverOnline', '✅ Онлайн');
+        btn.innerHTML = tr('serverWorksReload', '✅ Сервер работает! Перезагрузка...');
         setTimeout(() => {
           const prev = sessionStorage.getItem('crane_pre_error_url');
           window.location.href = prev || '/client/mobile/screens/chats/chats.html';
@@ -30,9 +31,9 @@ let attempts = 0;
       }
     } catch (_) {}
 
-    document.getElementById('statusText').textContent = '❌ Недоступен';
+    document.getElementById('statusText').textContent = tr('serverOffline', '❌ Недоступен');
     btn.classList.remove('loading');
-    btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Попробовать снова';
+    btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> ' + tr('retryAgain', 'Попробовать снова');
     startCountdown(15);
   }
 
@@ -42,7 +43,7 @@ let attempts = 0;
     clearCountdown();
     countdownTimer = setInterval(() => {
       autoRetryIn--;
-      el.innerHTML = 'Автоматическая проверка через <b>' + autoRetryIn + '</b> сек';
+      el.innerHTML = tr('autoCheckIn', 'Автоматическая проверка через <b>{seconds}</b> сек', { seconds: autoRetryIn });
       if (autoRetryIn <= 0) {
         clearCountdown();
         el.textContent = '';
@@ -68,5 +69,5 @@ let attempts = 0;
 
   // Первая проверка и автозапуск
   updateTime();
-  document.getElementById('statusText').textContent = '❌ Недоступен';
+  document.getElementById('statusText').textContent = tr('serverOffline', '❌ Недоступен');
   startCountdown(15);

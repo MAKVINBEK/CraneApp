@@ -26,23 +26,24 @@
     const TOKEN = localStorage.getItem('craneapp_auth_token');
     let userData;
     try { userData = JSON.parse(localStorage.getItem('craneapp_user_data') || '{}'); } catch(_) { userData = {}; }
-    const ME = { id: userData.id || ('guest_'+Math.random().toString(36).slice(2,7)), name: userData.firstName || userData.username || 'Гость', avatar: userData.avatarUrl || null };
+    const tr = (key, fallback, vars) => window.i18n?.t(key, vars) || fallback;
+    const ME = { id: userData.id || ('guest_'+Math.random().toString(36).slice(2,7)), name: userData.firstName || userData.username || tr('guest', 'Гость'), avatar: userData.avatarUrl || null };
 
     if (!TOKEN || !userData.id) {
         location.href = '../auth/login.html';
         return;
     }
     if (!ROOM_ID) {
-        document.getElementById('lobbyTitle').textContent = 'Комната не указана';
-        document.getElementById('lobbySub').textContent = 'Откройте звонок по приглашению';
+        document.getElementById('lobbyTitle').textContent = tr('roomMissing', 'Комната не указана');
+        document.getElementById('lobbySub').textContent = tr('openCallInvite', 'Откройте звонок по приглашению');
         document.getElementById('lobbyJoinBtn').disabled = true;
         return;
     }
 
     // Применяем режим к UI
     if (IS_AUDIO) {
-        document.getElementById('lobbyTitle').textContent = ROOM_TITLE || 'Аудиозвонок';
-        document.getElementById('lobbySub').textContent = 'Камера по умолчанию выключена — можно включить';
+        document.getElementById('lobbyTitle').textContent = ROOM_TITLE || tr('audioCall', 'Аудиозвонок');
+        document.getElementById('lobbySub').textContent = tr('cameraDefaultOff', 'Камера по умолчанию выключена — можно включить');
     }
     if (IS_P2P) {
         document.body.classList.add('pip-mode');
@@ -50,8 +51,8 @@
 
     document.getElementById('lobbyRoomCode').textContent = ROOM_ID;
         document.getElementById('callTitle').textContent = ROOM_TITLE || (IS_AUDIO
-            ? (window.i18n?.t('audioCall') || 'Аудиозвонок')
-            : (IS_P2P ? (window.i18n?.t('videoCall') || 'Видеозвонок') : (window.i18n?.t('videoMeeting') || 'Видеовстреча')));
+            ? tr('audioCall', 'Аудиозвонок')
+            : (IS_P2P ? tr('videoCall', 'Видеозвонок') : tr('videoMeeting', 'Видеовстреча')));
 
     function showToast(text, ms=2200){
         const t = document.getElementById('toast');
@@ -131,10 +132,10 @@
                 camEnabled = false;
                 applyTrackStates();
                 lobbyEmpty.style.display = 'flex';
-                lobbyEmpty.querySelector('span').textContent = 'Камера недоступна';
+                lobbyEmpty.querySelector('span').textContent = tr('cameraUnavailable', 'Камера недоступна');
             } catch(e2) {
-                showToast('Нет доступа к камере и микрофону');
-                lobbyEmpty.querySelector('span').textContent = 'Доступ запрещён';
+                showToast(tr('noCameraMicAccess', 'Нет доступа к камере и микрофону'));
+                lobbyEmpty.querySelector('span').textContent = tr('mediaAccessDenied', 'Доступ запрещён');
             }
         }
     }
@@ -192,7 +193,7 @@
         if (IS_EMBEDDED) {
             window.parent.postMessage({ type: 'crane_add_peer' }, '*');
         } else {
-            showToast('Откройте чат и нажмите кнопку звонка');
+            showToast(tr('openChatCallHint', 'Откройте чат и нажмите кнопку звонка'));
         }
     };
 
@@ -207,12 +208,12 @@
                 const screenTrack = screenStream.getVideoTracks()[0];
                 screenTrack.onended = () => stopScreenShare();
                 replaceVideoTrackForAll(screenTrack);
-                showToast('Демонстрация экрана включена');
+                showToast(tr('screenShareOn', 'Демонстрация экрана включена'));
                 document.getElementById('ctrlScreen').style.background = 'rgba(155,130,255,0.32)';
             } else {
                 stopScreenShare();
             }
-        } catch(e) { showToast('Не удалось начать показ экрана'); }
+        } catch(e) { showToast(tr('screenShareError', 'Не удалось начать показ экрана')); }
     };
     function stopScreenShare(){
         if (screenStream) { screenStream.getTracks().forEach(t=>t.stop()); screenStream = null; }
@@ -396,7 +397,7 @@
             <video autoplay playsinline muted></video>
             <div class="ph"><div class="ph-avatar">${escapeHtml((ME.name||'?')[0].toUpperCase())}</div></div>
             <div class="label">
-                <span class="name">${escapeHtml(ME.name)} (вы)</span>
+                <span class="name">${escapeHtml(ME.name)} (${tr('you', 'вы')})</span>
                 <span class="mic-state" id="selfMicState"></span>
             </div>`;
         tilesEl.appendChild(tile);
@@ -418,13 +419,13 @@
             <video autoplay playsinline></video>
             <div class="ph"><div class="ph-avatar">${info.avatarUrl?`<img src="${escapeAttr(info.avatarUrl)}" alt="">`:escapeHtml(initial)}</div></div>
             <div class="label">
-                <span class="name">${escapeHtml(info.displayName||'Участник')}</span>
+                <span class="name">${escapeHtml(info.displayName || tr('participant', 'Участник'))}</span>
                 <span class="mic-state"></span>
             </div>`;
         tilesEl.appendChild(tile);
         peers.set(pid, {
             pc:null,
-            name: info.displayName||'Участник',
+            name: info.displayName || tr('participant', 'Участник'),
             avatar: info.avatarUrl||null,
             videoEl: tile.querySelector('video'),
             tileEl: tile
@@ -446,7 +447,7 @@
         }
         peers.delete(pid);
         if (IS_P2P && peers.size === 0 && connected) {
-            showToast('Собеседник покинул звонок');
+            showToast(tr('peerLeftCall', 'Собеседник покинул звонок'));
             setTimeout(() => leaveCall(true), 1500);
             return;
         }
@@ -488,11 +489,11 @@
         addSelfTile();
         if (IS_P2P) {
             const callTimeEl = document.getElementById('callTime');
-            if (callTimeEl) callTimeEl.textContent = 'Звоним...';
+            if (callTimeEl) callTimeEl.textContent = tr('dialing', 'Звоним...');
             startRingback();
             dialingTimer = setTimeout(() => {
                 if (peers.size === 0) {
-                    if (callTimeEl) callTimeEl.textContent = 'Нет ответа';
+                    if (callTimeEl) callTimeEl.textContent = tr('noAnswer', 'Нет ответа');
                     setTimeout(() => leaveCall(true), 1500);
                 }
             }, 60000);
@@ -503,7 +504,7 @@
 
     document.getElementById('lobbyJoinBtn').onclick = async () => {
         const btn = document.getElementById('lobbyJoinBtn');
-        btn.disabled = true; btn.textContent = 'Подключение...';
+        btn.disabled = true; btn.textContent = tr('connecting', 'Подключение...');
         await joinCall();
     };
 
@@ -529,7 +530,7 @@
             document.getElementById('callView').style.display = 'none';
             document.getElementById('lobby').classList.remove('hidden');
             const btn = document.getElementById('lobbyJoinBtn');
-            btn.disabled = false; btn.textContent = 'Присоединиться';
+            btn.disabled = false; btn.textContent = tr('join', 'Присоединиться');
         }
     }
 

@@ -12,8 +12,8 @@
         <div class="logo-container">
             <img src="https://i.ibb.co/1Y4Pg7BF/94-20260317155000.png" alt="CraneApp Logo">
         </div>
-        <h1 class="title">Подтверждение</h1>
-        <p class="subtitle">Введите код из SMS</p>
+        <h1 class="title" data-i18n="phoneVerification">Подтверждение</h1>
+        <p class="subtitle" data-i18n="smsCodePrompt">Введите код из SMS</p>
         
         <div class="code-inputs" id="codeInputs">
             <input type="tel" class="code-input" maxlength="1" />
@@ -24,8 +24,8 @@
             <input type="tel" class="code-input" maxlength="1" />
         </div>
 
-        <button id="verifyBtn" class="verify-btn">Подтвердить</button>
-        <div class="resend" id="resendBtn">Отправить код повторно</div>
+        <button id="verifyBtn" class="verify-btn" data-i18n="verify">Подтвердить</button>
+        <div class="resend" id="resendBtn" data-i18n="resendCode">Отправить код повторно</div>
     </div>
 
     <script src="./phoneVerification.js"></script>

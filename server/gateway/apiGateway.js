@@ -1309,12 +1309,14 @@ app.get('/api/v1/auth/qr-confirm', async (req, res) => {
     try {
         const { token } = req.query;
         const data = qrTokens.get(token);
+        const lang = req.locale || i18n.languageFromHeaders(req);
+        const tt = (key, vars) => i18n.t(lang, key, vars);
 
         if (!data || data.expiresAt < Date.now()) {
             return res.status(400).send(`
                 <html><body style="font-family:sans-serif;text-align:center;padding:40px;background:#000;color:#fff;">
-                    <h2 style="color:#FF4B4B;">QR-код истёк</h2>
-                    <p>Сгенерируйте новый код в приложении CraneApp</p>
+                    <h2 style="color:#FF4B4B;">${tt('qrExpiredTitle')}</h2>
+                    <p>${tt('qrExpiredDesc')}</p>
                 </body></html>
             `);
         }
@@ -1326,7 +1328,7 @@ app.get('/api/v1/auth/qr-confirm', async (req, res) => {
         );
 
         if (userResult.rows.length === 0) {
-            return res.status(404).send('User not found');
+            return res.status(404).send(tt('userNotFound'));
         }
 
         const user = userResult.rows[0];
@@ -1345,11 +1347,11 @@ app.get('/api/v1/auth/qr-confirm', async (req, res) => {
         // Отдаём страницу подтверждения с авто-логином
         res.send(`
             <!DOCTYPE html>
-            <html lang="ru">
+            <html lang="${lang}">
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Вход в CraneApp</title>
+                <title>${tt('qrLoginTitle')}</title>
                 <style>
                     body { font-family: system-ui, sans-serif; background: #000; color: #fff; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
                     .card { background: #121212; border-radius: 16px; padding: 32px; text-align: center; max-width: 320px; width: 90%; }
@@ -1365,9 +1367,9 @@ app.get('/api/v1/auth/qr-confirm', async (req, res) => {
                 <div class="card">
                     <div class="avatar">${(user.first_name || user.username || '?')[0].toUpperCase()}</div>
                     <h2>${user.first_name || user.username}</h2>
-                    <p>@${user.username}<br>Войти в CraneApp на этом устройстве?</p>
-                    <button class="btn" onclick="doLogin()">Войти</button>
-                    <div class="success" id="successMsg">✓ Выполняется вход...</div>
+                    <p>@${user.username}<br>${tt('qrLoginPrompt')}</p>
+                    <button class="btn" onclick="doLogin()">${tt('qrLoginButton')}</button>
+                    <div class="success" id="successMsg">${tt('qrLoginSuccess')}</div>
                 </div>
                 <script>
                     function doLogin() {
@@ -2023,16 +2025,16 @@ app.post('/api/v1/auth/change-password', authMiddleware, async (req, res) => {
     try {
         const { currentPassword, newPassword } = req.body;
         if (!currentPassword || !newPassword) {
-            return res.status(400).json({ error: 'Both passwords required' });
+            return res.status(400).json({ error: req.t('bothPasswordsRequired') });
         }
         if (newPassword.length < 6) {
-            return res.status(400).json({ error: 'Password too short' });
+            return res.status(400).json({ error: req.t('passwordMin') });
         }
         const result = await query('SELECT password_hash FROM users WHERE id = $1', [req.user.id]);
         if (!result.rows[0]) return res.status(404).json({ error: req.t('userNotFound') });
 
         const valid = await bcrypt.compare(currentPassword, result.rows[0].password_hash);
-        if (!valid) return res.status(401).json({ error: 'Неверный текущий пароль' });
+        if (!valid) return res.status(401).json({ error: req.t('currentPasswordInvalid') });
 
         const newHash = await bcrypt.hash(newPassword, 10);
         await query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, req.user.id]);
@@ -2059,7 +2061,7 @@ app.post('/api/v1/auth/2fa/enable', authMiddleware, async (req, res) => {
     try {
         const { password } = req.body;
         if (!password || password.length < 6) {
-            return res.status(400).json({ error: 'Минимум 6 символов' });
+            return res.status(400).json({ error: req.t('passwordMin') });
         }
         const hash = await bcrypt.hash(password, 10);
         await query('UPDATE users SET two_fa_hash = $1, two_fa_enabled = TRUE WHERE id = $2', [hash, req.user.id]);
@@ -2074,9 +2076,9 @@ app.post('/api/v1/auth/2fa/disable', authMiddleware, async (req, res) => {
         const { password } = req.body;
         const result = await query('SELECT two_fa_hash FROM users WHERE id = $1', [req.user.id]);
         const hash = result.rows[0]?.two_fa_hash;
-        if (!hash) return res.status(400).json({ error: '2FA не установлена' });
+        if (!hash) return res.status(400).json({ error: req.t('twoFANotSet') });
         const match = await bcrypt.compare(password, hash);
-        if (!match) return res.status(401).json({ error: 'Неверный пароль' });
+        if (!match) return res.status(401).json({ error: req.t('invalidPassword') });
         await query('UPDATE users SET two_fa_hash = NULL, two_fa_enabled = FALSE WHERE id = $1', [req.user.id]);
         res.json({ success: true });
     } catch (e) {
@@ -2436,13 +2438,13 @@ app.post('/api/v1/users/devices/register', authMiddleware, async (req, res) => {
         const ip = clientIP || serverIP;
 
         // Геолокация по IP
-        let location = 'Неизвестно';
+        let location = req.t('unknown');
         try {
             const isLocal = !ip || ip === '::1' || ip === '127.0.0.1' || ip.startsWith('192.168.') || ip.startsWith('10.');
             if (!isLocal) {
                 const http = require('http');
                 const geoData = await new Promise((resolve, reject) => {
-                    http.get(`http://ip-api.com/json/${ip}?fields=city,country&lang=ru`, (r) => {
+                    http.get(`http://ip-api.com/json/${ip}?fields=city,country&lang=${encodeURIComponent(req.locale || 'ru')}`, (r) => {
                         let data = '';
                         r.on('data', chunk => data += chunk);
                         r.on('end', () => { try { resolve(JSON.parse(data)); } catch(e) { resolve({}); } });
@@ -2451,7 +2453,7 @@ app.post('/api/v1/users/devices/register', authMiddleware, async (req, res) => {
                 if (geoData.city) location = `${geoData.city}, ${geoData.country}`;
                 else if (geoData.country) location = geoData.country;
             } else {
-                location = 'Локальная сеть';
+                location = req.t('localNetwork');
             }
         } catch (e) {
             logger.warn('⚠️ Geo lookup failed:', e.message);
@@ -3844,7 +3846,7 @@ app.post('/api/v1/chats/create', authMiddleware, async (req, res) => {
         await client.query(
             `INSERT INTO chats (id, type, title, owner_id, created_at)
              VALUES ($1, $2, $3, $4, NOW())`,
-            [chatId, type || 'private', 'Личный чат', currentUserId]
+            [chatId, type || 'private', req.t('privateChatTitle'), currentUserId]
         );
 
         await client.query(
@@ -3865,7 +3867,7 @@ app.post('/api/v1/chats/create', authMiddleware, async (req, res) => {
             chatId,
             chatType: 'private',
             senderId: currentUserId,
-            senderName: sender.first_name || sender.username || 'Пользователь',
+            senderName: sender.first_name || sender.username || req.t('user'),
             senderAvatar: sender.avatar_url || ''
         }, currentUserId);
 
@@ -4266,7 +4268,7 @@ app.post('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
                     let botReply = null;
                     // Бот отвечает только в личных чатах (не в группах)
                     if (isPrivateBotChat) {
-                        botReply = await handleBotCommand(content || '', req.user.id, botId, chatId);
+                        botReply = await handleBotCommand(content || '', req.user.id, botId, chatId, req.locale);
                     }
 
                     if (botReply) {
@@ -4385,7 +4387,7 @@ app.post('/api/v1/messages/:messageId/pin', authMiddleware, async (req, res) => 
         const isGroup = chatType.rows[0]?.type === 'group' || chatType.rows[0]?.type === 'channel';
         const role = memberCheck.rows[0].role;
         if (isGroup && role === 'member') {
-            return res.status(403).json({ error: 'Только администраторы могут закреплять сообщения' });
+            return res.status(403).json({ error: req.t('adminsPinOnly') });
         }
 
         // Снимаем закрепление с других сообщений в этом чате
@@ -5216,15 +5218,15 @@ app.post('/api/v1/support/requests/:id/reply', authMiddleware, async (req, res) 
     if (!isDeveloper(req.user.username)) return res.status(403).json({ error: req.t('accessDenied') });
     try {
         const { message } = req.body;
-        if (!message) return res.status(400).json({ error: 'Message required' });
+        if (!message) return res.status(400).json({ error: req.t('messageRequired') });
 
         const reqResult = await query('SELECT * FROM support_requests WHERE id = $1', [req.params.id]);
-        if (!reqResult.rows.length) return res.status(404).json({ error: 'Request not found' });
-        if (reqResult.rows[0].status === 'closed') return res.status(400).json({ error: 'Запрос уже закрыт' });
+        if (!reqResult.rows.length) return res.status(404).json({ error: req.t('requestNotFound') });
+        if (reqResult.rows[0].status === 'closed') return res.status(400).json({ error: req.t('supportRequestClosed') });
 
         const supportReq = reqResult.rows[0];
         const botResult = await query("SELECT id FROM users WHERE username = 'craneapp_bot'");
-        if (!botResult.rows.length) return res.status(500).json({ error: 'Bot not found' });
+        if (!botResult.rows.length) return res.status(500).json({ error: req.t('botNotFound') });
         const botId = botResult.rows[0].id;
 
         // Находим чат пользователя с ботом
@@ -5313,10 +5315,12 @@ app.use((req, res) => {
     res.status(404).json({ error: 'Not found', path: req.path });
 });
 
-async function handleBotCommand(text, userId, botId, chatId) {
+async function handleBotCommand(text, userId, botId, chatId, locale) {
     if (!text || !text.startsWith('/')) {
         return null;
     }
+    const lang = i18n.normalizeLanguage(locale) || await i18n.languageForUser(userId, query) || 'ru';
+    const bt = (key, vars) => i18n.t(lang, key, vars);
 
     const parts = text.trim().split(/\s+/);
     const cmd = parts[0].toLowerCase();
@@ -5334,41 +5338,24 @@ async function handleBotCommand(text, userId, botId, chatId) {
 
     // ── Команды для ВСЕХ пользователей ───────────────────────────────
     if (cmd === '/start' || cmd === '/help') {
-        const devCmds = isDevUser
-            ? '\n\n🔧 Команды разработчика:\n'
-                + '/badge @user verified|admin|developer|premium|fake|scam — добавить значок\n'
-                + '/unbadge @user [значок] — убрать значок\n'
-                + '/premium @user — выдать/снять Premium\n'
-                + '/mute @user [мин] — замутить\n'
-                + '/unmute @user — размутить\n'
-                + '/ban @user — заблокировать\n'
-                + '/unban @user — разблокировать\n'
-                + '/info @user — информация\n'
-                + '/broadcast текст — рассылка\n'
-                + '/stats — статистика'
-            : '';
-        return '🤖 Привет! Я CraneApp — официальный бот.\n\n📋 Команды:\n'
-            + '/help — список команд\n'
-            + '/status — мой статус\n'
-            + '/support текст — написать в поддержку'
-            + devCmds;
+        return bt('botHelp') + (isDevUser ? bt('botDevCommands') : '');
     }
 
     if (cmd === '/status') {
         try {
             const u = await query('SELECT username, is_premium, badges FROM users WHERE id = $1', [userId]);
             const r = u.rows[0];
-            if (!r) return '❌ Пользователь не найден';
-            const badgeList = (r.badges || []).join(', ') || 'нет';
-            return `👤 @${r.username}\n💎 Premium: ${r.is_premium ? 'Да ✓' : 'Нет'}\n🏷 Значки: ${badgeList}`;
+            if (!r) return '❌ ' + bt('userNotFound');
+            const badgeList = (r.badges || []).join(', ') || bt('none');
+            return `👤 @${r.username}\n💎 Premium: ${r.is_premium ? bt('premiumYes') + ' ✓' : bt('premiumNo')}\n🏷 ${bt('botBadges')}: ${badgeList}`;
         } catch (e) {
-            return '❌ Ошибка: ' + e.message;
+            return '❌ ' + bt('botError', { message: e.message });
         }
     }
 
     if (cmd === '/support') {
         const msg = args.join(' ').trim();
-        if (!msg) return '❌ Укажите сообщение: /support ваш вопрос';
+        if (!msg) return '❌ ' + bt('botSupportUsage');
         try {
             // Проверяем cooldown 30 минут
             const lastReq = await query(
@@ -5380,7 +5367,7 @@ async function handleBotCommand(text, userId, botId, chatId) {
                 const remaining = 30 * 60 * 1000 - diff;
                 if (remaining > 0) {
                     const mins = Math.ceil(remaining / 60000);
-                    return `⏳ Вы уже отправляли запрос. Следующий можно отправить через ${mins} мин.`;
+                    return '⏳ ' + bt('botSupportCooldown', { minutes: mins });
                 }
             }
             await query(
@@ -5397,16 +5384,17 @@ async function handleBotCommand(text, userId, botId, chatId) {
                     );
                     if (botChat.rows.length) {
                         const notifId = uuidv4();
-                        const notifText = `📨 Новый запрос в поддержку от @${username}:\n"${msg}"`;
+                        const devLang = await i18n.languageForUser(dev.id, query) || lang;
+                        const notifText = i18n.t(devLang, 'botSupportNotification', { username, message: msg });
                         await query(`INSERT INTO messages (id, chat_id, sender_id, content, type, created_at) VALUES ($1,$2,$3,$4,'text',NOW())`,
                             [notifId, botChat.rows[0].id, botId, notifText]);
                         broadcastToChat(botChat.rows[0].id, { type: 'new_message', chatId: botChat.rows[0].id, message: { id: notifId, senderId: botId, content: notifText, type: 'text', createdAt: new Date() } }, null);
                     }
                 } catch (_) {}
             }
-            return '✅ Ваш запрос отправлен в поддержку. Мы ответим в ближайшее время.';
+            return '✅ ' + bt('botSupportSent');
         } catch (e) {
-            return '❌ Ошибка: ' + e.message;
+            return '❌ ' + bt('botError', { message: e.message });
         }
     }
 
@@ -5416,11 +5404,11 @@ async function handleBotCommand(text, userId, botId, chatId) {
     if (cmd === '/badge') {
         const target = (args[0] || '').replace('@', '');
         const badge = args[1] || '';
-        if (!target) return '❌ Укажите @username';
+        if (!target) return '❌ ' + bt('botSpecifyUsername');
         const validBadges = ['verified', 'admin', 'developer', 'premium', 'fake', 'scam'];
-        if (!validBadges.includes(badge)) return '❌ Доступные значки: ' + validBadges.join(', ');
+        if (!validBadges.includes(badge)) return '❌ ' + bt('botAvailableBadges', { badges: validBadges.join(', ') });
         const t = await query('SELECT id, username, badges FROM users WHERE username = $1', [target]);
-        if (!t.rows.length) return '❌ Пользователь @' + target + ' не найден';
+        if (!t.rows.length) return '❌ ' + bt('botUserNotFoundAt', { username: target });
         const uid = t.rows[0].id;
         if (badge === 'fake') {
             await query('UPDATE users SET is_fake = TRUE, is_scam = FALSE WHERE id = $1', [uid]);
@@ -5429,96 +5417,96 @@ async function handleBotCommand(text, userId, botId, chatId) {
         } else {
             await query(`UPDATE users SET badges = array_append(COALESCE(badges,'{}'), $1) WHERE id = $2 AND NOT ($1 = ANY(COALESCE(badges,'{}')))`, [badge, uid]);
         }
-        return '✅ @' + target + ' — значок «' + badge + '» добавлен';
+        return '✅ ' + bt('botBadgeAdded', { username: target, badge });
     }
 
     if (cmd === '/unbadge') {
         const target = (args[0] || '').replace('@', '');
         const badge = args[1] || '';
-        if (!target) return '❌ Укажите @username';
+        if (!target) return '❌ ' + bt('botSpecifyUsername');
         const t = await query('SELECT id, username FROM users WHERE username = $1', [target]);
-        if (!t.rows.length) return '❌ Пользователь @' + target + ' не найден';
+        if (!t.rows.length) return '❌ ' + bt('botUserNotFoundAt', { username: target });
         if (badge) {
             await query(`UPDATE users SET badges = array_remove(COALESCE(badges,'{}'), $1) WHERE id = $2`, [badge, t.rows[0].id]);
-            return '✅ @' + target + ' — значок «' + badge + '» снят';
+            return '✅ ' + bt('botBadgeRemoved', { username: target, badge });
         } else {
             await query(`UPDATE users SET badges = '{}', is_fake = FALSE, is_scam = FALSE WHERE id = $1`, [t.rows[0].id]);
-            return '✅ @' + target + ' — все значки сняты';
+            return '✅ ' + bt('botBadgesCleared', { username: target });
         }
     }
 
     if (cmd === '/premium') {
         const target = (args[0] || '').replace('@', '');
-        if (!target) return '❌ Укажите @username';
+        if (!target) return '❌ ' + bt('botSpecifyUsername');
         const t = await query('SELECT id, username, is_premium FROM users WHERE username = $1', [target]);
-        if (!t.rows.length) return '❌ Пользователь @' + target + ' не найден';
+        if (!t.rows.length) return '❌ ' + bt('botUserNotFoundAt', { username: target });
         const newVal = !t.rows[0].is_premium;
         await query('UPDATE users SET is_premium = $1 WHERE id = $2', [newVal, t.rows[0].id]);
-        return '✅ @' + target + ' — Premium ' + (newVal ? 'выдан 💎' : 'снят');
+        return '✅ ' + bt(newVal ? 'botPremiumGranted' : 'botPremiumRemoved', { username: target });
     }
 
     if (cmd === '/mute') {
         const target = (args[0] || '').replace('@', '');
         const minutes = parseInt(args[1]) || 60;
-        if (!target) return '❌ Укажите @username';
+        if (!target) return '❌ ' + bt('botSpecifyUsername');
         const t = await query('SELECT id, username FROM users WHERE username = $1', [target]);
-        if (!t.rows.length) return '❌ Пользователь @' + target + ' не найден';
+        if (!t.rows.length) return '❌ ' + bt('botUserNotFoundAt', { username: target });
         const until = new Date(Date.now() + minutes * 60000);
         await query('UPDATE users SET is_muted = TRUE, muted_until = $1 WHERE id = $2', [until, t.rows[0].id]);
-        return '🔇 @' + target + ' замучен на ' + minutes + ' мин. (до ' + until.toLocaleTimeString('ru') + ')';
+        return '🔇 ' + bt('botMuted', { username: target, minutes, time: until.toLocaleTimeString(lang) });
     }
 
     if (cmd === '/unmute') {
         const target = (args[0] || '').replace('@', '');
-        if (!target) return '❌ Укажите @username';
+        if (!target) return '❌ ' + bt('botSpecifyUsername');
         const t = await query('SELECT id, username FROM users WHERE username = $1', [target]);
-        if (!t.rows.length) return '❌ Пользователь @' + target + ' не найден';
+        if (!t.rows.length) return '❌ ' + bt('botUserNotFoundAt', { username: target });
         await query('UPDATE users SET is_muted = FALSE, muted_until = NULL WHERE id = $1', [t.rows[0].id]);
-        return '🔊 @' + target + ' размучен';
+        return '🔊 ' + bt('botUnmuted', { username: target });
     }
 
     if (cmd === '/ban') {
         const target = (args[0] || '').replace('@', '');
-        if (!target) return '❌ Укажите @username';
+        if (!target) return '❌ ' + bt('botSpecifyUsername');
         const t = await query('SELECT id, username FROM users WHERE username = $1', [target]);
-        if (!t.rows.length) return '❌ Пользователь @' + target + ' не найден';
+        if (!t.rows.length) return '❌ ' + bt('botUserNotFoundAt', { username: target });
         await query('UPDATE users SET is_banned = TRUE WHERE id = $1', [t.rows[0].id]);
         // Отзываем все сессии
         security.revokeAllUserSessions(t.rows[0].id);
-        return '🚫 @' + target + ' заблокирован';
+        return '🚫 ' + bt('botBanned', { username: target });
     }
 
     if (cmd === '/unban') {
         const target = (args[0] || '').replace('@', '');
-        if (!target) return '❌ Укажите @username';
+        if (!target) return '❌ ' + bt('botSpecifyUsername');
         const t = await query('SELECT id, username FROM users WHERE username = $1', [target]);
-        if (!t.rows.length) return '❌ Пользователь @' + target + ' не найден';
+        if (!t.rows.length) return '❌ ' + bt('botUserNotFoundAt', { username: target });
         await query('UPDATE users SET is_banned = FALSE WHERE id = $1', [t.rows[0].id]);
-        return '✅ @' + target + ' разблокирован';
+        return '✅ ' + bt('botUnbanned', { username: target });
     }
 
     if (cmd === '/info') {
         const target = (args[0] || '').replace('@', '');
-        if (!target) return '❌ Укажите @username';
+        if (!target) return '❌ ' + bt('botSpecifyUsername');
         const t = await query(
             'SELECT username, first_name, last_name, is_premium, badge, is_fake, is_scam, is_muted, is_banned, created_at, last_seen FROM users WHERE username = $1',
             [target]
         );
-        if (!t.rows.length) return '❌ Пользователь @' + target + ' не найден';
+        if (!t.rows.length) return '❌ ' + bt('botUserNotFoundAt', { username: target });
         const r = t.rows[0];
         return `👤 @${r.username} (${r.first_name || ''} ${r.last_name || ''})\n`
-            + `💎 Premium: ${r.is_premium ? 'Да' : 'Нет'}\n`
-            + `🏷 Значок: ${r.badge || 'нет'}\n`
-            + `⚠️ Fake: ${r.is_fake ? 'Да' : 'Нет'} | Scam: ${r.is_scam ? 'Да' : 'Нет'}\n`
-            + `🔇 Мут: ${r.is_muted ? 'Да' : 'Нет'}\n`
-            + `🚫 Бан: ${r.is_banned ? 'Да' : 'Нет'}\n`
-            + `📅 Регистрация: ${new Date(r.created_at).toLocaleDateString('ru')}\n`
-            + `🕐 Последний визит: ${r.last_seen ? new Date(r.last_seen).toLocaleString('ru') : 'неизвестно'}`;
+            + `💎 Premium: ${r.is_premium ? bt('premiumYes') : bt('premiumNo')}\n`
+            + `🏷 ${bt('botBadge')}: ${r.badge || bt('none')}\n`
+            + `⚠️ ${bt('botFake')}: ${r.is_fake ? bt('premiumYes') : bt('premiumNo')} | Scam: ${r.is_scam ? bt('premiumYes') : bt('premiumNo')}\n`
+            + `🔇 ${bt('botMute')}: ${r.is_muted ? bt('premiumYes') : bt('premiumNo')}\n`
+            + `🚫 ${bt('botBan')}: ${r.is_banned ? bt('premiumYes') : bt('premiumNo')}\n`
+            + `📅 ${bt('botRegistration')}: ${new Date(r.created_at).toLocaleDateString(lang)}\n`
+            + `🕐 ${bt('botLastSeen')}: ${r.last_seen ? new Date(r.last_seen).toLocaleString(lang) : bt('lastSeenUnknown')}`;
     }
 
     if (cmd === '/broadcast') {
         const msg = args.join(' ');
-        if (!msg) return '❌ Укажите текст рассылки';
+        if (!msg) return '❌ ' + bt('botBroadcastUsage');
         const allUsers = await query('SELECT id FROM users WHERE is_bot = FALSE AND is_banned = FALSE');
         let sent = 0;
         for (const u of allUsers.rows) {
@@ -5542,7 +5530,7 @@ async function handleBotCommand(text, userId, botId, chatId) {
                 }
             } catch (_) {}
         }
-        return '✅ Рассылка отправлена ' + sent + ' пользователям';
+        return '✅ ' + bt('botBroadcastSent', { count: sent });
     }
 
     if (cmd === '/stats') {
@@ -5555,10 +5543,10 @@ async function handleBotCommand(text, userId, botId, chatId) {
                 (SELECT COUNT(*) FROM messages WHERE created_at > NOW() - INTERVAL '24 hours') as messages_today
         `);
         const r = stats.rows[0];
-        return `📊 Статистика CraneApp:\n👥 Пользователей: ${r.users}\n💎 Premium: ${r.premium}\n🚫 Забанено: ${r.banned}\n💬 Чатов: ${r.chats}\n📨 Сообщений за 24ч: ${r.messages_today}`;
+        return `📊 ${bt('botStatsTitle')}:\n👥 ${bt('botStatsUsers')}: ${r.users}\n💎 Premium: ${r.premium}\n🚫 ${bt('botStatsBanned')}: ${r.banned}\n💬 ${bt('botStatsChats')}: ${r.chats}\n📨 ${bt('botStatsMessagesToday')}: ${r.messages_today}`;
     }
 
-    return '❓ Неизвестная команда. Напишите /help';
+    return '❓ ' + bt('botUnknownCommand');
 }
 
 async function createCraneAppBotChat(userId) {
@@ -5640,10 +5628,11 @@ async function createCraneAppBotChat(userId) {
         // Проверяем нет ли уже сообщений в чате
         const existingMsgs = await query('SELECT COUNT(*) FROM messages WHERE chat_id = $1', [chatId]);
         if (parseInt(existingMsgs.rows[0].count) === 0) {
+            const lang = await i18n.languageForUser(userId, query) || 'ru';
             await query(
                 `INSERT INTO messages (id, chat_id, sender_id, content, type, created_at)
                  VALUES ($1, $2, $3, $4, 'text', NOW())`,
-                [uuidv4(), chatId, botId, '🤖 Здравствуй! Я CraneApp — официальный бот.\n\n✨ Что я умею:\n• Уведомлять о входах с новых устройств\n• Следить за безопасностью твоего аккаунта\n• Сообщать о важных обновлениях\n• Отвечать на твои вопросы 24/7\n\n🛡️ Безопасность превыше всего — если замечу что-то подозрительное, мгновенно сообщу.\n\n💡 Напиши /help в любой момент, чтобы узнать все мои команды.\n\nДобро пожаловать в CraneApp! 🚀']
+                [uuidv4(), chatId, botId, i18n.t(lang, 'botWelcome')]
             );
         }
 

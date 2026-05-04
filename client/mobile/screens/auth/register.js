@@ -4,6 +4,10 @@ if (existingToken) location.href = '/client/mobile/screens/chats/chats.html';
 let currentStep = 1;
 let avatarBase64 = null;
 
+function tr(key, fallback, vars) {
+    return window.i18n?.t(key, vars) || fallback;
+}
+
 function goTo(n) {
     const cur = document.getElementById('step' + currentStep);
     cur.classList.remove('active');
@@ -29,7 +33,7 @@ function handleAvatar(input) {
 
 function step2Next() {
     const name = document.getElementById('firstName').value.trim();
-    if (!name) { showToast('error', 'Введите имя', '⚠️'); return; }
+    if (!name) { showToast('error', tr('enterName', 'Введите имя'), '⚠️'); return; }
     goTo(3);
 }
 
@@ -70,22 +74,22 @@ async function doRegister() {
     const password2 = document.getElementById('password2').value;
     const btn = document.getElementById('registerBtn');
 
-    if (username.length < 5) { showToast('error', 'Юзернейм: минимум 5 символов', '⚠️'); return; }
-    if (!/^[a-zA-Z0-9_]+$/.test(username)) { showToast('error', 'Только буквы, цифры и _', '⚠️'); return; }
-    if (password.length < 6) { showToast('error', 'Пароль минимум 6 символов', '⚠️'); return; }
-    if (password !== password2) { showToast('error', 'Пароли не совпадают', '⚠️'); return; }
+    if (username.length < 5) { showToast('error', tr('usernameMinError', 'Юзернейм: минимум 5 символов'), '⚠️'); return; }
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) { showToast('error', tr('usernameFormatError', 'Только буквы, цифры и _'), '⚠️'); return; }
+    if (password.length < 6) { showToast('error', tr('passwordMinError', 'Пароль минимум 6 символов'), '⚠️'); return; }
+    if (password !== password2) { showToast('error', tr('passwordsMismatch', 'Пароли не совпадают'), '⚠️'); return; }
 
     btn.disabled = true;
-    btn.textContent = 'Создание аккаунта...';
+    btn.textContent = tr('creatingAccount', 'Создание аккаунта...');
 
     try {
         const res = await fetch('/api/v1/auth/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password, firstName, lastName: '' })
+            body: JSON.stringify({ username, password, firstName, lastName: '', language: window.i18n?.currentLang || localStorage.getItem('craneapp_language') || 'ru' })
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Ошибка регистрации');
+        if (!res.ok) throw new Error(data.error || tr('registerError', 'Ошибка регистрации'));
 
         localStorage.setItem('craneapp_auth_token', data.token);
         const u = data.user;
@@ -94,7 +98,7 @@ async function doRegister() {
             lastName: u.lastName || '', bio: '', avatarUrl: ''
         }));
         localStorage.setItem('craneapp_settings', JSON.stringify({
-            theme: 'dark', notifications: true, sounds: true, language: 'ru'
+            theme: 'dark', notifications: true, sounds: true, language: window.i18n?.currentLang || localStorage.getItem('craneapp_language') || 'ru'
         }));
 
         // Загружаем аватарку если выбрана
@@ -106,12 +110,12 @@ async function doRegister() {
             }).catch(() => {});
         }
 
-        showToast('success', 'Добро пожаловать!', '🎉');
+        showToast('success', tr('welcomeDone', 'Добро пожаловать!'), '🎉');
         setTimeout(() => location.href = '/client/mobile/screens/chats/chats.html', 600);
     } catch (err) {
         showToast('error', err.message, '❌');
         btn.disabled = false;
-        btn.textContent = 'Создать аккаунт';
+        btn.textContent = tr('createAccount', 'Создать аккаунт');
     }
 }
 

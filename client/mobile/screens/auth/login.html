@@ -20,26 +20,26 @@
         </div>
         
         <h1>CraneApp</h1>
-        <p class="subtitle">Войдите в аккаунт</p>
+        <p class="subtitle" data-i18n="loginSubtitle">Войдите в аккаунт</p>
         
         <form id="loginForm">
             <div class="input-group">
-                <label for="username">Юзернейм</label>
+                <label for="username" data-i18n="username">Юзернейм</label>
                 <input type="text" id="username" placeholder="@username" required autocomplete="username" autocapitalize="none" autocorrect="off">
             </div>
             <div class="input-group">
-                <label for="password">Пароль</label>
+                <label for="password" data-i18n="password">Пароль</label>
                 <div style="position:relative;display:block">
                     <input type="password" id="password" placeholder="••••••••" required autocomplete="current-password" style="padding-right:44px">
                     <button type="button" class="eye-btn" onclick="toggleLoginEye(event)">
                     <svg id="loginEye" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                 </button>
             </div>
-            <button type="submit" id="loginBtn">Войти</button>
+            <button type="submit" id="loginBtn" data-i18n="login">Войти</button>
         </form>
         
         <div class="footer">
-            Нет аккаунта? <a href="./register.html">Зарегистрироваться</a>
+            <span data-i18n="noAccount">Нет аккаунта?</span> <a href="./register.html" data-i18n="registerAction">Зарегистрироваться</a>
         </div>
     </div>
 
