@@ -3124,10 +3124,11 @@
                         }
                         allChats.unshift({
                             id: data.chatId, name: senderName, av: senderAv,
-                            lastMessage: msg.content || '',
+                            lastMessage: formatLastMessageFromMessage(msg),
                             lastMessageAt: new Date().toISOString(),
                             time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
-                            isOnline: true, isPinned: false, lastMessageType: msg.type || 'text'
+                            isOnline: true, isPinned: false, lastMessageType: msg.type || 'text',
+                            lastMessageSenderId: msg.sender_id || msg.senderId || msg.sender?.id
                         });
                         renderChatList();
                     } else {
@@ -3136,7 +3137,9 @@
                         if (existingChat) {
                             existingChat.lastMessageAt = new Date().toISOString();
                             existingChat.time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-                            existingChat.lastMessage = data.message?.content || existingChat.lastMessage;
+                            existingChat.lastMessageType = data.message?.type || existingChat.lastMessageType || 'text';
+                            existingChat.lastMessageSenderId = data.message?.sender_id || data.message?.senderId || data.message?.sender?.id;
+                            existingChat.lastMessage = formatLastMessageFromMessage(data.message, existingChat.lastMessage);
                         }
                         loadChats();
                     }
@@ -3480,6 +3483,26 @@
             }
         }
 
+        function formatCallLastMessage(c, text) {
+            let callData = {};
+            const raw = text || c.lastMessage || c.content || '';
+            if (typeof raw === 'string') {
+                try { callData = JSON.parse(raw || '{}'); } catch(_) {}
+            } else if (raw && typeof raw === 'object') {
+                callData = raw;
+            }
+
+            const senderId = c.lastMessageSenderId || c.sender_id || c.senderId || c.sender?.id;
+            const isOutgoingCall = senderId && String(senderId) === String(user.id);
+            const isVideo = callData.callKind !== 'audio';
+
+            if (callData.status === 'missed') {
+                return isOutgoingCall ? '📞 Звонок без ответа' : '📞 Пропущенный звонок';
+            }
+
+            return isVideo ? '📹 Видеозвонок' : '📞 Аудиозвонок';
+        }
+
         function formatLastMessageType(c, text) {
             if (c.lastMessageType === 'voice') return '🎤 Голосовое';
             if (c.lastMessageType === 'image' || c.lastMessageType === 'photo') return '🖼️ Фото';
@@ -3487,7 +3510,18 @@
             if (c.lastMessageType === 'gif') return '🎞️ GIF';
             if (c.lastMessageType === 'sticker') return '🎨 Стикер';
             if (c.lastMessageType === 'video_note') return '⭕ Кружок';
+            if (c.lastMessageType === 'call' || c.type === 'call') return formatCallLastMessage(c, text);
             return text || '';
+        }
+
+        function formatLastMessageFromMessage(msg, fallback) {
+            if (!msg) return fallback || '';
+            return formatLastMessageType({
+                type: msg.type || 'text',
+                lastMessageType: msg.type || 'text',
+                lastMessage: msg.content || '',
+                lastMessageSenderId: msg.sender_id || msg.senderId || msg.sender?.id
+            }, msg.content || '') || fallback || '';
         }
 
         // Возвращает объект с lastMessage и опционально _rawEncrypted/_rawIv для отложенной расшифровки
