@@ -80,8 +80,7 @@
     let wsReconnectTimer = null;
     let ringbackCtx = null;
     let ringbackGain = null;
-    const CALL_VOLUME_STORAGE_KEY = 'craneapp_call_volume';
-    let callVolume = readInitialCallVolume();
+    let callVolume = 100;
 
     function startRingback(){
         if (ringbackCtx) return;
@@ -218,7 +217,7 @@
             e.stopPropagation();
             volumeControlEl.classList.toggle('open');
         };
-        callVolumeSlider.oninput = () => setCallVolume(callVolumeSlider.value, true);
+        callVolumeSlider.oninput = () => setCallVolume(callVolumeSlider.value);
         callVolumeSlider.onclick = (e) => e.stopPropagation();
         document.addEventListener('pointerdown', (e) => {
             if (!volumeControlEl.contains(e.target)) volumeControlEl.classList.remove('open');
@@ -228,23 +227,13 @@
         });
     }
 
-    function readInitialCallVolume(){
-        const stored = Number(localStorage.getItem(CALL_VOLUME_STORAGE_KEY));
-        if (Number.isFinite(stored)) return clampVolume(stored);
-        try {
-            const sounds = JSON.parse(localStorage.getItem('craneapp_sound_settings') || '{}');
-            if (Number.isFinite(Number(sounds.mediaVolume))) return clampVolume(Number(sounds.mediaVolume));
-        } catch(_) {}
-        return 100;
-    }
-
     function clampVolume(value){
         const n = Number(value);
         if (!Number.isFinite(n)) return 100;
         return Math.max(0, Math.min(100, Math.round(n)));
     }
 
-    function setCallVolume(value, persist){
+    function setCallVolume(value){
         callVolume = clampVolume(value);
         const normalized = callVolume / 100;
         if (callVolumeSlider) callVolumeSlider.value = String(callVolume);
@@ -256,9 +245,6 @@
         }
         if (ringbackGain && ringbackCtx) {
             try { ringbackGain.gain.setTargetAtTime(normalized, ringbackCtx.currentTime, 0.02); } catch(_) {}
-        }
-        if (persist) {
-            try { localStorage.setItem(CALL_VOLUME_STORAGE_KEY, String(callVolume)); } catch(_) {}
         }
     }
 

@@ -220,8 +220,8 @@
     .control:active{transform:scale(0.92);}
     .control svg{width:22px;height:22px;}
     .control.off{background:rgba(255,75,98,0.18);border-color:rgba(255,75,98,0.4);color:#ffb6c1;}
-    #ctrlMic.off,#ctrlCam.off{background:var(--bg-elev);border-color:var(--stroke-strong);color:#fff;}
-    #ctrlMic.off::before,#ctrlCam.off::before{
+    #ctrlMic.off,#ctrlCam.off,#ctrlVolume.off{background:var(--bg-elev);border-color:var(--stroke-strong);color:#fff;}
+    #ctrlMic.off::before,#ctrlCam.off::before,#ctrlVolume.off::before{
         content:"";
         position:absolute;
         width:32px;height:2px;border-radius:999px;
