@@ -303,6 +303,28 @@
 
         let _activeCallRoomId = null;
         let _activeCallTitle = '';
+        let _activeCallTitleKey = '';
+
+        function _getActiveCallTitle() {
+            if (_activeCallTitleKey === 'audioCall') return tr('audioCall', 'Аудиозвонок');
+            if (_activeCallTitleKey === 'videoCall') return tr('videoCall', 'Видеозвонок');
+            return _activeCallTitle || tr('activeCallTitle', 'Звонок активен');
+        }
+
+        function _renderActiveCallBar() {
+            const bar = document.getElementById('activeCallBar');
+            if (!bar) return;
+
+            const titleEl = document.getElementById('activeCallBarTitle');
+            const statusEl = bar.querySelector('.active-call-status');
+            const returnBtn = bar.querySelector('.active-call-return');
+            const endBtn = bar.querySelector('.active-call-end');
+
+            if (titleEl) titleEl.textContent = _getActiveCallTitle();
+            if (statusEl) statusEl.textContent = tr('callInProgress', 'Идёт звонок');
+            if (returnBtn) returnBtn.textContent = tr('returnToCall', 'Вернуться');
+            if (endBtn) endBtn.title = tr('endCall', 'Завершить звонок');
+        }
 
         function _openCallWindow(roomId, type, title, kind) {
             const url = '../calls/call.html?room=' + encodeURIComponent(roomId)
@@ -311,7 +333,8 @@
                 + (title ? '&title=' + encodeURIComponent(title) : '')
                 + '&embedded=1';
             _activeCallRoomId = roomId;
-            _activeCallTitle = title || (kind === 'audio' ? tr('audioCall', 'Аудиозвонок') : tr('videoCall', 'Видеозвонок'));
+            _activeCallTitleKey = title ? '' : (kind === 'audio' ? 'audioCall' : 'videoCall');
+            _activeCallTitle = title || '';
             document.getElementById('callFrame').src = url;
             _showCallPanel();
         }
@@ -335,7 +358,7 @@
             _panel.classList.add('minimized');
             if (_activeCallRoomId) {
                 const bar = document.getElementById('activeCallBar');
-                document.getElementById('activeCallBarTitle').textContent = _activeCallTitle;
+                _renderActiveCallBar();
                 bar.style.display = 'flex';
             }
             // Восстанавливаем предыдущий вид
@@ -354,6 +377,8 @@
                 try { document.getElementById('callFrame').contentWindow.postMessage({ type: 'crane_hangup' }, '*'); } catch(_) {}
             }
             _activeCallRoomId = null;
+            _activeCallTitle = '';
+            _activeCallTitleKey = '';
             const _panel = document.getElementById('callPanel');
             _panel.classList.remove('minimized');
             _panel.style.display = 'none';
@@ -1483,7 +1508,7 @@
             a.href = msg.mediaUrl;
             a.download = 'photo_' + Date.now();
             a.click();
-            showToast('success', 'Загрузка началась', '📥');
+            showToast('success', tr('downloadStarted', 'Загрузка началась'), '📥');
         }
 
         async function copyMessagePhoto() {
@@ -1495,11 +1520,11 @@
                 const res = await fetch(msg.mediaUrl);
                 const blob = await res.blob();
                 await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-                showToast('success', 'Фото скопировано', '📋');
+                showToast('success', tr('photoCopied', 'Фото скопировано'), '📋');
             } catch (_) {
                 // Fallback — копируем URL
                 navigator.clipboard.writeText(msg.mediaUrl).catch(() => {});
-                showToast('success', 'Ссылка скопирована', '📋');
+                showToast('success', tr('linkCopied', 'Ссылка скопирована'), '📋');
             }
         }
 
@@ -1507,10 +1532,10 @@
             if (!currentPreviewMediaUrl) return;
             
             if (currentPreviewMediaUrl.startsWith('data:')) {
-                showToast('success', 'Медиа сохранено в буфер', '📋');
+                showToast('success', tr('mediaCopiedBuffer', 'Медиа сохранено в буфер'), '📋');
             } else {
                 navigator.clipboard.writeText(currentPreviewMediaUrl);
-                showToast('success', 'Ссылка скопирована', '📋');
+                showToast('success', tr('linkCopied', 'Ссылка скопирована'), '📋');
             }
         }
 
@@ -1548,13 +1573,14 @@
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(
                     (pos) => {
-                        const locationText = `📍 Моя геопозиция: https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}`;
+                        const locationUrl = `https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}`;
+                        const locationText = tr('myLocationMessage', '📍 Моя геопозиция: {url}', { url: locationUrl });
                         sendMessage(locationText);
                     },
-                    (err) => showToast('error', 'Не удалось получить геопозицию', '❌')
+                    (err) => showToast('error', tr('geolocationError', 'Не удалось получить геопозицию'), '❌')
                 );
             } else {
-                showToast('error', 'Геолокация не поддерживается', '❌');
+                showToast('error', tr('geolocationUnsupported', 'Геолокация не поддерживается'), '❌');
             }
         }
 
@@ -2333,7 +2359,7 @@
                 });
                 loadGifs(document.getElementById('gifSearch') ? document.getElementById('gifSearch').value : '');
             } catch (error) {
-                showToast('error', 'Ошибка', '❌');
+                showToast('error', tr('error', 'Ошибка'), '❌');
             }
         }
 
@@ -2373,13 +2399,19 @@
             const addBtn = document.getElementById('emojiAddStickerBtn');
             if (!grid) return;
             if (emojiCurrentPackIdx === null || !stickerPacks[emojiCurrentPackIdx]) {
-                grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text-muted);font-size:13px">Выберите пак или создайте новый</div>';
-                if (nameEl) nameEl.textContent = 'Выберите пак';
+                grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text-muted);font-size:13px">' + tr('choosePackOrCreate', 'Выберите пак или создайте новый') + '</div>';
+                if (nameEl) {
+                    nameEl.setAttribute('data-i18n', 'choosePack');
+                    nameEl.textContent = tr('choosePack', 'Выберите пак');
+                }
                 if (addBtn) addBtn.style.display = 'none';
                 return;
             }
             const pack = stickerPacks[emojiCurrentPackIdx];
-            if (nameEl) nameEl.textContent = pack.name;
+            if (nameEl) {
+                nameEl.removeAttribute('data-i18n');
+                nameEl.textContent = pack.name;
+            }
             // Показываем кнопку добавления только для личных паков
             if (addBtn) addBtn.style.display = !pack.isCommon ? 'block' : 'none';
             grid.innerHTML = '';
@@ -2437,7 +2469,7 @@
         }
 
         function emojiAddStickerToPack() {
-            if (emojiCurrentPackIdx === null) { showToast('error', 'Выберите пак', '❌'); return; }
+            if (emojiCurrentPackIdx === null) { showToast('error', tr('choosePack', 'Выберите пак'), '❌'); return; }
             // Переключаем currentStickerPackId чтобы addStickerToCurrentPack работал правильно
             currentStickerPackId = emojiCurrentPackIdx;
             document.getElementById('stickerInput').click();
@@ -2462,11 +2494,11 @@
             // Копировать ссылку на стикер-пак
             const copyLinkItem = document.createElement('div');
             copyLinkItem.style.cssText = 'padding:10px 16px;cursor:pointer;display:flex;align-items:center;gap:10px;font-size:14px;color:var(--text-primary);transition:background 0.1s;';
-            copyLinkItem.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span>Скопировать ссылку</span>';
+            copyLinkItem.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span>' + tr('copyLink', 'Скопировать ссылку') + '</span>';
             copyLinkItem.onclick = function() {
                 const link = window.location.origin + '/stickers/' + pack.id;
                 navigator.clipboard.writeText(link).then(function() {
-                    showToast('success', 'Ссылка скопирована', '📋');
+                    showToast('success', tr('linkCopied', 'Ссылка скопирована'), '📋');
                 });
                 menu.remove();
             };
@@ -2478,7 +2510,7 @@
             if (pack.isCommon) {
                 const addToMyItem = document.createElement('div');
                 addToMyItem.style.cssText = 'padding:10px 16px;cursor:pointer;display:flex;align-items:center;gap:10px;font-size:14px;color:var(--text-primary);transition:background 0.1s;';
-                addToMyItem.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg><span>Добавить в мои стикеры</span>';
+                addToMyItem.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg><span>' + tr('addToMyStickers', 'Добавить в мои стикеры') + '</span>';
                 addToMyItem.onclick = function() {
                     addStickerPackToPersonal(pack);
                     menu.remove();
@@ -2513,7 +2545,7 @@
             const alreadyExists = personalPacks.some(p => p.name === pack.name);
 
             if (alreadyExists) {
-                showToast('error', 'Этот пак уже добавлен', '❌');
+                showToast('error', tr('packAlreadyAdded', 'Этот пак уже добавлен'), '❌');
                 return;
             }
 
@@ -2530,7 +2562,7 @@
             saveStickerPacks();
             renderStickerPacksList();
             emojiRenderPacksList();
-            showToast('success', 'Стикерпак добавлен', '✨');
+            showToast('success', tr('stickerPackAdded', 'Стикерпак добавлен'), '✨');
         }
 
         function renderEmojiPicker() {
@@ -6151,6 +6183,15 @@
  loadStickerPacks();
  // Применяем переводы
  setTimeout(function() { if (window.i18n) window.i18n.translatePage(); }, 200);
+ window.addEventListener('craneapp:languagechange', function() {
+     if (window.i18n) {
+         ['activeCallBar', 'inputLeftBtns', 'attachmentPanel', 'emojiPicker'].forEach(function(id) {
+             const el = document.getElementById(id);
+             if (el) window.i18n.translatePage(el);
+         });
+     }
+     _renderActiveCallBar();
+ });
 
         // ============================================
         // CREATE GROUP
