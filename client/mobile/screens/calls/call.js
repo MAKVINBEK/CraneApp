@@ -257,7 +257,8 @@
     }
 
     // ---------- Демонстрация экрана ----------
-    document.getElementById('ctrlScreen').onclick = async () => {
+    const ctrlScreen = document.getElementById('ctrlScreen');
+    if (ctrlScreen) ctrlScreen.onclick = async () => {
         try {
             if (!screenStream) {
                 screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
@@ -265,7 +266,7 @@
                 screenTrack.onended = () => stopScreenShare();
                 replaceVideoTrackForAll(screenTrack);
                 showToast(tr('screenShareOn', 'Демонстрация экрана включена'));
-                document.getElementById('ctrlScreen').style.background = 'rgba(155,130,255,0.32)';
+                ctrlScreen.style.background = 'rgba(155,130,255,0.32)';
             } else {
                 stopScreenShare();
             }
@@ -275,7 +276,7 @@
         if (screenStream) { screenStream.getTracks().forEach(t=>t.stop()); screenStream = null; }
         const camTrack = localStream && localStream.getVideoTracks()[0];
         if (camTrack) replaceVideoTrackForAll(camTrack);
-        document.getElementById('ctrlScreen').style.background = '';
+        if (ctrlScreen) ctrlScreen.style.background = '';
     }
     function replaceVideoTrackForAll(newTrack){
         for (const p of peers.values()) {
