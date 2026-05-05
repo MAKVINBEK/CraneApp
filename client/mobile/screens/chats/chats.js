@@ -1856,8 +1856,11 @@
             };
             
             messagesData[tempId] = msg;
-            document.getElementById('messages').appendChild(createMessageElement(msg));
-            scrollToBottom();
+            (async () => {
+                const el = await createMessageElement(msg);
+                document.getElementById('messages').appendChild(el);
+                scrollToBottom();
+            })();
             
             uploadFile(dataUrl, type).then(function(url) {
                 if (url) {
@@ -1909,8 +1912,11 @@
             };
             
             messagesData[tempId] = msg;
-            document.getElementById('messages').appendChild(createMessageElement(msg));
-            scrollToBottom();
+            (async () => {
+                const el = await createMessageElement(msg);
+                document.getElementById('messages').appendChild(el);
+                scrollToBottom();
+            })();
             
             if (stickerUrl.startsWith('data:')) {
                 uploadFile(stickerUrl, 'sticker').then(function(url) {
@@ -1982,7 +1988,7 @@
             messagesData[serverMessage.id] = serverMessage;
         }
 
-        function createMessageElement(m) {
+        async function createMessageElement(m) {
             const div = document.createElement('div');
             const isOutgoing = m.senderId === user.id || m.outgoing;
             const isBotMessage = m.senderUsername === 'craneapp_bot' || m.isBot === true;
@@ -2082,7 +2088,7 @@
                     div.insertBefore(rp, div.firstChild);
                 }
 
-                addMessageContent(div, m);
+                await addMessageContent(div, m);
                 return wrapper;
             }
 
@@ -2120,7 +2126,7 @@
             return div;
         }
 
-        function addMessageContent(div, m) {
+        async function addMessageContent(div, m) {
             // Метка "Переслано от ..." — стиль как в Telegram
             if (m.forwardFrom) {
                 const fwd = document.createElement('div');
@@ -2224,8 +2230,22 @@
             } else {
                 const textSpan = document.createElement('span');
                 textSpan.className = 'message-text';
-                // Убираем префикс "↪️ Переслано от X:\n" если есть forwardFrom
+                // Обработка зашифрованных сообщений
                 let displayContent = m.content || m.text || '';
+                
+                // Если сообщение зашифровано и есть contentPlain, используем его
+                if (m.isEncrypted && m.contentPlain) {
+                    displayContent = m.contentPlain;
+                } else if (m.isEncrypted && !m.contentPlain && window.E2E && m.encryptionIv) {
+                    // Пробуем расшифровать, если есть E2E и IV
+                    try {
+                        displayContent = await window.E2E.decrypt(m.content, m.encryptionIv, activeChat ? activeChat.id : 'unknown', token);
+                    } catch (e) {
+                        displayContent = '🔒 Зашифрованное сообщение';
+                    }
+                }
+                
+                // Убираем префикс "↪️ Переслано от X:\n" если есть forwardFrom
                 if (m.forwardFrom && displayContent.startsWith('↪️ Переслано от ')) {
                     const nlIdx = displayContent.indexOf('\n');
                     if (nlIdx !== -1) displayContent = displayContent.substring(nlIdx + 1);
@@ -3281,10 +3301,10 @@
             }
         }
         
-        function addMessage(msg) {
+        async function addMessage(msg) {
             messagesData[msg.id] = msg;
             const messagesEl = document.getElementById('messages');
-            const div = createMessageElement(msg);
+            const div = await createMessageElement(msg);
             messagesEl.appendChild(div);
             scrollToBottom();
         }
@@ -4365,9 +4385,9 @@
                     decrypted.forEach(function(m) {
                         messagesData[m.id] = m;
                     });
-                    decrypted.forEach(function(m) {
-                        messagesEl.appendChild(createMessageElement(m));
-                    });
+                    for (const m of decrypted) {
+                        messagesEl.appendChild(await createMessageElement(m));
+                    }
                 } else {
                     messagesEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px;font-size:14px;">' + tr('noMessages', 'Нет сообщений') + '</div>';
                 }
@@ -5734,7 +5754,7 @@
                 senderName: user.firstName || 'Вы', pending: true
             };
             messagesData[tempId] = msg;
-            document.getElementById('messages').appendChild(createMessageElement(msg));
+            document.getElementById('messages').appendChild(await createMessageElement(msg));
             scrollToBottom();
 
             const reader = new FileReader();
@@ -5996,7 +6016,7 @@
                 pending: true
             };
             messagesData[tempId] = msg;
-            document.getElementById('messages').appendChild(createMessageElement(msg));
+            document.getElementById('messages').appendChild(await createMessageElement(msg));
             scrollToBottom();
 
             // Конвертируем blob в base64 и загружаем
