@@ -897,7 +897,7 @@
                 nameEl.textContent = user.firstName || tr('user', 'Пользователь');
             }            
             if (user.avatarUrl && (user.avatarUrl.startsWith('data:image') || user.avatarUrl.startsWith('http') || user.avatarUrl.startsWith('/'))) {
-                avatarEl.innerHTML = '<img src="' + user.avatarUrl + '" alt="">';
+                avatarEl.innerHTML = '<img src="' + user.avatarUrl + '" alt="" preload="auto">';
             } else {
                 avatarEl.innerHTML = '<span>' + (user.firstName || '👤')[0].toUpperCase() + '</span>';
             }
@@ -1269,7 +1269,7 @@
                 const div = document.createElement('div');
                 div.className = 'profile-media-item';
                 if (m.mediaUrl || m.fileUrl) {
-                    div.innerHTML = `<img src="${m.mediaUrl || m.fileUrl}" loading="lazy">`;
+                    div.innerHTML = `<img src="${m.mediaUrl || m.fileUrl}">`;
                     div.onclick = () => window.open(m.mediaUrl || m.fileUrl, '_blank');
                 }
                 grid.appendChild(div);
@@ -1628,7 +1628,7 @@
             if (type === 'video') {
                 contentEl.innerHTML = '<video src="' + url + '" controls autoplay style="max-width:100%;max-height:100%;border-radius:4px;"></video>';
             } else {
-                contentEl.innerHTML = '<img src="' + url + '" alt="" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;user-select:none;" draggable="false">';
+                contentEl.innerHTML = '<img src="' + url + '" alt="" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;user-select:none;" draggable="false" preload="auto">';
             }
             
             document.getElementById('mediaPreviewOverlay').classList.add('active');
@@ -2139,7 +2139,7 @@
                 const avatarContent = senderIsBot
                     ? '<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:28px;">🤖</span>'
                     : senderAv
-                        ? `<img src="${senderAv}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
+                        ? `<img src="${senderAv}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" preload="auto">`
                         : camAvailable
                             ? '<span class="camera-icon" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;border-radius:50%">📷</span>'
                             : (initial || '?');
@@ -2240,6 +2240,7 @@
                 const img = document.createElement('img');
                 img.className = 'message-media';
                 img.src = m.mediaUrl;
+                img.preload = 'auto';
                 img.onclick = function() { openMediaPreview(m.mediaUrl, 'image'); };
                 div.appendChild(img);
                 if (m.content) {
@@ -2267,6 +2268,7 @@
                 const img = document.createElement('img');
                 img.className = 'message-gif';
                 img.src = m.mediaUrl;
+                img.preload = 'auto';
                 img.onclick = function() { openMediaPreview(m.mediaUrl, 'gif'); };
                 div.appendChild(img);
                 if (m.content) {
@@ -2285,6 +2287,7 @@
                 const img = document.createElement('img');
                 img.className = 'message-sticker';
                 img.src = m.mediaUrl;
+                img.preload = 'auto';
                 img.onclick = function() { openMediaPreview(m.mediaUrl, 'image'); };
                 div.appendChild(img);
             } else if (m.type === 'voice') {
@@ -2505,7 +2508,7 @@
                     const img = document.createElement('img');
                     img.src = gif.url;
                     img.style.cssText = 'width:100%;height:auto;display:block;';
-                    img.loading = 'lazy';
+                    img.preload = 'auto';
                     img.onclick = function() {
                         setTimeout(function() {
                             closeEmojiPicker();
@@ -2601,6 +2604,7 @@
                 const img = document.createElement('img');
                 img.src = url;
                 img.style.cssText = 'width:100%;height:100%;object-fit:contain;padding:4px;';
+                img.preload = 'auto';
                 img.onclick = function() { closeEmojiPicker(); sendStickerMessage(url); };
                 // Кнопка удаления только для личных паков
                 if (!pack.isCommon) {
