@@ -1,5 +1,7 @@
 const token = localStorage.getItem('craneapp_auth_token');
         let currentSessionId = null;
+        let devicesSocket = null;
+        let heartbeatInterval = null;
         
         // Сбрасываем флаг при каждом открытии страницы устройств
         // чтобы гарантировать актуальные данные
@@ -184,6 +186,83 @@ const token = localStorage.getItem('craneapp_auth_token');
             return date.toLocaleDateString('ru');
         }
         
+        // WebSocket для реального времени
+        function connectDevicesSocket() {
+            if (devicesSocket && devicesSocket.readyState === WebSocket.OPEN) return;
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/devices?token=${token}`;
+            
+            devicesSocket = new WebSocket(wsUrl);
+            
+            devicesSocket.onopen = () => {
+                console.log('Devices WebSocket connected');
+                startHeartbeat();
+            };
+            
+            devicesSocket.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleDeviceUpdate(data);
+                } catch (e) {
+                    console.error('Error parsing device update:', e);
+                }
+            };
+            
+            devicesSocket.onclose = () => {
+                console.log('Devices WebSocket disconnected');
+                stopHeartbeat();
+                // Переподключение через 5 секунд
+                setTimeout(connectDevicesSocket, 5000);
+            };
+            
+            devicesSocket.onerror = (error) => {
+                console.error('Devices WebSocket error:', error);
+            };
+        }
+        
+        function handleDeviceUpdate(data) {
+            switch (data.type) {
+                case 'device_connected':
+                    showToast('Новое устройство подключено', '📱');
+                    loadDevices();
+                    break;
+                case 'device_disconnected':
+                    showToast('Устройство отключено', '📱');
+                    loadDevices();
+                    break;
+                case 'device_terminated':
+                    showToast('Сеанс завершен', '📱');
+                    loadDevices();
+                    break;
+                case 'devices_updated':
+                    loadDevices();
+                    break;
+                case 'heartbeat':
+                    // Ответ на heartbeat
+                    if (devicesSocket && devicesSocket.readyState === WebSocket.OPEN) {
+                        devicesSocket.send(JSON.stringify({ type: 'heartbeat_response' }));
+                    }
+                    break;
+            }
+        }
+        
+        function startHeartbeat() {
+            stopHeartbeat();
+            heartbeatInterval = setInterval(() => {
+                if (devicesSocket && devicesSocket.readyState === WebSocket.OPEN) {
+                    devicesSocket.send(JSON.stringify({ type: 'heartbeat' }));
+                }
+            }, 30000); // Каждые 30 секунд
+        }
+        
+        function stopHeartbeat() {
+            if (heartbeatInterval) {
+                clearInterval(heartbeatInterval);
+                heartbeatInterval = null;
+            }
+        }
+        
         // Завершить одну сессию
         async function terminateDevice(sessionId) {
             if (!confirm(window.i18n?.t('terminateSessionConfirm') || 'Завершить сеанс на этом устройстве?')) return;
@@ -195,6 +274,14 @@ const token = localStorage.getItem('craneapp_auth_token');
                 });
                 
                 if (res.ok) {
+                    // Отправляем WebSocket событие
+                    if (devicesSocket && devicesSocket.readyState === WebSocket.OPEN) {
+                        devicesSocket.send(JSON.stringify({ 
+                            type: 'device_terminated',
+                            sessionId: sessionId 
+                        }));
+                    }
+                    
                     const el = document.querySelector('[data-id="' + sessionId + '"]');
                     if (el) el.remove();
                     
@@ -230,6 +317,13 @@ const token = localStorage.getItem('craneapp_auth_token');
                 });
                 
                 if (res.ok) {
+                    // Отправляем WebSocket событие
+                    if (devicesSocket && devicesSocket.readyState === WebSocket.OPEN) {
+                        devicesSocket.send(JSON.stringify({ 
+                            type: 'all_devices_terminated'
+                        }));
+                    }
+                    
                     document.getElementById('otherDevices').innerHTML = `
                         <div class="device-card">
                             <div style="padding:20px;text-align:center;color:var(--text-muted);">
@@ -258,10 +352,23 @@ const token = localStorage.getItem('craneapp_auth_token');
             }, 2000);
         }
         
-        // Инициализация
-        (async function init() {
+        // Очистка при закрытии страницы
+        window.addEventListener('beforeunload', () => {
+            if (devicesSocket) {
+                devicesSocket.close();
+                devicesSocket = null;
+            }
+            stopHeartbeat();
+        });
+        
+        // ── ИНИЦИАЛИЗАЦИЯ ───────────────────────────────────────────────────────
+        (async () => {
             await registerCurrentSession();
             await loadDevices();
+            
+            // Подключаем WebSocket для реального времени
+            connectDevicesSocket();
+            
             if (window.i18n) window.i18n.translatePage();
         })();
 

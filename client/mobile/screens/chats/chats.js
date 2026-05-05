@@ -1,4 +1,88 @@
 // ============================================
+        // ГЛОБАЛЬНОЕ ОТКЛЮЧЕНИЕ КОНТЕКСТНОГО МЕНЮ
+        // ============================================
+        
+        // Отключаем стандартное контекстное меню браузера везде
+        document.addEventListener('contextmenu', function(e) {
+            // Разрешаем контекстное меню только для определенных элементов
+            const allowedElements = [
+                'msgInput',           // Поле ввода сообщений
+                'messageContextMenu', // Контекстное меню сообщений
+                'inputContextMenu',    // Контекстное меню форматирования
+                'chatContextMenu',     // Контекстное меню чатов
+                'stickerContextMenu'  // Контекстное меню стикеров
+            ];
+            
+            const target = e.target;
+            const targetId = target.id;
+            const targetParentId = target.parentElement?.id;
+            
+            // Проверяем, является ли элемент или его родитель одним из разрешенных
+            const isAllowed = allowedElements.includes(targetId) || 
+                            allowedElements.includes(targetParentId) ||
+                            target.closest('#msgInput') ||
+                            target.closest('.message') ||
+                            target.closest('.chat-item') ||
+                            target.closest('.sticker-pack') ||
+                            target.closest('#chatList');
+            
+            // Если элемент не в списке разрешенных, блокируем стандартное меню
+            if (!isAllowed) {
+                e.preventDefault();
+                return false;
+            }
+        });
+
+        // Отключаем выделение текста и перетаскивание в ненужных местах
+        document.addEventListener('selectstart', function(e) {
+            const target = e.target;
+            
+            // Разрешаем выделение только в поле ввода и контентных областях
+            const isAllowed = target.closest('#msgInput') ||
+                            target.closest('.message-text') ||
+                            target.closest('textarea') ||
+                            target.closest('input[type="text"]') ||
+                            target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
+            
+            if (!isAllowed) {
+                e.preventDefault();
+                return false;
+            }
+        });
+
+        // Отключаем перетаскивание элементов
+        document.addEventListener('dragstart', function(e) {
+            // Разрешаем перетаскивание только для определенных элементов
+            const target = e.target;
+            
+            const isAllowed = target.closest('.chat-item') ||
+                            target.closest('.message') ||
+                            target.closest('#msgInput') ||
+                            target.tagName === 'IMG' && target.closest('.message-content');
+            
+            if (!isAllowed) {
+                e.preventDefault();
+                return false;
+            }
+        });
+
+        // Отключаем стандартное поведение middle-click (открытие в новой вкладке)
+        document.addEventListener('mousedown', function(e) {
+            if (e.button === 1) { // middle-click
+                const target = e.target;
+                
+                // Блокируем middle-click везде кроме ссылок и изображений в сообщениях
+                const isAllowed = target.closest('a') ||
+                                (target.tagName === 'IMG' && target.closest('.message-content'));
+                
+                if (!isAllowed) {
+                    e.preventDefault();
+                    return false;
+                }
+            }
+        });
+
+        // ============================================
         // REACTIONS
         // ============================================
         const QUICK_REACTIONS = ['👍','❤️','😂','😮','😢','🔥','👏','🎉'];
@@ -38,7 +122,22 @@
             reactions.forEach(r => {
                 const badge = document.createElement('div');
                 badge.className = 'reaction-badge' + (r.myReaction ? ' my-reaction' : '');
-                badge.innerHTML = `<span>${r.emoji}</span><span class="reaction-count">${r.count}</span>`;
+                
+                // Показываем эмодзи, количество и пользователей
+                let usersHtml = '';
+                if (r.users && r.users.length > 0) {
+                    // Показываем до 3 пользователей, потом "и еще X"
+                    const displayUsers = r.users.slice(0, 3);
+                    const userNames = displayUsers.map(u => u.firstName || u.username || 'Пользователь').join(', ');
+                    
+                    if (r.users.length > 3) {
+                        usersHtml = `<div class="reaction-users">${userNames} и еще ${r.users.length - 3}</div>`;
+                    } else {
+                        usersHtml = `<div class="reaction-users">${userNames}</div>`;
+                    }
+                }
+                
+                badge.innerHTML = `<span>${r.emoji}</span><span class="reaction-count">${r.count}</span>${usersHtml}`;
                 badge.onclick = (e) => { e.stopPropagation(); toggleReaction(messageId, r.emoji); };
                 el.appendChild(badge);
             });
@@ -147,6 +246,30 @@
 
         async function toggleReaction(messageId, emoji) {
             if (!isValidUUID(messageId)) return;
+            
+            // Проверяем есть ли уже реакция от этого пользователя
+            const msg = messagesData[messageId];
+            if (msg && msg.reactions) {
+                const myReaction = msg.reactions.find(r => r.myReaction);
+                if (myReaction) {
+                    // Если уже есть реакция - убираем её
+                    try {
+                        const res = await fetch('/api/v1/messages/' + messageId + '/reactions/' + emoji, {
+                            method: 'DELETE',
+                            headers: { 'Authorization': 'Bearer ' + token }
+                        });
+                        const data = await res.json();
+                        if (data.reactions !== undefined) {
+                            updateMessageReactions(messageId, data.reactions);
+                        }
+                    } catch (err) {
+                        console.error('Reaction remove error:', err);
+                    }
+                    return;
+                }
+            }
+            
+            // Если нет реакции - добавляем
             try {
                 const res = await fetch('/api/v1/messages/' + messageId + '/reactions', {
                     method: 'POST',
@@ -158,7 +281,7 @@
                     updateMessageReactions(messageId, data.reactions);
                 }
             } catch (err) {
-                console.error('Reaction error:', err);
+                console.error('Reaction add error:', err);
             }
         }
 
@@ -236,6 +359,9 @@
         let currentContextChatId = null;
         let archivedChats = [];
         let pinnedChatIds = new Set();
+        let isViewingArchives = false;
+        let attachedFiles = [];
+        let attachmentPanelOpen = false;
 
         // ============================================
         // SIDE MENU
@@ -1018,35 +1144,6 @@
                 return cu && cu.id === currentProfileUser.id;
             });
             
-            if (!chatWithUser) {
-                showToast('error', tr('chatNotFound', 'Чат не найден'), '❌');
-                return;
-            }
-            
-            // Архивируем через API
-            try {
-                const res = await fetch(`/api/v1/chats/${chatWithUser.id}/archive`, {
-                    method: 'POST',
-                    headers: { 
-                        'Authorization': 'Bearer ' + token,
-                        'Content-Type': 'application/json'
-                    }
-                });
-                
-                if (res.ok) {
-                    showToast('success', tr('chatArchived', 'Чат архивирован'), '📁');
-                    await loadArchivedChats();
-                    loadChats();
-                } else {
-                    showToast('error', tr('archiveError', 'Ошибка архивирования'), '❌');
-                }
-            } catch (err) {
-                showToast('error', tr('networkError', 'Ошибка сети'), '❌');
-            }
-        }
-        
-        // Переменная для хранения данных при добавлении в папку
-        let folderSelectChatId = null;
         let folderSelectData = [];
 
         async function addToFolder() {
@@ -1770,12 +1867,15 @@
 
             const content = document.getElementById('mediaSendPreviewContent');
             const caption = document.getElementById('mediaSendCaption');
+            const editBtn = document.getElementById('editPhotoBtn');
             caption.innerText = '';
 
             if (type === 'video') {
                 content.innerHTML = '<video src="' + dataUrl + '" controls style="max-width:100%;max-height:55vh;border-radius:12px;"></video>';
+                editBtn.style.display = 'none';
             } else {
                 content.innerHTML = '<img src="' + dataUrl + '" style="max-width:100%;max-height:55vh;border-radius:12px;object-fit:contain;">';
+                editBtn.style.display = 'block';
             }
 
             const modal = document.getElementById('mediaSendPreview');
@@ -2085,7 +2185,7 @@
                             if (t) { t.scrollIntoView({behavior:'smooth',block:'center'}); t.classList.add('highlight'); setTimeout(()=>t.classList.remove('highlight'),1500); }
                         }
                     };
-                    div.insertBefore(rp, div.firstChild);
+                    wrapper.insertBefore(rp, wrapper.firstChild);
                 }
 
                 await addMessageContent(div, m);
@@ -2176,6 +2276,10 @@
                     cap.textContent = m.content;
                     div.appendChild(cap);
                 }
+            } else if (m.type === 'poll') {
+                div.classList.add('poll-message');
+                const pollDiv = createPollElement(m);
+                div.appendChild(pollDiv);
             } else if (m.type === 'sticker') {
                 div.classList.add('sticker-only');
                 const img = document.createElement('img');
@@ -3136,6 +3240,183 @@
             }, 3000);
         }
 
+        // ============================================
+        // BROWSER NOTIFICATIONS
+        // ============================================
+        let notificationPermission = 'default';
+        let notificationSettings = {
+            desktop: true,
+            sound: true,
+            preview: true
+        };
+
+        // Инициализация уведомлений
+        async function initNotifications() {
+            if (!('Notification' in window)) {
+                console.log('Браузер не поддерживает уведомления');
+                return;
+            }
+
+            // Загружаем настройки
+            const saved = localStorage.getItem('craneapp_notification_settings');
+            if (saved) {
+                notificationSettings = JSON.parse(saved);
+            }
+
+            // Проверяем текущий статус разрешений
+            notificationPermission = Notification.permission;
+            
+            // Если разрешение еще не запрошено, запрашиваем при первом сообщении
+            if (notificationPermission === 'default') {
+                // Не запрашиваем сразу, ждем первого сообщения
+                console.log('Ожидание запроса разрешений на уведомления...');
+            }
+        }
+
+        // Запрос разрешений на уведомления
+        async function requestNotificationPermission() {
+            if (!('Notification' in window)) return false;
+
+            if (notificationPermission === 'granted') return true;
+            
+            try {
+                const permission = await Notification.requestPermission();
+                notificationPermission = permission;
+                
+                if (permission === 'granted') {
+                    showToast('Уведомления включены', '🔔');
+                    return true;
+                } else if (permission === 'denied') {
+                    showToast('Уведомления отключены в настройках браузера', '🔕');
+                    return false;
+                }
+            } catch (error) {
+                console.error('Ошибка запроса разрешений:', error);
+            }
+            
+            return false;
+        }
+
+        // Показать браузерное уведомление
+        function showBrowserNotification(title, options = {}) {
+            if (!('Notification' in window)) return;
+            
+            // Проверяем настройки
+            if (!notificationSettings.desktop) return;
+            
+            // Запрашиваем разрешение если еще не получено
+            if (notificationPermission === 'default') {
+                requestNotificationPermission().then(granted => {
+                    if (granted) {
+                        showNotificationNow(title, options);
+                    }
+                });
+                return;
+            }
+            
+            if (notificationPermission === 'granted') {
+                showNotificationNow(title, options);
+            }
+        }
+
+        // Непосредственное показ уведомления
+        function showNotificationNow(title, options) {
+            const notificationOptions = {
+                body: options.body || '',
+                icon: options.icon || '/logo.png',
+                badge: options.badge || '/logo.png',
+                tag: options.tag || 'craneapp-message',
+                requireInteraction: options.requireInteraction || false,
+                silent: !notificationSettings.sound,
+                ...options
+            };
+
+            try {
+                const notification = new Notification(title, notificationOptions);
+                
+                // Обработчик клика по уведомлению
+                notification.onclick = function() {
+                    // Фокусируем окно если оно не в фокусе
+                    if (document.hidden) {
+                        window.focus();
+                    }
+                    
+                    // Если есть chatId, открываем соответствующий чат
+                    if (options.chatId) {
+                        openChat(options.chatId, options.chatName);
+                    }
+                    
+                    // Закрываем уведомление
+                    notification.close();
+                };
+                
+                // Автоматически закрываем через 5 секунд
+                setTimeout(() => {
+                    notification.close();
+                }, 5000);
+                
+            } catch (error) {
+                console.error('Ошибка показа уведомления:', error);
+            }
+        }
+
+        // Уведомление о новом сообщении
+        function notifyNewMessage(message, chatName) {
+            if (!message || !chatName) return;
+            
+            // Не показываем уведомление если мы в этом чате и страница в фокусе
+            if (activeChat && message.chatId === activeChat.id && !document.hidden) {
+                return;
+            }
+            
+            let title = chatName;
+            let body = '';
+            let icon = '/logo.png';
+            
+            // Определяем тип сообщения
+            if (message.type === 'text' || !message.type) {
+                body = message.content || message.text || '';
+                if (body.length > 100) {
+                    body = body.substring(0, 100) + '...';
+                }
+            } else if (message.type === 'image' || message.type === 'photo') {
+                body = '📷 Фото';
+                if (message.mediaUrl) {
+                    icon = message.mediaUrl;
+                }
+            } else if (message.type === 'video') {
+                body = '🎬 Видео';
+            } else if (message.type === 'voice') {
+                body = '🎤 Голосовое сообщение';
+            } else if (message.type === 'sticker') {
+                body = '🎨 Стикер';
+            } else if (message.type === 'file') {
+                body = '📎 Файл: ' + (message.fileName || 'document');
+            } else {
+                body = message.content || 'Новое сообщение';
+            }
+            
+            // Добавляем имя отправителя если это групповой чат
+            if (message.senderName && message.senderName !== user.name) {
+                body = message.senderName + ': ' + body;
+            }
+            
+            showBrowserNotification(title, {
+                body: body,
+                icon: icon,
+                tag: `message-${message.chatId}`,
+                chatId: message.chatId,
+                chatName: chatName,
+                requireInteraction: message.type === 'voice' // Голосовые требуют внимания
+            });
+        }
+
+        // Обновление настроек уведомлений
+        function updateNotificationSettings(settings) {
+            notificationSettings = { ...notificationSettings, ...settings };
+            localStorage.setItem('craneapp_notification_settings', JSON.stringify(notificationSettings));
+        }
+
         function handleWsMessage(data) {
             // Перехват входящего видеозвонка
             if (data && data.type === 'call_incoming') {
@@ -3187,7 +3468,28 @@
                             }
                             return msg;
                         };
-                        decryptMsg(data.message).then(msg => addMessage(msg));
+                        decryptMsg(data.message).then(msg => {
+                            addMessage(msg);
+                            // Если сообщение не от текущего пользователя, обновляем индикаторы
+                            if (msg.senderId !== user.id) {
+                                updateUnreadBadges();
+                                // Показываем уведомление если страница не в фокусе
+                                if (document.hidden) {
+                                    notifyNewMessage(msg, activeChat.name);
+                                }
+                            }
+                        });
+                    } else {
+                        // Если чат не активен, обновляем индикаторы при получении сообщения
+                        if (data.message?.senderId !== user.id) {
+                            updateUnreadBadges();
+                            
+                            // Показываем уведомление для нового сообщения в неактивном чате
+                            const chat = allChats.find(c => c.id === data.chatId);
+                            if (chat) {
+                                notifyNewMessage(data.message, chat.name);
+                            }
+                        }
                     }
                     // Если чат новый (нас нет в chatUsers) — добавляем его сразу
                     if (data.chatId && !allChats.find(c => c.id === data.chatId)) {
@@ -3269,7 +3571,7 @@
                             statusEl.textContent = 'последний визит скрыт';
                             statusEl.style.color = 'var(--text-muted)';
                         } else {
-                            statusEl.textContent = 'был(а) недавно';
+                            statusEl.textContent = userData.isBot ? 'бот' : 'был(а) недавно';
                             statusEl.style.color = 'var(--text-muted)';
                         }
                     }
@@ -3337,7 +3639,7 @@
                         statusEl.textContent = 'онлайн';
                         statusEl.style.color = 'var(--success-color)';
                     } else {
-                        statusEl.textContent = 'был(а) недавно';
+                        statusEl.textContent = userData.isBot ? 'бот' : 'был(а) недавно';
                         statusEl.style.color = 'var(--text-muted)';
                     }
                 } else {
@@ -3865,6 +4167,58 @@
             renderChatList();
         }
 
+        function getUnreadCount(chatId) {
+            if (!activeChat || activeChat.id !== chatId) {
+                const chatMessages = Object.values(messagesData).filter(msg => 
+                    msg.chatId === chatId && 
+                    msg.senderId !== user.id && 
+                    !msg.read
+                );
+                return chatMessages.length;
+            }
+            return 0;
+        }
+
+        function updateUnreadBadges() {
+            // Обновляем индикаторы непрочитанных сообщений в списке чатов
+            document.querySelectorAll('.chat-item').forEach(item => {
+                const chatId = item.getAttribute('onclick')?.match(/openChat\('([^']+)'/)?.[1];
+                if (chatId) {
+                    const unreadCount = getUnreadCount(chatId);
+                    const existingBadge = item.querySelector('.unread-badge');
+                    
+                    if (unreadCount > 0 && !existingBadge) {
+                        // Добавляем новый индикатор
+                        const badge = document.createElement('div');
+                        badge.className = 'unread-badge';
+                        badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+                        const chatActions = item.querySelector('.chat-actions');
+                        if (chatActions) {
+                            chatActions.insertBefore(badge, chatActions.firstChild);
+                        }
+                    } else if (unreadCount > 0 && existingBadge) {
+                        // Обновляем существующий индикатор
+                        existingBadge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+                    } else if (unreadCount === 0 && existingBadge) {
+                        // Удаляем индикатор если нет непрочитанных
+                        existingBadge.remove();
+                    }
+                }
+            });
+        }
+
+        function markMessagesAsRead(chatId) {
+            // Отмечаем все сообщения в чате как прочитанные
+            Object.values(messagesData).forEach(msg => {
+                if (msg.chatId === chatId && msg.senderId !== user.id && !msg.read) {
+                    msg.read = true;
+                }
+            });
+            
+            // Обновляем индикаторы
+            updateUnreadBadges();
+        }
+
         function renderChatList(filter) {
             filter = filter || '';
             
@@ -3907,23 +4261,53 @@
             
             let html = '';
             
-            // Секция архивированных — ПЕРВОЙ (как в Telegram)
-            if (archivedChats.length > 0 && !filter) {
-                html += '<div class="archived-chats-section">';
-                html += '<div class="archived-chats-header" onclick="toggleArchivedChats()">📁 Архивированные (' + archivedChats.length + ')</div>';
-                html += '<div class="archived-chats-list" id="archivedChatsList" style="display: block;">';
-                html += archivedChats.map(function(c) {
-                    const name = c.name || c.title || tr('chatShort', 'Чат');
-                    const ph = c.av || c.avatarUrl || (name[0] || '?');
-                    return '<div class="chat-item" onclick="openArchivedChat(\'' + c.id + '\', \'' + name + '\')">' +
-                        renderAvatar(ph, name[0], 'avatar') +
-                        '<div class="chat-info"><div class="chat-name">' + name + '</div>' +
-                        '<div class="chat-last">' + (c.lastMessage || tr('noMessages', 'Нет сообщений')) + '</div></div>' +
-                        '<div class="chat-time">' + (c.time || '') + '</div>' +
-                        '<div class="chat-actions"><button class="chat-action-icon" onclick="event.stopPropagation(); unarchiveChat(\'' + c.id + '\')" title="' + tr('restore', 'Восстановить') + '">📥</button></div>' +
+            // Если мы в режиме просмотра архивов
+            if (isViewingArchives) {
+                html += '<div class="archives-view-header">' +
+                    '<button class="back-btn" onclick="exitArchivesView()">←</button>' +
+                    '<div class="archives-view-title">Архивированные</div>' +
+                    '</div>';
+                
+                if (archivedChats.length === 0) {
+                    html += '<div style="padding:30px;text-align:center;color:var(--text-muted);font-size:14px;">Нет архивированных чатов</div>';
+                } else {
+                    html += archivedChats.map(function(c) {
+                        const name = c.name || c.title || tr('chatShort', 'Чат');
+                        const ph = c.av || c.avatarUrl || (name[0] || '?');
+                        const unreadCount = getUnreadCount(c.id);
+                        const unreadBadge = unreadCount > 0 ? '<div class="unread-badge">' + (unreadCount > 99 ? '99+' : unreadCount) + '</div>' : '';
+                        return '<div class="chat-item" onclick="openArchivedChat(\'' + c.id + '\', \'' + name + '\')">' +
+                            renderAvatar(ph, name[0], 'avatar') +
+                            '<div class="chat-info"><div class="chat-name">' + name + '</div>' +
+                            '<div class="chat-last">' + (c.lastMessage || tr('noMessages', 'Нет сообщений')) + '</div></div>' +
+                            '<div class="chat-time">' + (c.time || '') + '</div>' +
+                            '<div class="chat-actions">' +
+                            unreadBadge +
+                            '<button class="chat-action-icon archived" onclick="event.stopPropagation(); unarchiveChat(\'' + c.id + '\')" title="' + tr('restore', 'Восстановить') + '">📥</button>' +
+                            '</div>' +
+                            '</div>';
+                    }).join('');
+                }
+            } else {
+                // Обычный режим - показываем папку архивов как отдельный чат
+                if (archivedChats.length > 0 && !filter) {
+                    const totalUnread = archivedChats.reduce((sum, c) => sum + getUnreadCount(c.id), 0);
+                    const unreadBadge = totalUnread > 0 ? '<div class="unread-badge">' + (totalUnread > 99 ? '99+' : totalUnread) + '</div>' : '';
+                    
+                    html += '<div class="chat-item archive-folder" onclick="enterArchivesView()">' +
+                        '<div class="avatar archive-avatar">' +
+                        '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>' +
+                        '</div>' +
+                        '<div class="chat-info">' +
+                        '<div class="chat-name">Архивированные</div>' +
+                        '<div class="chat-last">' + archivedChats.length + ' чатов</div>' +
+                        '</div>' +
+                        '<div class="chat-time"></div>' +
+                        '<div class="chat-actions">' +
+                        unreadBadge +
+                        '</div>' +
                         '</div>';
-                }).join('');
-                html += '</div></div>';
+                }
             }
 
             // Секция закреплённых
@@ -3934,6 +4318,8 @@
                 html += pinnedChats.map(function(c) {
                     const isActive = activeChat && activeChat.id === c.id;
                     const ph = typeof c.av === 'string' && c.av.length <= 2 ? c.av : c.name[0];
+                    const unreadCount = getUnreadCount(c.id);
+                    const unreadBadge = unreadCount > 0 ? '<div class="unread-badge">' + (unreadCount > 99 ? '99+' : unreadCount) + '</div>' : '';
                     return '<div class="chat-item pinned ' + (isActive ? 'active' : '') + '" ' +
                         'data-chat-type="' + (c.type || (c.isGroup ? 'group' : 'private')) + '" ' +
                         'onclick="openChat(\'' + c.id + '\', \'' + c.name + '\')" ' +
@@ -3946,6 +4332,7 @@
                         '</div>' +
                         '<div class="chat-time">' + (c.time || '') + '</div>' +
                         '<div class="chat-actions">' +
+                        unreadBadge +
                         '<button class="chat-action-icon pinned" onclick="event.stopPropagation(); unpinChat(\'' + c.id + '\')" title="' + tr('unpin', 'Открепить') + '" style="color: var(--accent-color);">📌</button>' +
                         '<button class="chat-action-icon archived" onclick="event.stopPropagation(); archiveChat(\'' + c.id + '\')" title="' + tr('archiveChat', 'Архивировать') + '">📁</button>' +
                         '</div>' +
@@ -3964,6 +4351,8 @@
                     const ph = typeof c.av === 'string' && c.av.length <= 2 ? c.av : c.name[0];
                     const chatUser = chatUsers[c.id];
                     const isBlocked = chatUser && chatUser.isBlocked;
+                    const unreadCount = getUnreadCount(c.id);
+                    const unreadBadge = unreadCount > 0 ? '<div class="unread-badge">' + (unreadCount > 99 ? '99+' : unreadCount) + '</div>' : '';
                     // Журавль для бота CraneApp или призрак для заблокированных
                     let avatarHtml;
                     if (isBlocked) {
@@ -3985,6 +4374,7 @@
                         '</div>' +
                         '<div class="chat-time">' + (c.time || '') + '</div>' +
                         '<div class="chat-actions">' +
+                        unreadBadge +
                         '<button class="chat-action-icon" onclick="event.stopPropagation(); pinChat(\'' + c.id + '\')" title="' + tr('pin', 'Закрепить') + '">📌</button>' +
                         '<button class="chat-action-icon archived" onclick="event.stopPropagation(); archiveChat(\'' + c.id + '\')" title="' + tr('archiveChat', 'Архивировать') + '">📁</button>' +
                         '</div>' +
@@ -4277,6 +4667,9 @@
             document.querySelectorAll('img[src$=".gif"]').forEach(img => {
                 img.style.animationPlayState = autoplayGifs ? 'running' : 'paused';
             });
+
+            // Отмечаем сообщения как прочитанные и обновляем индикаторы
+            markMessagesAsRead(id);
         }
 
         async function updateChatUserStatus(userId) {
@@ -4330,7 +4723,7 @@
                             statusEl.textContent = 'был(а) давно';
                         }
                     } else {
-                        statusEl.textContent = 'был(а) недавно';
+                        statusEl.textContent = userData.isBot ? 'бот' : 'был(а) недавно';
                     }
                     statusEl.style.color = 'var(--text-muted)';
                 }
@@ -4563,38 +4956,78 @@
                 } else {
                     showToast('error', d.error || 'Ошибка', '❌');
                 }
-            }).catch(function(err) {
-                showToast('error', 'Ошибка сохранения', '❌');
             });
-        }
-                
-        function deleteMessage(forEveryone) {
-            // Проверка что messageId валиден
-            if (!isValidUUID(currentMessageId)) {
+            
+            if (res.ok) {
+                // Показываем уведомление об успехе
+                const messageText = msg.type === 'image' || msg.type === 'photo' ? 'Фото' : 
+                                  msg.type === 'video' ? 'Видео' :
+                                  msg.type === 'sticker' ? 'Стикер' :
+                                  msg.type === 'voice' ? 'Голосовое' :
+                                  msg.type === 'file' ? 'Файл' :
+                                  (msg.content || msg.text || '').substring(0, 50);
                 showToast('info', 'Сообщение ещё отправляется...', '⏳');
                 return;
             }
+            
+            const msg = messagesData[currentMessageId];
+            const isMyMessage = msg && (msg.senderId === user.id || msg.outgoing);
+            
+            if (isMyMessage) {
+                // Если это своё сообщение, используем обычное удаление
+                deleteMyMessage();
+                return;
+            }
+            
+            // Проверяем права (админ/создатель группы)
+            const canDeleteOthers = activeChat && (
+                activeChat.type === 'private' || 
+                (activeChat.type === 'group' && (
+                    activeChat.creatorId === user.id || 
+                    (activeChat.adminIds && activeChat.adminIds.includes(user.id))
+                ))
+            );
+            
+            if (!canDeleteOthers) {
+                showToast('error', 'У вас нет прав для удаления чужих сообщений', '❌');
+                return;
+            }
+            
             document.getElementById('messageContextMenu').classList.remove('active');
             
-            document.getElementById('confirmTitle').textContent = forEveryone ? (window.i18n?.t('deleteForEveryoneQuestion') || 'Удалить для всех?') : (window.i18n?.t('deleteQuestion') || 'Удалить?');
+            document.getElementById('confirmTitle').textContent = 'Удалить сообщение собеседника?';
             document.getElementById('confirmText').textContent = 'Это действие нельзя отменить.';
             
             document.getElementById('confirmBtn').onclick = function() {
-                performDelete(forEveryone);
+                performDelete(false, true);
                 closeConfirmModal();
             };
             
             document.getElementById('confirmModal').classList.add('active');
         }
 
-        async function performDelete(forEveryone) {
+        async function performDelete(forEveryone, deleteOthers = false) {
             // Проверка что messageId валиден
             if (!isValidUUID(currentMessageId)) {
                 showToast('error', 'Сообщение ещё отправляется', '⚠️');
                 return;
             }
             try {
-                const res = await fetch('/api/v1/messages/' + currentMessageId + '?forEveryone=' + forEveryone, {
+                let url = '/api/v1/messages/' + currentMessageId;
+                const params = new URLSearchParams();
+                
+                if (forEveryone) {
+                    params.append('forEveryone', 'true');
+                }
+                if (deleteOthers) {
+                    params.append('deleteOthers', 'true');
+                }
+                
+                if (params.toString()) {
+                    url += '?' + params.toString();
+                }
+                
+                const res = await fetch(url, {
                     method: 'DELETE',
                     headers: { 'Authorization': 'Bearer ' + token }
                 });
@@ -4705,9 +5138,12 @@
                 pinnedText.innerHTML = '<span>🎨</span> Стикер';
             } else if (msg.type === 'voice') {
                 pinnedText.innerHTML = '<span>🎤</span> Голосовое';
+            } else if (msg.type === 'text') {
+                const text = msg.content || '';
+                pinnedText.innerHTML = '<span>📝</span> <strong>' + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ':</strong> ' + (text.length > 60 ? text.substring(0, 60) + '...' : text);
             } else {
                 const text = msg.content || '';
-            pinnedText.innerHTML = '<span>📌</span> <strong>' + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ':</strong> ' + (text.length > 60 ? text.substring(0, 60) + '...' : text);
+                pinnedText.innerHTML = '<span>📌</span> <strong>' + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ':</strong> ' + (text.length > 60 ? text.substring(0, 60) + '...' : text);
             }
             
             pinnedBar.classList.add('active');
@@ -4885,10 +5321,11 @@
                 content: msg.content || msg.text || '',
                 type: msg.type,
                 mediaUrl: msg.mediaUrl,
-                senderName: msg.senderFirstName || msg.sender?.firstName || msg.senderName || 'Пользователь'
+                senderName: msg.senderName || msg.sender?.firstName || 'Unknown',
+                senderAvatar: msg.senderAvatar || msg.sender?.avatar || null
             };
             
-            // Показываем превью сообщения
+            // Показываем превью сообщения в старом формате (для совместимости)
             const previewEl = document.getElementById('forwardPreview');
             if (forwardMessageData.type === 'image' || forwardMessageData.type === 'photo') {
                 previewEl.innerHTML = '<img src="' + forwardMessageData.mediaUrl + '" style="max-width: 60px; max-height: 60px; border-radius: 8px; vertical-align: middle; margin-right: 8px;"> <span>Фото</span>';
@@ -4902,14 +5339,12 @@
                 previewEl.innerHTML = '<strong>' + forwardMessageData.senderName + ':</strong> ' + (forwardMessageData.content.substring(0, 100) || 'Текстовое сообщение');
             }
             
+            // Показываем мини-бар пересланного сообщения
+            showForwardMessageBar();
+            
             // Загружаем список чатов
-            renderForwardChatsList();
-            
-            document.getElementById('forwardModal').classList.add('active');
-            
-            // Добавляем обработчик поиска
-            setTimeout(function() {
-                document.getElementById('forwardSearchInput').focus();
+            setTimeout(() => {
+                loadForwardChats();
             }, 100);
         }
 
@@ -4918,6 +5353,88 @@
             document.getElementById('forwardSearchInput').value = '';
             document.getElementById('forwardChatsList').innerHTML = '';
             forwardMessageData = null;
+            
+            // Скрываем мини-бар пересланного сообщения
+            const forwardBar = document.getElementById('forwardMessagePreview');
+            if (forwardBar) {
+                forwardBar.style.display = 'none';
+            }
+        }
+
+        // Функция для отображения мини-бара пересланного сообщения
+        function showForwardMessageBar() {
+            if (!forwardMessageData) return;
+            
+            const forwardBar = document.getElementById('forwardMessagePreview');
+            const avatarEl = document.getElementById('forwardMessageAvatar');
+            const senderEl = document.getElementById('forwardMessageSender');
+            const textEl = document.getElementById('forwardMessageText');
+            
+            if (!forwardBar || !avatarEl || !senderEl || !textEl) return;
+            
+            // Устанавливаем аватар отправителя
+            if (forwardMessageData.senderAvatar) {
+                avatarEl.src = forwardMessageData.senderAvatar;
+                avatarEl.style.display = 'block';
+            } else {
+                // Если нет аватара, показываем первую букву имени
+                avatarEl.style.display = 'none';
+            }
+            
+            // Устанавливаем имя отправителя
+            senderEl.textContent = forwardMessageData.senderName || 'Unknown';
+            
+            // Устанавливаем текст сообщения в зависимости от типа
+            let messageText = '';
+            if (forwardMessageData.type === 'image' || forwardMessageData.type === 'photo') {
+                messageText = 'Фото';
+            } else if (forwardMessageData.type === 'video') {
+                messageText = 'Видео';
+            } else if (forwardMessageData.type === 'gif') {
+                messageText = 'GIF';
+            } else if (forwardMessageData.type === 'sticker') {
+                messageText = 'Стикер';
+            } else if (forwardMessageData.type === 'voice') {
+                messageText = 'Голосовое сообщение';
+            } else {
+                messageText = forwardMessageData.content || '';
+                // Обрезаем длинный текст
+                if (messageText.length > 50) {
+                    messageText = messageText.substring(0, 50) + '...';
+                }
+            }
+            
+            textEl.textContent = messageText;
+            
+            // Показываем мини-бар
+            forwardBar.style.display = 'flex';
+        }
+
+        // Функция для очистки пересланного сообщения
+        function clearForwardMessage() {
+            forwardMessageData = null;
+            
+            const forwardBar = document.getElementById('forwardMessagePreview');
+            const previewEl = document.getElementById('forwardPreview');
+            
+            if (forwardBar) {
+                forwardBar.style.display = 'none';
+            }
+            
+            if (previewEl) {
+                previewEl.innerHTML = '';
+            }
+            
+            showToast('info', 'Сообщение очищено', '🗑️');
+        }
+
+        // Загрузка чатов для пересылки
+        function loadForwardChats() {
+            // Показываем модальное окно
+            document.getElementById('forwardModal').classList.add('active');
+            
+            // Рендерим список чатов
+            renderForwardChatsList('');
         }
 
         function renderForwardChatsList(filter) {
@@ -5066,10 +5583,20 @@
         async function send() {
             const input = document.getElementById('msgInput');
             const text = getInputText();
-            if (!text || !activeChat) return;
+            
+            // Проверяем есть ли контент для отправки
+            if ((!text && attachedFiles.length === 0) || !activeChat) return;
             
             closeEmojiPicker();
+            closeAttachmentPanel();
             
+            // Если есть прикрепленные файлы, отправляем их
+            if (attachedFiles.length > 0) {
+                await sendAttachedFiles(text);
+                return;
+            }
+            
+            // Обычная отправка текста
             const tempId = 'temp-' + Date.now();
             const tempMsg = {
                 id: tempId,
@@ -5306,6 +5833,12 @@
                 const data = await res.json();
                 if (res.ok) {
                     showToast('success', tr('chatRestored', 'Чат восстановлен'), '📁');
+                    
+                    // Если мы в режиме просмотра архивов и это был последний чат, выходим из режима
+                    if (isViewingArchives && archivedChats.length === 1) {
+                        isViewingArchives = false;
+                    }
+                    
                     loadChats();
                 } else {
                     showToast('error', data.error || tr('error', 'Ошибка'), '❌');
@@ -5411,8 +5944,585 @@
 
         function toggleArchivedChats() {
             const list = document.getElementById('archivedChatsList');
-            if (list) {
-                list.style.display = list.style.display === 'none' ? 'block' : 'none';
+            const header = document.querySelector('.archived-chats-header');
+            
+            if (list && header) {
+                const isCollapsed = list.classList.contains('collapsed');
+                
+                if (isCollapsed) {
+                    // Разворачиваем
+                    list.classList.remove('collapsed');
+                    header.classList.remove('collapsed');
+                    localStorage.setItem('archived_chats_collapsed', 'false');
+                } else {
+                    // Сворачиваем
+                    list.classList.add('collapsed');
+                    header.classList.add('collapsed');
+                    localStorage.setItem('archived_chats_collapsed', 'true');
+                }
+            }
+        }
+
+        function enterArchivesView() {
+            isViewingArchives = true;
+            renderChatList();
+        }
+
+        function exitArchivesView() {
+            isViewingArchives = false;
+            renderChatList();
+        }
+
+        // ============================================
+        // ATTACHMENT PANEL FUNCTIONS
+        // ============================================
+        function toggleAttachmentPanel() {
+            const panel = document.getElementById('attachmentPanel');
+            const isOpen = panel.classList.contains('active');
+            
+            if (isOpen) {
+                closeAttachmentPanel();
+            } else {
+                openAttachmentPanel();
+            }
+        }
+
+        function openAttachmentPanel() {
+            const panel = document.getElementById('attachmentPanel');
+            panel.classList.add('active');
+            attachmentPanelOpen = true;
+            
+            // Закрываем другие панели
+            closeEmojiPicker();
+            closeStickerModal();
+        }
+
+        function closeAttachmentPanel() {
+            const panel = document.getElementById('attachmentPanel');
+            panel.classList.remove('active');
+            attachmentPanelOpen = false;
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function getFileIcon(fileName) {
+            const extension = fileName.split('.').pop().toLowerCase();
+            const iconMap = {
+                // Images
+                'jpg': '🖼️', 'jpeg': '🖼️', 'png': '🖼️', 'gif': '🖼️', 'webp': '🖼️', 'svg': '🖼️',
+                // Videos
+                'mp4': '🎬', 'avi': '🎬', 'mov': '🎬', 'wmv': '🎬', 'flv': '🎬', 'webm': '🎬',
+                // Audio
+                'mp3': '🎵', 'wav': '🎵', 'ogg': '🎵', 'aac': '🎵', 'flac': '🎵',
+                // Documents
+                'pdf': '📄', 'doc': '📝', 'docx': '📝', 'txt': '📝', 'rtf': '📝',
+                'xls': '📊', 'xlsx': '📊', 'csv': '📊',
+                'ppt': '📊', 'pptx': '📊',
+                // Archives
+                'zip': '📦', 'rar': '📦', '7z': '📦', 'tar': '📦', 'gz': '📦',
+                // Default
+                'default': '📎'
+            };
+            return iconMap[extension] || iconMap.default;
+        }
+
+        function addAttachedFile(file) {
+            const fileId = Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            const fileInfo = {
+                id: fileId,
+                file: file,
+                name: file.name,
+                size: file.size,
+                type: file.type,
+                icon: getFileIcon(file.name)
+            };
+            
+            attachedFiles.push(fileInfo);
+            updateFilePreview();
+            closeAttachmentPanel();
+        }
+
+        function removeAttachedFile(fileId) {
+            attachedFiles = attachedFiles.filter(f => f.id !== fileId);
+            updateFilePreview();
+        }
+
+        function updateFilePreview() {
+            const panel = document.getElementById('filePreviewPanel');
+            const list = document.getElementById('filePreviewList');
+            
+            if (attachedFiles.length === 0) {
+                panel.classList.remove('active');
+                list.innerHTML = '';
+                return;
+            }
+            
+            panel.classList.add('active');
+            
+            list.innerHTML = attachedFiles.map(file => `
+                <div class="file-preview-item">
+                    <div class="file-preview-icon">${file.icon}</div>
+                    <div class="file-preview-info">
+                        <div class="file-preview-name">${file.name}</div>
+                        <div class="file-preview-size">${formatFileSize(file.size)}</div>
+                    </div>
+                    <button class="file-preview-remove" onclick="removeAttachedFile('${file.id}')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function clearAttachedFiles() {
+            attachedFiles = [];
+            updateFilePreview();
+        }
+
+        // ============================================
+        // ATTACHMENT TYPE FUNCTIONS
+        // ============================================
+        function openGallery() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*,video/*';
+            input.multiple = true;
+            input.onchange = function(e) {
+                const files = Array.from(e.target.files);
+                files.forEach(file => addAttachedFile(file));
+            };
+            input.click();
+        }
+
+        function openCamera() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.capture = 'environment';
+            input.onchange = function(e) {
+                if (e.target.files.length > 0) {
+                    addAttachedFile(e.target.files[0]);
+                }
+            };
+            input.click();
+        }
+
+        function openFilePicker() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.multiple = true;
+            input.onchange = function(e) {
+                const files = Array.from(e.target.files);
+                files.forEach(file => addAttachedFile(file));
+            };
+            input.click();
+        }
+
+        function shareLocation() {
+            if (!navigator.geolocation) {
+                showToast('error', 'Геолокация не поддерживается', '❌');
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const { latitude, longitude } = position.coords;
+                    const locationText = `📍 Моя геопозиция: https://maps.google.com/?q=${latitude},${longitude}`;
+                    
+                    // Добавляем как текстовое сообщение
+                    const input = document.getElementById('msgInput');
+                    input.innerText = locationText;
+                    input.focus();
+                    
+                    closeAttachmentPanel();
+                },
+                (error) => {
+                    showToast('error', 'Не удалось получить геопозицию', '❌');
+                }
+            );
+        }
+
+        function shareContact() {
+            // Открываем модальное окно для выбора контакта
+            showToast('info', 'Выбор контакта в разработке', '👤');
+            closeAttachmentPanel();
+        }
+
+        function sharePoll() {
+            // Открываем модальное окно для создания опроса
+            openPollModal();
+            closeAttachmentPanel();
+        }
+
+        function openPollModal() {
+            document.getElementById('pollModal').classList.add('active');
+            document.getElementById('pollQuestion').focus();
+            updatePollOptionRemoveButtons();
+        }
+
+        function closePollModal() {
+            document.getElementById('pollModal').classList.remove('active');
+            resetPollForm();
+        }
+
+        function resetPollForm() {
+            document.getElementById('pollQuestion').value = '';
+            const container = document.getElementById('pollOptionsContainer');
+            container.innerHTML = `
+                <div class="poll-option">
+                    <input type="text" class="poll-option-input" placeholder="Вариант ответа..." data-i18n-placeholder="pollOptionPlaceholder" maxlength="50">
+                    <button class="poll-option-remove" onclick="removePollOption(this)" style="display:none;">×</button>
+                </div>
+                <div class="poll-option">
+                    <input type="text" class="poll-option-input" placeholder="Вариант ответа..." data-i18n-placeholder="pollOptionPlaceholder" maxlength="50">
+                    <button class="poll-option-remove" onclick="removePollOption(this)" style="display:none;">×</button>
+                </div>
+            `;
+            document.getElementById('pollAnonymous').checked = false;
+            document.getElementById('pollMultiple').checked = false;
+            updatePollOptionRemoveButtons();
+        }
+
+        function addPollOption() {
+            const container = document.getElementById('pollOptionsContainer');
+            const optionCount = container.children.length;
+            
+            if (optionCount >= 10) {
+                showToast('error', 'Максимум 10 вариантов ответа', '❌');
+                return;
+            }
+            
+            const optionDiv = document.createElement('div');
+            optionDiv.className = 'poll-option';
+            optionDiv.innerHTML = `
+                <input type="text" class="poll-option-input" placeholder="Вариант ответа..." data-i18n-placeholder="pollOptionPlaceholder" maxlength="50">
+                <button class="poll-option-remove" onclick="removePollOption(this)" style="display:none;">×</button>
+            `;
+            
+            container.appendChild(optionDiv);
+            optionDiv.querySelector('.poll-option-input').focus();
+            updatePollOptionRemoveButtons();
+        }
+
+        function removePollOption(button) {
+            const option = button.parentElement;
+            const container = document.getElementById('pollOptionsContainer');
+            
+            if (container.children.length <= 2) {
+                showToast('error', 'Минимум 2 варианта ответа', '❌');
+                return;
+            }
+            
+            option.remove();
+            updatePollOptionRemoveButtons();
+        }
+
+        function updatePollOptionRemoveButtons() {
+            const container = document.getElementById('pollOptionsContainer');
+            const options = container.querySelectorAll('.poll-option');
+            const removeButtons = container.querySelectorAll('.poll-option-remove');
+            
+            removeButtons.forEach((button, index) => {
+                button.style.display = options.length > 2 ? 'flex' : 'none';
+            });
+        }
+
+        async function sendPoll() {
+            const question = document.getElementById('pollQuestion').value.trim();
+            const optionInputs = document.querySelectorAll('.poll-option-input');
+            const options = Array.from(optionInputs)
+                .map(input => input.value.trim())
+                .filter(option => option.length > 0);
+            
+            if (!question) {
+                showToast('error', 'Введите вопрос опроса', '❌');
+                return;
+            }
+            
+            if (options.length < 2) {
+                showToast('error', 'Добавьте минимум 2 варианта ответа', '❌');
+                return;
+            }
+            
+            const isAnonymous = document.getElementById('pollAnonymous').checked;
+            const isMultiple = document.getElementById('pollMultiple').checked;
+            
+            const pollData = {
+                question: question,
+                options: options,
+                anonymous: isAnonymous,
+                multiple: isMultiple
+            };
+            
+            try {
+                const response = await fetch(`/api/v1/messages/${activeChat.id}/poll`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify(pollData)
+                });
+                
+                const data = await response.json();
+                
+                if (data.message) {
+                    messagesData[data.message.id] = data.message;
+                    document.getElementById('messages').appendChild(createMessageElement(data.message));
+                    scrollToBottom();
+                    closePollModal();
+                    showToast('success', 'Опрос отправлен', '📊');
+                } else {
+                    showToast('error', data.error || 'Ошибка отправки опроса', '❌');
+                }
+            } catch (error) {
+                console.error('Poll send error:', error);
+                showToast('error', 'Ошибка сети', '❌');
+            }
+        }
+
+        function shareVoice() {
+            // Запускаем запись голосового сообщения
+            if (typeof startVoiceRecording === 'function') {
+                startVoiceRecording();
+            } else {
+                showToast('info', 'Запись голоса в разработке', '🎤');
+            }
+            closeAttachmentPanel();
+        }
+
+        function shareVideo() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'video/*';
+            input.capture = 'environment';
+            input.onchange = function(e) {
+                if (e.target.files.length > 0) {
+                    addAttachedFile(e.target.files[0]);
+                }
+            };
+            input.click();
+        }
+
+        async function sendAttachedFiles(caption = '') {
+            if (!activeChat || attachedFiles.length === 0) return;
+
+            // Отправляем каждый файл отдельно
+            for (const fileInfo of attachedFiles) {
+                const file = fileInfo.file;
+                const tempId = 'temp-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+                
+                // Определяем тип сообщения
+                let messageType = 'file';
+                if (file.type.startsWith('image/')) {
+                    messageType = 'image';
+                } else if (file.type.startsWith('video/')) {
+                    messageType = 'video';
+                } else if (file.type.startsWith('audio/')) {
+                    messageType = 'audio';
+                }
+                
+                // Создаем временное сообщение
+                const tempMsg = {
+                    id: tempId,
+                    content: caption || fileInfo.name,
+                    fileName: fileInfo.name,
+                    fileSize: fileInfo.size,
+                    fileType: file.type,
+                    mediaUrl: URL.createObjectURL(file),
+                    type: messageType,
+                    senderId: user.id,
+                    time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
+                    senderName: user.firstName || user.username || tr('you', 'Вы'),
+                    replyToMessageId: replyingTo ? replyingTo.messageId : null,
+                    pending: true
+                };
+                
+                messagesData[tempId] = tempMsg;
+                document.getElementById('messages').appendChild(createMessageElement(tempMsg));
+                scrollToBottom();
+                
+                // Загружаем файл на сервер
+                await uploadAttachedFile(file, caption, messageType, tempId);
+            }
+            
+            // Очищаем прикрепленные файлы
+            clearAttachedFiles();
+            
+            // Очищаем поле ввода и отменяем ответ
+            const input = document.getElementById('msgInput');
+            input.innerText = '';
+            updateSendButton();
+            cancelReply();
+        }
+
+        async function uploadAttachedFile(file, caption, messageType, tempId) {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('content', caption);
+            formData.append('type', messageType);
+            
+            if (replyingTo) {
+                formData.append('replyTo', replyingTo.messageId);
+            }
+            
+            try {
+                const response = await fetch(`/api/v1/messages/${activeChat.id}/upload`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.message) {
+                    // Заменяем временное сообщение на серверное
+                    delete messagesData[tempId];
+                    messagesData[data.message.id] = data.message;
+                    
+                    const tempEl = document.querySelector(`[data-message-id="${tempId}"]`);
+                    if (tempEl) {
+                        tempEl.dataset.messageId = data.message.id;
+                        tempEl.classList.remove('pending');
+                        
+                        // Обновляем контент сообщения
+                        const contentEl = tempEl.querySelector('.message-content');
+                        if (contentEl) {
+                            contentEl.textContent = data.message.content || data.message.fileName || '';
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                showToast('error', 'Ошибка загрузки файла', '❌');
+                
+                // Удаляем временное сообщение при ошибке
+                delete messagesData[tempId];
+                const tempEl = document.querySelector(`[data-message-id="${tempId}"]`);
+                if (tempEl) {
+                    tempEl.remove();
+                }
+            }
+        }
+
+        function createPollElement(poll) {
+            const pollDiv = document.createElement('div');
+            pollDiv.className = 'poll-container';
+            
+            const isExpired = poll.expiresAt && new Date(poll.expiresAt) < new Date();
+            const hasVoted = poll.userVotes && poll.userVotes.length > 0;
+            const totalVotes = poll.options ? poll.options.reduce((sum, opt) => sum + (opt.votes || 0), 0) : 0;
+            
+            // Заголовок опроса
+            const headerDiv = document.createElement('div');
+            headerDiv.className = 'poll-header';
+            headerDiv.innerHTML = `
+                <div class="poll-title">${poll.question}</div>
+                <div class="poll-info">
+                    ${poll.anonymous ? '<span class="poll-badge">Анонимный</span>' : ''}
+                    ${poll.multiple ? '<span class="poll-badge">Множественный выбор</span>' : ''}
+                    <span class="poll-votes">${totalVotes} ${pluralVotes(totalVotes)}</span>
+                </div>
+            `;
+            pollDiv.appendChild(headerDiv);
+            
+            // Варианты ответа
+            const optionsDiv = document.createElement('div');
+            optionsDiv.className = 'poll-options';
+            
+            if (poll.options) {
+                poll.options.forEach((option, index) => {
+                    const optionDiv = document.createElement('div');
+                    optionDiv.className = 'poll-option-item';
+                    
+                    const voteCount = option.votes || 0;
+                    const percentage = totalVotes > 0 ? Math.round((voteCount / totalVotes) * 100) : 0;
+                    const userVoted = poll.userVotes && poll.userVotes.includes(index);
+                    
+                    optionDiv.innerHTML = `
+                        <button class="poll-option-btn ${userVoted ? 'voted' : ''} ${isExpired || hasVoted ? 'disabled' : ''}" 
+                                onclick="voteInPoll('${poll.id}', ${index})"
+                                ${isExpired || hasVoted ? 'disabled' : ''}>
+                            <div class="poll-option-content">
+                                <div class="poll-option-text">${option.text}</div>
+                                <div class="poll-option-stats">
+                                    <span class="poll-option-percentage">${percentage}%</span>
+                                    <span class="poll-option-votes">${voteCount}</span>
+                                </div>
+                            </div>
+                            ${userVoted ? '<div class="poll-option-check">✓</div>' : ''}
+                            <div class="poll-option-bar" style="width: ${percentage}%"></div>
+                        </button>
+                    `;
+                    
+                    optionsDiv.appendChild(optionDiv);
+                });
+            }
+            
+            pollDiv.appendChild(optionsDiv);
+            
+            return pollDiv;
+        }
+
+        function pluralVotes(count) {
+            const lastDigit = count % 10;
+            const lastTwoDigits = count % 100;
+            
+            if (lastTwoDigits >= 11 && lastTwoDigits <= 14) {
+                return 'голосов';
+            }
+            
+            if (lastDigit === 1) {
+                return 'голос';
+            } else if (lastDigit >= 2 && lastDigit <= 4) {
+                return 'голоса';
+            } else {
+                return 'голосов';
+            }
+        }
+
+        async function voteInPoll(pollId, optionIndex) {
+            try {
+                const response = await fetch(`/api/v1/messages/${activeChat.id}/poll/${pollId}/vote`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify({ optionIndex })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Обновляем опрос в сообщении
+                    const message = messagesData[pollId];
+                    if (message) {
+                        Object.assign(message, data.poll);
+                        
+                        // Находим элемент опроса и обновляем его
+                        const messageEl = document.querySelector(`[data-message-id="${pollId}"]`);
+                        if (messageEl) {
+                            const pollContainer = messageEl.querySelector('.poll-container');
+                            if (pollContainer) {
+                                const newPollContainer = createPollElement(data.poll);
+                                pollContainer.replaceWith(newPollContainer);
+                            }
+                        }
+                    }
+                } else {
+                    showToast('error', data.error || 'Ошибка голосования', '❌');
+                }
+            } catch (error) {
+                console.error('Poll vote error:', error);
+                showToast('error', 'Ошибка сети', '❌');
             }
         }
 
@@ -5582,19 +6692,6 @@
         function updateSendButton() {
             const hasText = getInputText().length > 0;
             document.getElementById('sendBtn').style.display = hasText ? 'flex' : 'none';
-            if (hasText) {
-                document.getElementById('voiceBtn').style.display = 'none';
-                document.getElementById('videoNoteBtn').style.display = 'none';
-            } else {
-                if (videoNoteMode && cameraAvailable) {
-                    document.getElementById('videoNoteBtn').style.display = 'flex';
-                    document.getElementById('voiceBtn').style.display = 'none';
-                } else {
-                    document.getElementById('voiceBtn').style.display = 'flex';
-                    document.getElementById('videoNoteBtn').style.display = 'none';
-                    if (!cameraAvailable) videoNoteMode = false;
-                }
-            }
         }
         const _origInputHandler = document.getElementById('msgInput').oninput;
         document.getElementById('msgInput').addEventListener('input', updateSendButton);
@@ -5780,210 +6877,6 @@
                 } catch (err) { showToast('error', tr('sendError', 'Ошибка отправки'), '❌'); }
             };
             reader.readAsDataURL(blob);
-        }
-
-        // ============================================
-        // VIDEO NOTES
-        // ============================================
-        let mediaRecorder = null;
-        let voiceChunks = [];
-        let voiceTimer = null;
-        let voiceSeconds = 0;
-        let isRecording = false;
-        let voiceHoldStartX = 0; // для свайпа отмены
-        let voiceCancelled = false;
-
-        let voiceHoldTimer = null;
-        const VOICE_HOLD_DELAY = 300;
-
-        function voiceBtnMouseDown(e) {
-            e.preventDefault();
-            voiceHoldTimer = setTimeout(() => {
-                voiceHoldTimer = null;
-                startVoiceHold(e);
-            }, VOICE_HOLD_DELAY);
-        }
-
-        function voiceBtnMouseUp(e) {
-            if (voiceHoldTimer) {
-                // Короткий клик — переключаем на кружок
-                clearTimeout(voiceHoldTimer);
-                voiceHoldTimer = null;
-                switchToVideoNote();
-            } else {
-                stopVoiceHold(e);
-            }
-        }
-
-        function voiceBtnTouchStart(e) {
-            e.preventDefault();
-            voiceHoldStartX = e.touches[0].clientX;
-            voiceCancelled = false;
-            voiceHoldTimer = setTimeout(() => {
-                voiceHoldTimer = null;
-                startVoiceHold(e);
-            }, VOICE_HOLD_DELAY);
-        }
-
-        function voiceBtnTouchEnd(e) {
-            if (voiceHoldTimer) {
-                clearTimeout(voiceHoldTimer);
-                voiceHoldTimer = null;
-                switchToVideoNote();
-            } else {
-                stopVoiceHold(e);
-            }
-        }
-
-        function startVoiceHold(e) {
-            if (isRecording) return;
-            voiceCancelled = false;
-            startVoiceRecording();
-        }
-
-        function stopVoiceHold(e) {
-            if (!isRecording) return;
-            if (voiceCancelled) return;
-            stopVoiceRecording();
-        }
-
-        function cancelVoiceHoldIfRecording() {
-            // На десктопе: если мышь ушла с кнопки — НЕ отменяем, просто останавливаем и отправляем
-            if (isRecording && !voiceCancelled) {
-                stopVoiceRecording();
-            }
-        }
-
-        function checkVoiceSwipe(e) {
-            if (!isRecording || !e.touches) return;
-            const currentX = e.touches[0].clientX;
-            const diff = voiceHoldStartX - currentX;
-            // Свайп влево на 120px — отмена (только тач)
-            if (diff > 120) {
-                voiceCancelled = true;
-                cancelVoiceRecording();
-            }
-        }
-
-        function handleVoiceBtn() {
-            // Оставляем для совместимости (клик на десктопе)
-            if (isRecording) {
-                stopVoiceRecording();
-            } else {
-                startVoiceRecording();
-            }
-        }
-
-        async function startVoiceRecording() {
-            if (!activeChat) {
-                showToast('info', 'Выберите чат', '⚠️');
-                return;
-            }
-
-            // Проверяем поддержку API
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                showToast('error', 'Браузер не поддерживает запись. Используйте HTTPS.', '🎤');
-                return;
-            }
-
-            // Проверяем текущее состояние разрешения
-            if (navigator.permissions) {
-                try {
-                    const perm = await navigator.permissions.query({ name: 'microphone' });
-                    console.log('🎤 Microphone permission state:', perm.state);
-                    if (perm.state === 'denied') {
-                        showToast('error', 'Доступ к микрофону заблокирован. Разрешите в настройках браузера.', '🎤');
-                        return;
-                    }
-                } catch (_) {}
-            }
-
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    audio: {
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        autoGainControl: true,
-                        sampleRate: 48000,
-                        channelCount: 1
-                    },
-                    video: false
-                });
-                voiceChunks = [];
-                voiceSeconds = 0;
-                isRecording = true;
-
-                // Определяем поддерживаемый формат с максимальным качеством
-                const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-                    ? 'audio/webm;codecs=opus'
-                    : MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')
-                    ? 'audio/ogg;codecs=opus'
-                    : MediaRecorder.isTypeSupported('audio/webm')
-                    ? 'audio/webm'
-                    : 'audio/ogg';
-
-                mediaRecorder = new MediaRecorder(stream, {
-                    mimeType,
-                    audioBitsPerSecond: 128000  // 128 kbps — хорошее качество
-                });
-                mediaRecorder.ondataavailable = e => { if (e.data.size > 0) voiceChunks.push(e.data); };
-                mediaRecorder.onstop = () => {
-                    stream.getTracks().forEach(t => t.stop());
-                    if (voiceChunks.length > 0 && voiceSeconds >= 1) {
-                        const blob = new Blob(voiceChunks, { type: mimeType });
-                        sendVoiceMessage(blob, voiceSeconds);
-                    }
-                    resetVoiceUI();
-                };
-                mediaRecorder.start(100);
-
-                // UI
-                document.getElementById('msgInput').style.display = 'none';
-                document.getElementById('voiceRecordingBar').classList.add('active');
-                document.getElementById('voiceBtn').classList.add('recording');
-                document.getElementById('voiceBtn').innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
-
-                voiceTimer = setInterval(() => {
-                    voiceSeconds++;
-                    const m = Math.floor(voiceSeconds / 60);
-                    const s = voiceSeconds % 60;
-                    document.getElementById('voiceRecTime').textContent = m + ':' + String(s).padStart(2, '0');
-                    // Максимум 5 минут
-                    if (voiceSeconds >= 300) stopVoiceRecording();
-                }, 1000);
-
-            } catch (e) {
-                console.error('Microphone error:', e.name, e.message);
-                if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
-                    showToast('error', 'Разрешите доступ к микрофону в настройках браузера', '🎤');
-                } else if (e.name === 'NotFoundError' || e.name === 'DevicesNotFoundError') {
-                    showToast('error', 'Микрофон не найден', '🎤');
-                } else if (e.name === 'NotSupportedError' || location.protocol !== 'https:' && location.hostname !== 'localhost') {
-                    showToast('error', 'Запись доступна только по HTTPS', '🔒');
-                } else {
-                    showToast('error', 'Ошибка микрофона: ' + e.message, '🎤');
-                }
-            }
-        }
-
-        function stopVoiceRecording() {
-            clearInterval(voiceTimer);
-            voiceTimer = null;
-            isRecording = false;
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                mediaRecorder.stop();
-            }
-        }
-
-        function cancelVoiceRecording() {
-            voiceChunks = [];
-            clearInterval(voiceTimer);
-            voiceTimer = null;
-            isRecording = false;
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                mediaRecorder.stop();
-            }
-            resetVoiceUI();
         }
 
         function resetVoiceUI() {
@@ -6263,20 +7156,6 @@
             };
 
             wrapper._audio = audio;
-            wrapper._playing = false;
-
-            wrapper.appendChild(playBtn);
-            wrapper.appendChild(waveform);
-            wrapper.appendChild(durEl);
-            return wrapper;
-        }
- connectWebSocket();
- loadChats().then(function() {
-     initFolderTabs();
-     // Открываем чат из параметра URL (например из папки)
-     const params = new URLSearchParams(window.location.search);
-     const openChatId = params.get('openChat');
-     if (openChatId) {
          const chat = allChats.find(function(c) { return c.id === openChatId; });
          if (chat) {
              openChat(chat.id, chat.name || chat.title);
@@ -6284,7 +7163,6 @@
          // Убираем параметр из URL
          history.replaceState({}, '', window.location.pathname);
      }
- });
  syncUserData();
  updateSideMenuProfile();
  if (window.applyTheme) window.applyTheme();
@@ -7107,13 +7985,895 @@
  toast.style.opacity = '0';
  setTimeout(function() { toast.remove(); },300);
  },10000);
- }
 
- // Запускаем проверку при загрузке
- checkSessionAndShowGreeting();
+function getCurrentTime() {
+    var now = new Date();
+    var hours = now.getHours().toString().padStart(2, '0');
+    var minutes = now.getMinutes().toString().padStart(2, '0');
+    return hours + ':' + minutes;
+}
 
- // Обновляем вкладки папок при возврате на страницу
- window.addEventListener('focus', function() { initFolderTabs(); });
- document.addEventListener('visibilitychange', function() {
-     if (!document.hidden) initFolderTabs();
- });
+function checkSessionAndShowGreeting() {
+    fetch('/api/v1/auth/sessions', {
+        headers: { 'Authorization': 'Bearer ' + token }
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+        if (data.sessions && data.sessions.length >0) {
+            // Если есть более одной сессии
+            if (data.sessions.length >1) {
+                var device = getDeviceInfo();
+                var time = getCurrentTime();
+                var userName = user.firstName || user.username || 'пользователь';
+                        
+                var greetingMsg = 'Здравствуйте, ' + userName + ', кто-то вошел в ваш аккаунт с ' + device + ' в ' + time + '.\n\nЕсли это были не вы, НЕЗАМЕДЛИТЕЛЬНО завершите сеанс в настройках.';
+                        
+                showCraneAppGreeting(greetingMsg);
+            }
+        }
+    })
+    .catch(function(err) {
+        console.error('Session check error:', err);
+    });
+}
+
+function showCraneAppGreeting(message) {
+    var container = document.getElementById('toastContainer');
+            
+    var toast = document.createElement('div');
+    toast.className = 'toast craneapp-greeting';
+    toast.innerHTML = '<div class="craneapp-greeting-header"><span>🤖 CraneApp</span></div>' +
+    '<div class="craneapp-greeting-body">' + message.replace(/\n/g, '<br>') + '</div>';
+            
+    container.appendChild(toast);
+            
+    setTimeout(function() {
+        toast.style.opacity = '0';
+        setTimeout(function() { toast.remove(); },300);
+    },10000);
+}
+
+// Запускаем проверку при загрузке
+checkSessionAndShowGreeting();
+}
+
+// Обновляем онлайн-статус
+function updateOnlineStatus(isOnline) {
+    try {
+        fetch('/api/v1/users/online-status', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({ isOnline: isOnline })
+        }).catch(() => {});
+    } catch (e) {}
+}
+
+// Обновляем статус при фокусе окна
+window.addEventListener('focus', function() { 
+    initFolderTabs();
+    updateOnlineStatus(true);
+});
+
+// Обновляем статус при потере фокуса
+window.addEventListener('blur', function() {
+    updateOnlineStatus(false);
+});
+
+// Обновляем статус при изменении видимости страницы
+document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) {
+        initFolderTabs();
+        updateOnlineStatus(true);
+    } else {
+        updateOnlineStatus(false);
+    }
+});
+
+// Обновляем статус при закрытии страницы
+window.addEventListener('beforeunload', function() {
+    updateOnlineStatus(false);
+});
+
+// Обновляем статус при скрытии страницы
+document.addEventListener('pagehide', function() {
+    updateOnlineStatus(false);
+});
+
+// ============================================
+// CHAT MANAGEMENT
+// ============================================
+
+// Удаление чата (для себя/для всех)
+async function deleteChat(chatId, forEveryone = false) {
+    if (!chatId) return;
+    
+    try {
+        const url = '/api/v1/chats/' + chatId;
+        if (forEveryone) {
+            url += '?forEveryone=true';
+        }
+        
+        const res = await fetch(url, {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        
+        if (res.ok) {
+            // Удаляем из списка
+            allChats = allChats.filter(chat => chat.id !== chatId);
+            renderChatList();
+            
+            // Если текущий чат удален, закрываем его
+            if (activeChat && activeChat.id === chatId) {
+                closeChat();
+            }
+            
+            showToast('success', forEveryone ? 'Чат удален у всех' : 'Чат удален', '✓');
+        } else {
+            showToast('error', 'Ошибка удаления чата', '❌');
+        }
+    } catch (err) {
+        console.error('Delete chat error:', err);
+        showToast('error', 'Ошибка сети', '❌');
+    }
+}
+
+// Удаление переписки с пользователем
+async function deleteChatHistory(userId, forEveryone = false) {
+    if (!userId) return;
+    
+    try {
+        let url = '/api/v1/chats/history/' + userId;
+        if (forEveryone) {
+            url += '?forEveryone=true';
+        }
+        
+        const res = await fetch(url, {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        
+        if (res.ok) {
+            // Очищаем сообщения в текущем чате если это тот же пользователь
+            if (activeChat && activeChat.type === 'private' && activeChat.userId === userId) {
+                document.getElementById('messages').innerHTML = '';
+                messagesData = {};
+            }
+            
+            showToast('success', forEveryone ? 'Переписка удалена у всех' : 'Переписка удалена', '✓');
+        } else {
+            showToast('error', 'Ошибка удаления переписки', '❌');
+        }
+    } catch (err) {
+        console.error('Delete history error:', err);
+        showToast('error', 'Ошибка сети', '❌');
+    }
+}
+
+// Функция для закрытия текущего чата
+function closeChat() {
+    activeChat = null;
+    document.getElementById('chatView').style.display = 'none';
+    document.getElementById('chatList').style.display = 'block';
+    document.getElementById('messages').innerHTML = '';
+    messagesData = {};
+}
+
+// ============================================
+// МИНИ-РЕДАКТОР ФОТОГРАФИЙ
+// ============================================
+
+let photoEditorState = {
+    originalImage: null,
+    canvas: null,
+    ctx: null,
+    rotation: 0,
+    flipH: false,
+    flipV: false,
+    brightness: 100,
+    contrast: 100,
+    filter: 'none',
+    isCropping: false,
+    cropBox: null,
+    originalDataUrl: null
+};
+
+// Открытие редактора фотографий
+function openPhotoEditor() {
+    if (!_pendingMediaDataUrl || _pendingMediaType !== 'image') return;
+    
+    const canvas = document.getElementById('photoEditorCanvas');
+    const content = document.getElementById('mediaSendPreviewContent');
+    const tools = document.getElementById('photoEditorTools');
+    const editBtn = document.getElementById('editPhotoBtn');
+    
+    // Сохраняем оригинальный dataUrl
+    photoEditorState.originalDataUrl = _pendingMediaDataUrl;
+    
+    // Инициализация canvas
+    photoEditorState.canvas = canvas;
+    photoEditorState.ctx = canvas.getContext('2d');
+    
+    // Загрузка изображения
+    const img = new Image();
+    img.onload = function() {
+        photoEditorState.originalImage = img;
+        
+        // Настройка размеров canvas
+        const maxWidth = content.clientWidth;
+        const maxHeight = window.innerHeight * 0.6;
+        
+        let width = img.width;
+        let height = img.height;
+        
+        // Масштабирование
+        if (width > maxWidth || height > maxHeight) {
+            const ratio = Math.min(maxWidth / width, maxHeight / height);
+            width *= ratio;
+            height *= ratio;
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        
+        // Применение текущих настроек и отрисовка
+        applyPhotoEdits();
+        
+        // Показываем интерфейс редактора
+        canvas.style.display = 'block';
+        content.querySelector('img')?.style.display = 'none';
+        tools.style.display = 'block';
+        editBtn.style.display = 'none';
+    };
+    
+    img.src = _pendingMediaDataUrl;
+}
+
+// Закрытие редактора
+function closePhotoEditor() {
+    const canvas = document.getElementById('photoEditorCanvas');
+    const content = document.getElementById('mediaSendPreviewContent');
+    const tools = document.getElementById('photoEditorTools');
+    const editBtn = document.getElementById('editPhotoBtn');
+    const drawingTools = document.getElementById('drawingTools');
+    const drawBtn = document.getElementById('drawBtn');
+    
+    // Выключаем режим рисования если активен
+    if (drawingState.isDrawingMode) {
+        toggleDrawingMode();
+    }
+    
+    // Удаляем canvas для рисования
+    if (drawingState.drawingCanvas) {
+        drawingState.drawingCanvas.remove();
+        drawingState.drawingCanvas = null;
+    }
+    
+    // Восстанавливаем оригинальное изображение
+    _pendingMediaDataUrl = photoEditorState.originalDataUrl;
+    
+    // Показываем оригинальное изображение
+    content.innerHTML = '<img src="' + _pendingMediaDataUrl + '" style="max-width:100%;max-height:55vh;border-radius:12px;object-fit:contain;">';
+    
+    // Скрываем инструменты редактора
+    canvas.style.display = 'none';
+    tools.style.display = 'none';
+    drawingTools.style.display = 'none';
+    editBtn.style.display = 'block';
+    drawBtn.classList.remove('active');
+    
+    // Сброс состояния
+    resetPhotoEditorState();
+}
+
+// Сброс состояния редактора
+function resetPhotoEditorState() {
+    photoEditorState = {
+        originalImage: null,
+        canvas: null,
+        ctx: null,
+        rotation: 0,
+        flipH: false,
+        flipV: false,
+        brightness: 100,
+        contrast: 100,
+        filter: 'none',
+        isCropping: false,
+        cropBox: null,
+        originalDataUrl: photoEditorState.originalDataUrl
+    };
+    
+    // Сброс слайдеров
+    document.getElementById('brightnessSlider').value = 100;
+    document.getElementById('contrastSlider').value = 100;
+    
+    // Сброс фильтров
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.dataset.filter === 'none') {
+            btn.classList.add('active');
+        }
+    });
+}
+
+// Применение всех редактирований
+function applyPhotoEdits() {
+    const { canvas, ctx, originalImage, rotation, flipH, flipV, brightness, contrast, filter } = photoEditorState;
+    
+    if (!canvas || !ctx || !originalImage) return;
+    
+    // Очистка canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Сохранение состояния
+    ctx.save();
+    
+    // Перемещение в центр для вращения
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    
+    // Применение вращения
+    ctx.rotate(rotation * Math.PI / 180);
+    
+    // Применение отражения
+    ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+    
+    // Применение фильтров
+    ctx.filter = getFilterString(brightness, contrast, filter);
+    
+    // Рисование изображения
+    ctx.drawImage(originalImage, -originalImage.width / 2, -originalImage.height / 2, originalImage.width, originalImage.height);
+    
+    // Восстановление состояния
+    ctx.restore();
+    
+    // Накладываем рисунок если есть
+    if (drawingState.drawingCanvas && drawingState.isDrawingMode) {
+        ctx.drawImage(drawingState.drawingCanvas, 0, 0);
+    }
+    
+    // Обновление dataUrl
+    _pendingMediaDataUrl = canvas.toDataURL('image/jpeg', 0.9);
+}
+
+// Получение строки фильтра
+function getFilterString(brightness, contrast, filter) {
+    let filterString = `brightness(${brightness}%) contrast(${contrast}%)`;
+    
+    switch(filter) {
+        case 'grayscale':
+            filterString += ' grayscale(100%)';
+            break;
+        case 'sepia':
+            filterString += ' sepia(100%)';
+            break;
+        case 'vintage':
+            filterString += ' sepia(50%) contrast(120%) brightness(90%)';
+            break;
+        case 'cold':
+            filterString += ' hue-rotate(180deg) saturate(140%)';
+            break;
+        case 'warm':
+            filterString += ' hue-rotate(-30deg) saturate(120%) brightness(110%)';
+            break;
+    }
+    
+    return filterString;
+}
+
+// Поворот изображения
+function rotatePhoto(degrees) {
+    photoEditorState.rotation += degrees;
+    applyPhotoEdits();
+}
+
+// Отражение изображения
+function flipPhoto(direction) {
+    if (direction === 'horizontal') {
+        photoEditorState.flipH = !photoEditorState.flipH;
+    } else {
+        photoEditorState.flipV = !photoEditorState.flipV;
+    }
+    applyPhotoEdits();
+}
+
+// Применение фильтра
+function applyFilter(filterName) {
+    photoEditorState.filter = filterName;
+    
+    // Обновление активной кнопки
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.dataset.filter === filterName) {
+            btn.classList.add('active');
+        }
+    });
+    
+    applyPhotoEdits();
+}
+
+// Регулировка яркости/контраста
+function adjustImage(type, value) {
+    if (type === 'brightness') {
+        photoEditorState.brightness = parseInt(value);
+    } else if (type === 'contrast') {
+        photoEditorState.contrast = parseInt(value);
+    }
+    applyPhotoEdits();
+}
+
+// Сброс всех редактирований
+function resetEdits() {
+    photoEditorState.rotation = 0;
+    photoEditorState.flipH = false;
+    photoEditorState.flipV = false;
+    photoEditorState.brightness = 100;
+    photoEditorState.contrast = 100;
+    photoEditorState.filter = 'none';
+    
+    // Сброс UI
+    document.getElementById('brightnessSlider').value = 100;
+    document.getElementById('contrastSlider').value = 100;
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.dataset.filter === 'none') {
+            btn.classList.add('active');
+        }
+    });
+    
+    applyPhotoEdits();
+}
+
+// ============================================
+// РИСОВАНИЕ НА ИЗОБРАЖЕНИИ
+// ============================================
+
+let drawingState = {
+    isDrawing: false,
+    isDrawingMode: false,
+    drawingTool: 'pen',
+    drawColor: '#000000',
+    brushSize: 3,
+    drawingCanvas: null,
+    drawingCtx: null,
+    lastX: 0,
+    lastY: 0
+};
+
+// Переключение режима рисования
+function toggleDrawingMode() {
+    const drawBtn = document.getElementById('drawBtn');
+    const drawingTools = document.getElementById('drawingTools');
+    const canvas = photoEditorState.canvas;
+    
+    drawingState.isDrawingMode = !drawingState.isDrawingMode;
+    
+    if (drawingState.isDrawingMode) {
+        // Включаем режим рисования
+        drawBtn.classList.add('active');
+        drawingTools.style.display = 'block';
+        canvas.classList.add('drawing-mode');
+        
+        // Создаем canvas для рисования
+        setupDrawingCanvas();
+        
+        // Добавляем обработчики событий
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('mouseout', stopDrawing);
+        
+        // Для мобильных устройств
+        canvas.addEventListener('touchstart', handleTouch);
+        canvas.addEventListener('touchmove', handleTouch);
+        canvas.addEventListener('touchend', stopDrawing);
+    } else {
+        // Выключаем режим рисования
+        drawBtn.classList.remove('active');
+        drawingTools.style.display = 'none';
+        canvas.classList.remove('drawing-mode');
+        
+        // Удаляем обработчики событий
+        canvas.removeEventListener('mousedown', startDrawing);
+        canvas.removeEventListener('mousemove', draw);
+        canvas.removeEventListener('mouseup', stopDrawing);
+        canvas.removeEventListener('mouseout', stopDrawing);
+        
+        canvas.removeEventListener('touchstart', handleTouch);
+        canvas.removeEventListener('touchmove', handleTouch);
+        canvas.removeEventListener('touchend', stopDrawing);
+    }
+}
+
+// Настройка canvas для рисования
+function setupDrawingCanvas() {
+    const canvas = photoEditorState.canvas;
+    if (!canvas) return;
+    
+    // Создаем overlay canvas для рисования
+    if (!drawingState.drawingCanvas) {
+        drawingState.drawingCanvas = document.createElement('canvas');
+        drawingState.drawingCanvas.style.position = 'absolute';
+        drawingState.drawingCanvas.style.top = '0';
+        drawingState.drawingCanvas.style.left = '0';
+        drawingState.drawingCanvas.style.pointerEvents = 'none';
+        canvas.parentElement.appendChild(drawingState.drawingCanvas);
+    }
+    
+    drawingState.drawingCanvas.width = canvas.width;
+    drawingState.drawingCanvas.height = canvas.height;
+    drawingState.drawingCtx = drawingState.drawingCanvas.getContext('2d');
+    drawingState.drawingCanvas.style.pointerEvents = 'auto';
+}
+
+// Установка цвета рисования
+function setDrawColor(color) {
+    drawingState.drawColor = color;
+    
+    // Обновляем активную кнопку цвета
+    document.querySelectorAll('.color-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    event.target.classList.add('active');
+}
+
+// Установка размера кисти
+function setBrushSize(size) {
+    drawingState.brushSize = parseInt(size);
+    document.getElementById('brushSizeValue').textContent = size;
+}
+
+// Установка инструмента рисования
+function setDrawingTool(tool) {
+    drawingState.drawingTool = tool;
+    
+    // Обновляем активные кнопки инструментов
+    document.querySelectorAll('.drawing-tool-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    if (tool === 'pen') {
+        document.getElementById('penTool').classList.add('active');
+    } else if (tool === 'eraser') {
+        document.getElementById('eraserTool').classList.add('active');
+    }
+}
+
+// Начало рисования
+function startDrawing(e) {
+    if (!drawingState.isDrawingMode) return;
+    
+    drawingState.isDrawing = true;
+    const rect = photoEditorState.canvas.getBoundingClientRect();
+    drawingState.lastX = e.clientX - rect.left;
+    drawingState.lastY = e.clientY - rect.top;
+    
+    // Начинаем новую линию
+    drawingState.drawingCtx.beginPath();
+    drawingState.drawingCtx.moveTo(drawingState.lastX, drawingState.lastY);
+}
+
+// Рисование
+function draw(e) {
+    if (!drawingState.isDrawing || !drawingState.isDrawingMode) return;
+    
+    const rect = photoEditorState.canvas.getBoundingClientRect();
+    const currentX = e.clientX - rect.left;
+    const currentY = e.clientY - rect.top;
+    
+    const ctx = drawingState.drawingCtx;
+    
+    if (drawingState.drawingTool === 'pen') {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.strokeStyle = drawingState.drawColor;
+        ctx.lineWidth = drawingState.brushSize;
+    } else if (drawingState.drawingTool === 'eraser') {
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.lineWidth = drawingState.brushSize * 2;
+    }
+    
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    
+    ctx.beginPath();
+    ctx.moveTo(drawingState.lastX, drawingState.lastY);
+    ctx.lineTo(currentX, currentY);
+    ctx.stroke();
+    
+    drawingState.lastX = currentX;
+    drawingState.lastY = currentY;
+}
+
+// Остановка рисования
+function stopDrawing() {
+    drawingState.isDrawing = false;
+}
+
+// Обработка touch событий для мобильных устройств
+function handleTouch(e) {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const mouseEvent = new MouseEvent(e.type === 'touchstart' ? 'mousedown' : e.type === 'touchmove' ? 'mousemove' : 'mouseup', {
+        clientX: touch.clientX,
+        clientY: touch.clientY
+    });
+    photoEditorState.canvas.dispatchEvent(mouseEvent);
+}
+
+// Очистка рисунка
+function clearDrawing() {
+    if (drawingState.drawingCanvas && drawingState.drawingCtx) {
+        drawingState.drawingCtx.clearRect(0, 0, drawingState.drawingCanvas.width, drawingState.drawingCanvas.height);
+        showToast('info', 'Рисунок очищен', '🧹');
+    }
+}
+
+// ============================================
+// УЛУЧШЕННАЯ ОБРЕЗКА
+// ============================================
+
+let cropState = {
+    isCropping: false,
+    cropBox: null,
+    startX: 0,
+    startY: 0,
+    endX: 0,
+    endY: 0,
+    isDragging: false,
+    isResizing: false,
+    currentHandle: null,
+    dragStartX: 0,
+    dragStartY: 0
+};
+
+// Начало обрезки
+function startCrop() {
+    const canvas = photoEditorState.canvas;
+    const overlay = document.getElementById('cropOverlay');
+    const cropBox = document.getElementById('cropBox');
+    
+    if (!canvas) return;
+    
+    cropState.isCropping = true;
+    overlay.style.display = 'flex';
+    
+    // Устанавливаем начальные размеры и позицию обрезки
+    const rect = canvas.getBoundingClientRect();
+    const canvasRect = canvas.parentElement.getBoundingClientRect();
+    
+    // Начальная область обрезки - 80% от размера изображения
+    const cropWidth = canvas.width * 0.8;
+    const cropHeight = canvas.height * 0.8;
+    const cropLeft = (canvas.width - cropWidth) / 2;
+    const cropTop = (canvas.height - cropHeight) / 2;
+    
+    cropBox.style.left = cropLeft + 'px';
+    cropBox.style.top = cropTop + 'px';
+    cropBox.style.width = cropWidth + 'px';
+    cropBox.style.height = cropHeight + 'px';
+    
+    cropState.startX = cropLeft;
+    cropState.startY = cropTop;
+    cropState.endX = cropLeft + cropWidth;
+    cropState.endY = cropTop + cropHeight;
+    
+    // Добавляем обработчики событий для обрезки
+    setupCropEventListeners();
+}
+
+// Настройка обработчиков событий для обрезки
+function setupCropEventListeners() {
+    const cropBox = document.getElementById('cropBox');
+    
+    // Перемещение области обрезки
+    cropBox.addEventListener('mousedown', startCropDrag);
+    
+    // Изменение размера области обрезки
+    document.querySelectorAll('.crop-handle').forEach(handle => {
+        handle.addEventListener('mousedown', startCropResize);
+    });
+}
+
+// Начало перемещения области обрезки
+function startCropDrag(e) {
+    if (e.target.classList.contains('crop-handle')) return;
+    
+    cropState.isDragging = true;
+    cropState.dragStartX = e.clientX - parseInt(cropBox.style.left);
+    cropState.dragStartY = e.clientY - parseInt(cropBox.style.top);
+    
+    document.addEventListener('mousemove', dragCropBox);
+    document.addEventListener('mouseup', stopCropDrag);
+    
+    e.preventDefault();
+}
+
+// Перемещение области обрезки
+function dragCropBox(e) {
+    if (!cropState.isDragging) return;
+    
+    const cropBox = document.getElementById('cropBox');
+    const canvas = photoEditorState.canvas;
+    
+    let newLeft = e.clientX - cropState.dragStartX;
+    let newTop = e.clientY - cropState.dragStartY;
+    
+    // Ограничения в пределах canvas
+    newLeft = Math.max(0, Math.min(newLeft, canvas.width - parseInt(cropBox.style.width)));
+    newTop = Math.max(0, Math.min(newTop, canvas.height - parseInt(cropBox.style.height)));
+    
+    cropBox.style.left = newLeft + 'px';
+    cropBox.style.top = newTop + 'px';
+    
+    cropState.startX = newLeft;
+    cropState.startY = newTop;
+    cropState.endX = newLeft + parseInt(cropBox.style.width);
+    cropState.endY = newTop + parseInt(cropBox.style.height);
+}
+
+// Остановка перемещения области обрезки
+function stopCropDrag() {
+    cropState.isDragging = false;
+    document.removeEventListener('mousemove', dragCropBox);
+    document.removeEventListener('mouseup', stopCropDrag);
+}
+
+// Начало изменения размера области обрезки
+function startCropResize(e) {
+    cropState.isResizing = true;
+    cropState.currentHandle = e.target.dataset.handle;
+    cropState.dragStartX = e.clientX;
+    cropState.dragStartY = e.clientY;
+    
+    document.addEventListener('mousemove', resizeCropBox);
+    document.addEventListener('mouseup', stopCropResize);
+    
+    e.preventDefault();
+    e.stopPropagation();
+}
+
+// Изменение размера области обрезки
+function resizeCropBox(e) {
+    if (!cropState.isResizing) return;
+    
+    const cropBox = document.getElementById('cropBox');
+    const canvas = photoEditorState.canvas;
+    const handle = cropState.currentHandle;
+    
+    const deltaX = e.clientX - cropState.dragStartX;
+    const deltaY = e.clientY - cropState.dragStartY;
+    
+    let newLeft = parseInt(cropBox.style.left);
+    let newTop = parseInt(cropBox.style.top);
+    let newWidth = parseInt(cropBox.style.width);
+    let newHeight = parseInt(cropBox.style.height);
+    
+    switch(handle) {
+        case 'nw':
+            newLeft += deltaX;
+            newTop += deltaY;
+            newWidth -= deltaX;
+            newHeight -= deltaY;
+            break;
+        case 'ne':
+            newTop += deltaY;
+            newWidth += deltaX;
+            newHeight -= deltaY;
+            break;
+        case 'sw':
+            newLeft += deltaX;
+            newWidth -= deltaX;
+            newHeight += deltaY;
+            break;
+        case 'se':
+            newWidth += deltaX;
+            newHeight += deltaY;
+            break;
+    }
+    
+    // Минимальные размеры
+    if (newWidth >= 50 && newHeight >= 50) {
+        // Ограничения в пределах canvas
+        newLeft = Math.max(0, Math.min(newLeft, canvas.width - newWidth));
+        newTop = Math.max(0, Math.min(newTop, canvas.height - newHeight));
+        newWidth = Math.min(newWidth, canvas.width - newLeft);
+        newHeight = Math.min(newHeight, canvas.height - newTop);
+        
+        cropBox.style.left = newLeft + 'px';
+        cropBox.style.top = newTop + 'px';
+        cropBox.style.width = newWidth + 'px';
+        cropBox.style.height = newHeight + 'px';
+        
+        cropState.startX = newLeft;
+        cropState.startY = newTop;
+        cropState.endX = newLeft + newWidth;
+        cropState.endY = newTop + newHeight;
+    }
+    
+    cropState.dragStartX = e.clientX;
+    cropState.dragStartY = e.clientY;
+}
+}
+
+// Остановка изменения размера области обрезки
+function stopCropResize() {
+    cropState.isResizing = false;
+    cropState.currentHandle = null;
+    document.removeEventListener('mousemove', resizeCropBox);
+    document.removeEventListener('mouseup', stopCropResize);
+}
+
+// Подтверждение обрезки
+function confirmCrop() {
+    const canvas = photoEditorState.canvas;
+    const ctx = photoEditorState.ctx;
+    const originalImage = photoEditorState.originalImage;
+    
+    if (!canvas || !ctx || !originalImage) return;
+    
+    // Создаем временный canvas для обрезанного изображения
+    const tempCanvas = document.createElement('canvas');
+    const tempCtx = tempCanvas.getContext('2d');
+    
+    const cropWidth = cropState.endX - cropState.startX;
+    const cropHeight = cropState.endY - cropState.startY;
+    
+    tempCanvas.width = cropWidth;
+    tempCanvas.height = cropHeight;
+    
+    // Применяем текущие трансформации и обрезаем
+    ctx.save();
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate(photoEditorState.rotation * Math.PI / 180);
+    ctx.scale(photoEditorState.flipH ? -1 : 1, photoEditorState.flipV ? -1 : 1);
+    ctx.filter = getFilterString(photoEditorState.brightness, photoEditorState.contrast, photoEditorState.filter);
+    
+    // Рассчитываем координаты для обрезки с учетом трансформаций
+    const scaleX = originalImage.width / canvas.width;
+    const scaleY = originalImage.height / canvas.height;
+    
+    tempCtx.drawImage(
+        originalImage,
+        cropState.startX * scaleX, 
+        cropState.startY * scaleY, 
+        cropWidth * scaleX, 
+        cropHeight * scaleY,
+        0, 0, cropWidth, cropHeight
+    );
+    
+    ctx.restore();
+    
+    // Обновляем основной canvas
+    canvas.width = cropWidth;
+    canvas.height = cropHeight;
+    ctx.drawImage(tempCanvas, 0, 0);
+    
+    // Обновляем состояние
+    photoEditorState.rotation = 0;
+    photoEditorState.flipH = false;
+    photoEditorState.flipV = false;
+    
+    // Обновляем dataUrl
+    _pendingMediaDataUrl = canvas.toDataURL('image/jpeg', 0.9);
+    
+    // Закрываем режим обрезки
+    cancelCrop();
+    
+    showToast('success', 'Изображение обрезано', '✂️');
+}
+
+// Отмена обрезки
+function cancelCrop() {
+    const overlay = document.getElementById('cropOverlay');
+    overlay.style.display = 'none';
+    cropState.isCropping = false;
+    
+    // Удаляем обработчики событий
+    document.removeEventListener('mousemove', dragCropBox);
+    document.removeEventListener('mouseup', stopCropDrag);
+    document.removeEventListener('mousemove', resizeCropBox);
+    document.removeEventListener('mouseup', stopCropResize);
+}
