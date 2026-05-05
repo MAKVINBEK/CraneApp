@@ -782,8 +782,64 @@
             if (confirm(window.i18n?.t('logoutConfirm') || 'Выйти из аккаунта?')) {
                 localStorage.removeItem('craneapp_auth_token');
                 localStorage.removeItem('craneapp_user_data');
-                window.location.href = '../auth/login.html';
+                openTwoFactorModal();
             }
+        }
+
+        function openTwoFactorModal() {
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                z-index: 99999;
+                background: rgba(0, 0, 0, 0.5);
+                backdrop-filter: blur(10px);
+                -webkit-backdrop-filter: blur(10px);
+            `;
+            
+            const iframe = document.createElement('iframe');
+            iframe.src = '../auth/twoFactorModal.html';
+            iframe.style.cssText = `
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                width: 400px;
+                height: 600px;
+                max-width: 90vw;
+                max-height: 90vh;
+                border: none;
+                border-radius: 20px;
+                box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            `;
+            
+            modal.appendChild(iframe);
+            document.body.appendChild(modal);
+            
+            // Обработка сообщений из iframe
+            window.addEventListener('message', function handleModalMessage(event) {
+                if (event.data.type === 'auth-success') {
+                    localStorage.setItem('craneapp_auth_token', event.data.token);
+                    modal.remove();
+                    window.removeEventListener('message', handleModalMessage);
+                    // Перезагружаем страницу для обновления состояния
+                    window.location.reload();
+                } else if (event.data.type === 'auth-cancelled') {
+                    modal.remove();
+                    window.removeEventListener('message', handleModalMessage);
+                }
+            });
+            
+            // Закрытие по клику на фон
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    modal.remove();
+                    window.removeEventListener('message', handleModalMessage);
+                }
+            });
         }
 
         // ============================================
