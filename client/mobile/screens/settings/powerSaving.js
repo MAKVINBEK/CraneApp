@@ -110,34 +110,13 @@ const token = localStorage.getItem('craneapp_auth_token');
             document.getElementById('batteryIcon').textContent = charging ? '🔌' : level <= 20 ? '🪫' : '🔋';
 
             // Авто-включение при низком заряде
-            if (settings.autoLow && level <= 25 && !charging && !settings.powerSave) {
+            if (settings.autoLow && level <= 20 && !charging && !settings.powerSave) {
                 settings.powerSave = true;
                 document.getElementById('togglePowerSave').classList.add('active');
                 applyPowerSave(true);
                 save();
                 showToast('Режим энергосбережения включён автоматически', '🔋');
-                sendBotNotification('⚡ Энергосбережение', `Включён режим энергосбережения. Заряд батареи: ${level}%`);
             }
-        }
-
-        function sendBotNotification(title, message) {
-            try {
-                const token = localStorage.getItem('craneapp_auth_token');
-                if (!token) return;
-                
-                fetch('/api/v1/messages/bot', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + token
-                    },
-                    body: JSON.stringify({
-                        title: title,
-                        content: message,
-                        type: 'notification'
-                    })
-                }).catch(() => {});
-            } catch (e) {}
         }
 
         function showToast(msg, icon) {

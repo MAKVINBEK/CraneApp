@@ -2,62 +2,26 @@
             --bg-primary: #000000;
             --bg-secondary: #121212;
             --bg-tertiary: #1E1E1E;
-            --bg-quaternary: #2A2A2A;
             --text-primary: #FFFFFF;
             --text-secondary: #B0B0B0;
             --text-muted: #666666;
-            --text-dimmed: #444444;
             --border-color: #1E1E1E;
-            --border-light: #2A2A2A;
             --safe-area-top: env(safe-area-inset-top, 0px);
             --accent-color: #FF007F;
             --accent-gradient: linear-gradient(135deg, #FF007F, #9D00FF);
             --safe-area-bottom: env(safe-area-inset-bottom, 0px);
-            
-            /* Новые переменные для иконок */
-            --icon-profile: #FF007F;
-            --icon-notifications: #FF4B4B;
-            --icon-privacy: #FFA500;
-            --icon-storage: #2AABEE;
-            --icon-appearance: #9D00FF;
-            --icon-folders: #00C864;
-            --icon-stickers: #FFD700;
-            --icon-devices: #42A5F5;
-            --icon-premium: #FFD700;
-            --icon-advanced: #7E57C2;
-            --icon-help: #00C864;
-            --icon-about: #78909C;
-            --icon-logout: #FF4B4B;
         }
         
         [data-theme="light"] {
             --bg-primary: #FFFFFF;
             --bg-secondary: #F5F5F5;
             --bg-tertiary: #EEEEEE;
-            --bg-quaternary: #E0E0E0;
             --text-primary: #000000;
             --text-secondary: #666666;
             --text-muted: #999999;
-            --text-dimmed: #CCCCCC;
             --border-color: #DDDDDD;
-            --border-light: #E0E0E0;
             --accent-color: #FF007F;
             --accent-gradient: linear-gradient(135deg, #FF007F, #9D00FF);
-            
-            /* Цвета иконок для светлой темы */
-            --icon-profile: #FF007F;
-            --icon-notifications: #FF4B4B;
-            --icon-privacy: #FFA500;
-            --icon-storage: #2AABEE;
-            --icon-appearance: #9D00FF;
-            --icon-folders: #00C864;
-            --icon-stickers: #FFD700;
-            --icon-devices: #42A5F5;
-            --icon-premium: #FFD700;
-            --icon-advanced: #7E57C2;
-            --icon-help: #00C864;
-            --icon-about: #78909C;
-            --icon-logout: #FF4B4B;
         }
         
         * { 
@@ -105,6 +69,114 @@
             }
             .tab-bar { display: none !important; }
             .pc-header-menu { display: flex !important; }
+            .mobile-back-btn { display: none !important; }
+            .logout-btn-mobile { display: none !important; }
+        }
+        
+        @media (max-width: 767px) {
+            .pc-header-menu { display: none !important; }
+            .mobile-back-btn { display: block !important; }
+        }
+        
+        .header { 
+            padding: 10px 12px; 
+            background: var(--bg-secondary); 
+            border-bottom: 1px solid var(--border-color); 
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        @media (min-width: 768px) {
+            .header {
+                padding: 16px 32px;
+            }
+        }
+        
+        .header-left { 
+            display: flex; 
+            align-items: center; 
+            gap: 8px; 
+        }
+        
+        .back-btn { 
+            background: none; 
+            border: none; 
+            color: var(--text-primary); 
+            font-size: 22px; 
+            cursor: pointer; 
+            width: 36px; 
+            height: 36px; 
+            border-radius: 50%; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+        }
+        
+        .back-btn:active { 
+            background: rgba(255,255,255,0.1); 
+        }
+        
+        .header-title { 
+            font-size: 17px; 
+            font-weight: 700; 
+        }
+        
+        @media (min-width: 768px) {
+            .header-title {
+                font-size: 22px;
+            }
+        }
+        
+        .header-btn { 
+            background: none; 
+            border: none; 
+            color: var(--text-primary); 
+            font-size: 18px; 
+            cursor: pointer; 
+            width: 36px; 
+            height: 36px; 
+            border-radius: 50%; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+        }
+        
+        .header-btn:active { 
+            background: rgba(255,255,255,0.1); 
+        }
+        
+        .sync-indicator {
+            font-size: 12px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        @media (min-width: 768px) {
+            .sync-indicator {
+                font-size: 14px;
+            }
+        }
+        
+        .sync-indicator.syncing {
+            color: var(--accent-color);
+        }
+        
+        .sync-indicator.synced {
+            color: #00FF88;
+        }
+        
+        .profile-section { 
+            padding: 16px 12px; 
+            background: linear-gradient(180deg, rgba(255,0,127,0.1) 0%, transparent 100%); 
+            display: flex; 
+            align-items: center; 
+            gap: 12px; 
         }
         
         @media (min-width: 768px) {
@@ -211,58 +283,34 @@
             }
         }
         
-        /* Секции настроек */
-        .settings-section {
-            margin-bottom: 24px;
-        }
-        
-        .settings-section-title {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            padding: 0 16px;
-            margin-bottom: 8px;
-        }
-        
-        @media (min-width: 768px) {
-            .settings-section-title {
-                padding: 0 32px;
-                font-size: 14px;
-            }
-        }
-        
         .settings-group { 
             background: var(--bg-secondary); 
-            margin: 0 16px; 
-            border-radius: 16px; 
+            margin: 10px 8px; 
+            border-radius: 12px; 
             overflow: hidden; 
-            border: 1px solid var(--border-color);
         }
         
         @media (min-width: 768px) {
             .settings-group { 
-                margin: 0 32px; 
-                border-radius: 20px;
+                margin: 16px 32px; 
+                border-radius: 16px;
             }
         }
         
         .settings-item { 
             display: flex; 
             align-items: center; 
-            padding: 16px; 
+            padding: 12px; 
             cursor: pointer; 
             border-bottom: 1px solid var(--border-color); 
             text-decoration: none; 
             color: inherit; 
-            transition: all 0.2s ease;
-            position: relative;
+            transition: background 0.15s;
         }
         
         @media (min-width: 768px) {
             .settings-item {
-                padding: 20px 24px;
+                padding: 18px 24px;
             }
         }
         
@@ -270,103 +318,34 @@
             border-bottom: none; 
         }
         
-        .settings-item:hover {
-            background: var(--bg-tertiary);
-        }
-        
         .settings-item:active { 
-            background: var(--bg-quaternary); 
-            transform: scale(0.98);
-        }
-        
-        .settings-content {
-            flex: 1;
-            min-width: 0;
+            background: var(--bg-tertiary); 
         }
         
         .settings-icon { 
-            width: 40px; 
-            height: 40px; 
-            border-radius: 12px; 
+            width: 34px; 
+            height: 34px; 
+            border-radius: 10px; 
             display: flex; 
             align-items: center; 
             justify-content: center; 
-            margin-right: 16px; 
-            flex-shrink: 0;
-            transition: all 0.2s ease;
+            font-size: 15px; 
+            margin-right: 10px; 
+            flex-shrink: 0; 
         }
         
-        /* Цвета иконок */
-        .profile-icon {
-            background: rgba(255, 0, 127, 0.15);
-            color: var(--icon-profile);
-        }
-        
-        .notifications-icon {
-            background: rgba(255, 75, 75, 0.15);
-            color: var(--icon-notifications);
-        }
-        
-        .privacy-icon {
-            background: rgba(255, 165, 0, 0.15);
-            color: var(--icon-privacy);
-        }
-        
-        .storage-icon {
-            background: rgba(42, 171, 238, 0.15);
-            color: var(--icon-storage);
-        }
-        
-        .appearance-icon {
-            background: rgba(157, 0, 255, 0.15);
-            color: var(--icon-appearance);
-        }
-        
-        .folders-icon {
-            background: rgba(0, 200, 100, 0.15);
-            color: var(--icon-folders);
-        }
-        
-        .stickers-icon {
-            background: rgba(255, 215, 0, 0.15);
-            color: var(--icon-stickers);
-        }
-        
-        .devices-icon {
-            background: rgba(66, 165, 245, 0.15);
-            color: var(--icon-devices);
-        }
-        
-        .premium-icon {
-            background: rgba(255, 215, 0, 0.15);
-            color: var(--icon-premium);
-        }
-        
-        .advanced-icon {
-            background: rgba(126, 87, 194, 0.15);
-            color: var(--icon-advanced);
-        }
-        
-        .help-icon {
-            background: rgba(0, 200, 100, 0.15);
-            color: var(--icon-help);
-        }
-        
-        .about-icon {
-            background: rgba(120, 144, 156, 0.15);
-            color: var(--icon-about);
-        }
-        
-        .logout-icon {
-            background: rgba(255, 75, 75, 0.15);
-            color: var(--icon-logout);
+        @media (min-width: 768px) {
+            .settings-icon {
+                width: 44px;
+                height: 44px;
+                font-size: 20px;
+                margin-right: 16px;
+            }
         }
         
         .settings-label { 
-            font-size: 16px; 
-            font-weight: 500;
-            color: var(--text-primary);
-            margin-bottom: 2px;
+            flex: 1; 
+            font-size: 14px; 
         }
         
         @media (min-width: 768px) {
@@ -377,8 +356,8 @@
         
         .settings-value { 
             color: var(--text-secondary); 
-            font-size: 14px; 
-            font-weight: 400;
+            font-size: 12px; 
+            margin-right: 6px; 
         }
         
         @media (min-width: 768px) {
@@ -389,273 +368,7 @@
         
         .settings-arrow { 
             color: var(--text-muted); 
-            opacity: 0.5;
-            transition: all 0.2s ease;
-        }
-        
-        .settings-item:hover .settings-arrow {
-            opacity: 1;
-            transform: translateX(2px);
-        }
-        
-        /* Кнопка выхода */
-        .logout-item {
-            border: none !important;
-            background: transparent !important;
-        }
-        
-        .logout-item:hover {
-            background: rgba(255, 75, 75, 0.1) !important;
-        }
-        
-        .logout-label {
-            color: var(--icon-logout) !important;
-            font-weight: 500;
-        }
-        
-        /* Анимации и переходы */
-        @keyframes slideInFromTop {
-            from {
-                opacity: 0;
-                transform: translateY(-20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-        
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-        
-        @keyframes scaleIn {
-            from {
-                opacity: 0;
-                transform: scale(0.9);
-            }
-            to {
-                opacity: 1;
-                transform: scale(1);
-            }
-        }
-        
-        .header {
-            animation: slideInFromTop 0.3s ease-out;
-        }
-        
-        .profile-section {
-            animation: fadeInUp 0.4s ease-out 0.1s both;
-        }
-        
-        .settings-section {
-            animation: fadeInUp 0.4s ease-out both;
-        }
-        
-        .settings-section:nth-child(2) {
-            animation-delay: 0.2s;
-        }
-        
-        .settings-section:nth-child(3) {
-            animation-delay: 0.3s;
-        }
-        
-        .settings-section:nth-child(4) {
-            animation-delay: 0.4s;
-        }
-        
-        .settings-section:nth-child(5) {
-            animation-delay: 0.5s;
-        }
-        
-        .settings-group {
-            animation: scaleIn 0.3s ease-out;
-        }
-        
-        /* Плавные переходы для всех интерактивных элементов */
-        .settings-item {
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        
-        .settings-icon {
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        
-        .settings-item:hover .settings-icon {
-            transform: scale(1.1);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        }
-        
-        .profile-avatar-container {
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        
-        .profile-avatar-container:hover {
-            transform: scale(1.05);
-        }
-        
-        .profile-avatar-container:active {
-            transform: scale(0.98);
-        }
-        
-        .profile-edit-btn {
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        
-        .profile-edit-btn:hover {
-            transform: scale(1.1);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        }
-        
-        .profile-edit-btn:active {
-            transform: scale(0.95);
-        }
-        
-        .header-btn {
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        
-        .header-btn:hover {
-            transform: scale(1.1);
-        }
-        
-        .header-btn:active {
-            transform: scale(0.95);
-        }
-        
-        .back-btn {
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        
-        .back-btn:hover {
-            transform: translateX(-2px);
-        }
-        
-        .back-btn:active {
-            transform: translateX(0) scale(0.95);
-        }
-        
-        /* Микро-анимации для статуса */
-        .profile-status-indicator {
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        
-        .profile-status-indicator.online {
-            animation: pulse 2s infinite;
-        }
-        
-        @keyframes pulse {
-            0%, 100% {
-                transform: scale(1);
-                opacity: 1;
-            }
-            50% {
-                transform: scale(1.1);
-                opacity: 0.8;
-            }
-        }
-        
-        /* Адаптивность для мобильных устройств */
-        @media (max-width: 375px) {
-            .settings-section-title {
-                font-size: 12px;
-                padding: 0 12px;
-            }
-            
-            .settings-group {
-                margin: 0 12px;
-            }
-            
-            .settings-item {
-                padding: 14px;
-            }
-            
-            .settings-icon {
-                width: 36px;
-                height: 36px;
-                margin-right: 12px;
-            }
-            
-            .settings-label {
-                font-size: 15px;
-            }
-            
-            .settings-value {
-                font-size: 13px;
-            }
-            
-            .profile-avatar {
-                width: 64px;
-                height: 64px;
-            }
-            
-            .profile-name {
-                font-size: 18px;
-            }
-            
-            .profile-username {
-                font-size: 14px;
-            }
-        }
-        
-        /* Темная тема optimizations */
-        [data-theme="dark"] .settings-item:hover {
-            background: rgba(255, 255, 255, 0.05);
-        }
-        
-        [data-theme="dark"] .settings-item:active {
-            background: rgba(255, 255, 255, 0.08);
-        }
-        
-        /* Светлая тема optimizations */
-        [data-theme="light"] .settings-item:hover {
-            background: rgba(0, 0, 0, 0.02);
-        }
-        
-        [data-theme="light"] .settings-item:active {
-            background: rgba(0, 0, 0, 0.05);
-        }
-        
-        /* Дополнительные улучшения доступности */
-        .settings-item:focus {
-            outline: 2px solid var(--accent-color);
-            outline-offset: -2px;
-        }
-        
-        .profile-avatar-container:focus,
-        .profile-edit-btn:focus,
-        .header-btn:focus,
-        .back-btn:focus {
-            outline: 2px solid var(--accent-color);
-            outline-offset: 2px;
-        }
-        
-        /* Улучшенная типографика */
-        .settings-label {
-            line-height: 1.3;
-        }
-        
-        .settings-value {
-            line-height: 1.4;
-        }
-        
-        .profile-name {
-            line-height: 1.2;
-        }
-        
-        .profile-username {
-            line-height: 1.3;
-        }
-        
-        .profile-bio {
-            line-height: 1.4;
+            font-size: 16px; 
         }
         
         .toggle-switch { 
