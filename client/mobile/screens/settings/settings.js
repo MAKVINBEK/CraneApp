@@ -70,7 +70,12 @@
                     if (serverSettings.sounds !== undefined) mergedSettings.sounds = serverSettings.sounds;
                     
                     localStorage.setItem('craneapp_settings', JSON.stringify(mergedSettings));
-                    if (mergedSettings.language) localStorage.setItem('craneapp_language', mergedSettings.language);
+                    if (mergedSettings.language) {
+                        localStorage.setItem('craneapp_language', mergedSettings.language);
+                        if (window.i18n?.setLanguage && window.i18n.currentLang !== mergedSettings.language) {
+                            window.i18n.setLanguage(mergedSettings.language);
+                        }
+                    }
                     
                     updateThemeDisplay(mergedSettings.theme || 'dark');
                     updateLanguageDisplay(mergedSettings.language || 'ru');

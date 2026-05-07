@@ -108,6 +108,9 @@
                     if (data.settings.language) {
                         merged.language = data.settings.language;
                         localStorage.setItem('craneapp_language', data.settings.language);
+                        if (window.i18n?.setLanguage && window.i18n.currentLang !== data.settings.language) {
+                            window.i18n.setLanguage(data.settings.language);
+                        }
                     }
                     if (data.settings.notifications !== undefined) merged.notifications = data.settings.notifications;
                     if (data.settings.sounds !== undefined) merged.sounds = data.settings.sounds;

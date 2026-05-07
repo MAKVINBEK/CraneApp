@@ -15,7 +15,21 @@ const token = localStorage.getItem('craneapp_auth_token');
             { code: 'tr', name: 'Türkçe',      sub: 'Turkish'     },
         ];
 
-        let current = localStorage.getItem('craneapp_language') || 'ru';
+        function getStoredLanguage() {
+            try {
+                const settings = JSON.parse(localStorage.getItem('craneapp_settings') || '{}');
+                return localStorage.getItem('craneapp_language') || settings.language || 'ru';
+            } catch (_) {
+                return localStorage.getItem('craneapp_language') || 'ru';
+            }
+        }
+
+        function isSupported(code) {
+            return LANGUAGES.some(l => l.code === code) && (!window.i18n || window.i18n.supportedLanguages.includes(code));
+        }
+
+        let current = getStoredLanguage();
+        if (!isSupported(current)) current = 'ru';
 
         function render(q) {
             q = (q || '').toLowerCase().trim();
@@ -109,10 +123,17 @@ const token = localStorage.getItem('craneapp_auth_token');
                     const d = await res.json();
                     if (d.settings?.language) {
                         current = d.settings.language;
+                        if (!isSupported(current)) current = 'ru';
                         localStorage.setItem('craneapp_language', current);
+                        const localSettings = JSON.parse(localStorage.getItem('craneapp_settings') || '{}');
+                        localSettings.language = current;
+                        localStorage.setItem('craneapp_settings', JSON.stringify(localSettings));
                     }
                 }
             } catch (e) {}
+            if (window.i18n && window.i18n.currentLang !== current) {
+                window.i18n.setLanguage(current);
+            }
             render('');
             if (window.i18n) {
                 document.getElementById('headerTitle').textContent = window.i18n.t('language');
