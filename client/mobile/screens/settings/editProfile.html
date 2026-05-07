@@ -4,10 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>Редактировать профиль - CraneApp</title>
+    <title data-i18n="editProfileTitle">Edit profile - CraneApp</title>
     <script src="/client/mobile/scripts/i18n.js"></script>
     <script src="/client/mobile/scripts/theme.js"></script>
-    
     <link rel="stylesheet" href="./editProfile.css">
 </head>
 <body>
@@ -15,32 +14,32 @@
 
     <div class="modal-overlay" id="pwModal">
         <div class="modal">
-            <div class="modal-title">Сменить пароль</div>
+            <div class="modal-title" data-i18n="changePassword">Change password</div>
             <div class="modal-field">
-                <label>Текущий пароль</label>
-                <input type="password" id="pwCurrent" placeholder="••••••••">
+                <label data-i18n="currentPassword">Current password</label>
+                <input type="password" id="pwCurrent" placeholder="********">
             </div>
             <div class="modal-field">
-                <label>Новый пароль</label>
-                <input type="password" id="pwNew" placeholder="••••••••">
+                <label data-i18n="newPassword">New password</label>
+                <input type="password" id="pwNew" placeholder="********">
             </div>
             <div class="modal-field">
-                <label>Повторите новый пароль</label>
-                <input type="password" id="pwConfirm" placeholder="••••••••">
+                <label data-i18n="repeatNewPassword">Repeat new password</label>
+                <input type="password" id="pwConfirm" placeholder="********">
             </div>
             <div class="modal-actions">
-                <button class="btn btn-secondary" onclick="closePwModal()">Отмена</button>
-                <button class="btn btn-primary" onclick="changePassword()">Сохранить</button>
+                <button class="btn btn-secondary" onclick="closePwModal()" data-i18n="cancel">Cancel</button>
+                <button class="btn btn-primary" onclick="changePassword()" data-i18n="save">Save</button>
             </div>
         </div>
     </div>
 
     <div class="header">
         <div class="header-left">
-            <button class="back-btn" onclick="history.back()">←</button>
-            <span class="header-title">Редактировать профиль</span>
+            <button class="back-btn" onclick="history.back()" data-i18n-aria-label="back">←</button>
+            <span class="header-title" data-i18n="editProfile">Edit profile</span>
         </div>
-        <button class="save-btn" id="saveBtn" onclick="saveProfile()">Сохранить</button>
+        <button class="save-btn" id="saveBtn" onclick="saveProfile()" data-i18n="save">Save</button>
     </div>
 
     <div class="avatar-section">
@@ -48,23 +47,23 @@
             <div class="avatar" id="avatarEl"><span>?</span></div>
             <div class="avatar-edit-badge">📷</div>
         </div>
-        <span class="avatar-hint">Изменить фото</span>
+        <span class="avatar-hint" data-i18n="changePhoto">Change photo</span>
         <input type="file" id="avatarInput" accept="image/*" style="display:none" onchange="handleAvatarChange(this)">
     </div>
 
     <div class="form">
-        <div class="section-header">Основное</div>
+        <div class="section-header" data-i18n="basicInfo">Basic info</div>
         <div class="section">
             <div class="field">
-                <div class="field-label">Имя</div>
-                <input class="field-input" id="firstName" placeholder="Введите имя" maxlength="64" oninput="markDirty()">
+                <div class="field-label" data-i18n="firstName">First name</div>
+                <input class="field-input" id="firstName" data-i18n-placeholder="enterFirstName" placeholder="Enter first name" maxlength="64" oninput="markDirty()">
             </div>
             <div class="field">
-                <div class="field-label">Фамилия</div>
-                <input class="field-input" id="lastName" placeholder="Необязательно" maxlength="64" oninput="markDirty()">
+                <div class="field-label" data-i18n="lastName">Last name</div>
+                <input class="field-input" id="lastName" data-i18n-placeholder="optional" placeholder="Optional" maxlength="64" oninput="markDirty()">
             </div>
             <div class="field">
-                <div class="field-label">Юзернейм</div>
+                <div class="field-label" data-i18n="username">Username</div>
                 <div class="username-row">
                     <span class="username-prefix">@</span>
                     <input class="field-input" id="username" placeholder="username" maxlength="32"
@@ -74,20 +73,20 @@
             </div>
         </div>
 
-        <div class="section-header">О себе</div>
+        <div class="section-header" data-i18n="aboutMe">About me</div>
         <div class="section">
             <div class="field">
-                <div class="field-label">Биография</div>
-                <textarea class="field-input" id="bio" placeholder="Расскажите о себе..." maxlength="200" rows="3"
+                <div class="field-label" data-i18n="biography">Biography</div>
+                <textarea class="field-input" id="bio" data-i18n-placeholder="tellAboutYourself" placeholder="Tell about yourself..." maxlength="200" rows="3"
                     oninput="markDirty(); updateBioCounter()"></textarea>
                 <div class="field-counter"><span id="bioCounter">0</span>/200</div>
             </div>
         </div>
 
-        <div class="section-header">Безопасность</div>
+        <div class="section-header" data-i18n="securitySection">Security</div>
         <div class="section">
             <button class="danger-btn" onclick="openPwModal()">
-                <span>🔑</span><span>Сменить пароль</span>
+                <span>🔑</span><span data-i18n="changePassword">Change password</span>
             </button>
         </div>
     </div>

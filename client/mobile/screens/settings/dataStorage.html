@@ -39,7 +39,7 @@
                 <div class="item-icon" style="background:rgba(0,200,100,0.2);">📱</div>
                 <div class="item-text">
                     <div class="item-title" data-i18n="mobileNetwork">Через мобильную сеть</div>
-                    <div class="item-subtitle" id="mobileDesc">Медиа (10 МБ), Файлы (1.0 МБ)</div>
+                    <div class="item-subtitle" id="mobileDesc">Media (10 MB), Files (1.0 MB)</div>
                 </div>
                 <span class="item-arrow">›</span>
             </div>
@@ -47,7 +47,7 @@
                 <div class="item-icon" style="background:rgba(0,136,255,0.2);">📶</div>
                 <div class="item-text">
                     <div class="item-title" data-i18n="viaWifi">Через Wi-Fi</div>
-                    <div class="item-subtitle" id="wifiDesc">Медиа (15 МБ), Файлы (3.0 МБ)</div>
+                    <div class="item-subtitle" id="wifiDesc">Media (15 MB), Files (3.0 MB)</div>
                 </div>
                 <span class="item-arrow">›</span>
             </div>
@@ -63,19 +63,19 @@
             <div class="item" onclick="showPicker('savePrivate')">
                 <div class="item-icon" style="background:rgba(255,75,75,0.2);">👤</div>
                 <div class="item-text"><div class="item-title" data-i18n="privateChats">Личные чаты</div></div>
-                <span class="item-value" id="savePrivateVal">Нет</span>
+                <span class="item-value" id="savePrivateVal" data-i18n="no">No</span>
                 <span class="item-arrow">›</span>
             </div>
             <div class="item" onclick="showPicker('saveGroups')">
                 <div class="item-icon" style="background:rgba(42,171,238,0.2);">👥</div>
                 <div class="item-text"><div class="item-title" data-i18n="groups">Группы</div></div>
-                <span class="item-value" id="saveGroupsVal">Нет</span>
+                <span class="item-value" id="saveGroupsVal" data-i18n="no">No</span>
                 <span class="item-arrow">›</span>
             </div>
             <div class="item" onclick="showPicker('saveChannels')">
                 <div class="item-icon" style="background:rgba(157,0,255,0.2);">📢</div>
                 <div class="item-text"><div class="item-title" data-i18n="channels">Каналы</div></div>
-                <span class="item-value" id="saveChannelsVal">Нет</span>
+                <span class="item-value" id="saveChannelsVal" data-i18n="no">No</span>
                 <span class="item-arrow">›</span>
             </div>
         </div>
@@ -139,7 +139,7 @@
     <div id="pickerOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000" onclick="closePicker()"></div>
     <div id="pickerModal" style="display:none;position:fixed;bottom:0;left:0;right:0;background:var(--bg-secondary);border-radius:20px 20px 0 0;z-index:1001;padding-bottom:var(--safe-area-bottom);max-height:60vh;overflow-y:auto">
         <div style="padding:16px;border-bottom:1px solid var(--border-color);display:flex;justify-content:space-between;align-items:center">
-            <span style="font-size:17px;font-weight:700" id="pickerTitle">Выберите</span>
+            <span style="font-size:17px;font-weight:700" id="pickerTitle" data-i18n="choose">Choose</span>
             <button onclick="closePicker()" style="background:none;border:none;color:var(--text-secondary);font-size:24px;cursor:pointer">×</button>
         </div>
         <div id="pickerOptions"></div>

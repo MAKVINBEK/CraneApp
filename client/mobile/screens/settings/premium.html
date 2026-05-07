@@ -3,84 +3,83 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>CraneApp Премиум</title>
-    <script src="/client/mobile/scripts/i18n.js"></script>
+<title data-i18n="premiumTitle">CraneApp Premium</title>
+<script src="/client/mobile/scripts/i18n.js"></script>
 <script src="/client/mobile/scripts/theme.js"></script>
-
-    <link rel="stylesheet" href="./premium.css">
+<link rel="stylesheet" href="./premium.css">
 </head>
 <body>
 <div class="toasts" id="toasts"></div>
 
 <div class="hdr">
-  <button class="back" onclick="history.back()">←</button>
-  <span class="hdr-title">CraneApp Премиум</span>
+  <button class="back" onclick="history.back()" data-i18n-aria-label="back">←</button>
+  <span class="hdr-title" data-i18n="premiumTitle">CraneApp Premium</span>
 </div>
 
 <div class="hero">
   <div class="hero-star">⭐</div>
-  <div class="hero-title">CraneApp Премиум</div>
-  <div class="hero-sub">Разблокируйте все возможности мессенджера</div>
-  <div class="hero-badge" id="heroBadge" style="display:none">✓ У вас активна подписка</div>
+  <div class="hero-title" data-i18n="premiumTitle">CraneApp Premium</div>
+  <div class="hero-sub" data-i18n="premiumHeroSub">Unlock every messenger feature</div>
+  <div class="hero-badge" id="heroBadge" style="display:none" data-i18n="premiumActiveBadge">✓ Your subscription is active</div>
 </div>
 
 <div class="status-banner" id="statusBanner" style="display:none">
   <div class="status-icon">💎</div>
   <div>
-    <div class="status-text">Премиум активен</div>
-    <div class="status-sub" id="statusSub">Подписка активна</div>
+    <div class="status-text" data-i18n="premiumActive">Premium active</div>
+    <div class="status-sub" id="statusSub" data-i18n="subscriptionActive">Subscription active</div>
   </div>
 </div>
 
-<div class="sec-label">Преимущества</div>
+<div class="sec-label" data-i18n="benefitsSection">Benefits</div>
 <div class="features">
-  <div class="feat"><div class="feat-ico">🚀</div><div class="feat-text"><div class="feat-title">Увеличенные лимиты</div><div class="feat-desc">Файлы до 4 ГБ, до 1000 участников в группах, до 20 каналов</div></div></div>
-  <div class="feat"><div class="feat-ico">⭐</div><div class="feat-text"><div class="feat-title">Значок Премиум</div><div class="feat-desc">Золотая звезда рядом с именем в чатах и профиле</div></div></div>
-  <div class="feat"><div class="feat-ico">🎨</div><div class="feat-text"><div class="feat-title">Эксклюзивные стикеры</div><div class="feat-desc">Доступ к премиум-стикерпакам и анимированным стикерам</div></div></div>
-  <div class="feat"><div class="feat-ico">🤖</div><div class="feat-text"><div class="feat-title">CraneApp Bot Premium</div><div class="feat-desc">Расширенная поддержка, приоритетные уведомления и быстрые ответы</div></div></div>
-  <div class="feat"><div class="feat-ico">🎙</div><div class="feat-text"><div class="feat-title">Транскрибация голосовых</div><div class="feat-desc">Автоматический перевод голосовых сообщений в текст</div></div></div>
-  <div class="feat"><div class="feat-ico">📁</div><div class="feat-text"><div class="feat-title">Папки без ограничений</div><div class="feat-desc">Создавайте неограниченное количество папок с чатами</div></div></div>
-  <div class="feat"><div class="feat-ico">🔒</div><div class="feat-text"><div class="feat-title">Приоритетная поддержка</div><div class="feat-desc">Ответ в течение 2 часов от команды CraneApp</div></div></div>
-  <div class="feat"><div class="feat-ico">🎭</div><div class="feat-text"><div class="feat-title">Уникальные темы</div><div class="feat-desc">Эксклюзивные цветовые схемы и оформление чатов</div></div></div>
-  <div class="feat"><div class="feat-ico">📢</div><div class="feat-text"><div class="feat-title">Без рекламы</div><div class="feat-desc">Полностью чистый интерфейс без рекламных блоков</div></div></div>
-  <div class="feat"><div class="feat-ico">⚡</div><div class="feat-text"><div class="feat-title">Быстрая загрузка</div><div class="feat-desc">Приоритетные серверы для скачивания медиафайлов</div></div></div>
+  <div class="feat"><div class="feat-ico">🚀</div><div class="feat-text"><div class="feat-title" data-i18n="premiumIncreasedLimits">Increased limits</div><div class="feat-desc" data-i18n="premiumIncreasedLimitsDesc">Files up to 4 GB, up to 1000 group members, and up to 20 channels</div></div></div>
+  <div class="feat"><div class="feat-ico">⭐</div><div class="feat-text"><div class="feat-title" data-i18n="premiumBadgeTitle">Premium badge</div><div class="feat-desc" data-i18n="premiumBadgeFullDesc">A gold star next to your name in chats and profile</div></div></div>
+  <div class="feat"><div class="feat-ico">🎨</div><div class="feat-text"><div class="feat-title" data-i18n="premiumExclusiveStickers">Exclusive stickers</div><div class="feat-desc" data-i18n="premiumExclusiveStickersDesc">Access to premium sticker packs and animated stickers</div></div></div>
+  <div class="feat"><div class="feat-ico">🤖</div><div class="feat-text"><div class="feat-title">CraneApp Bot Premium</div><div class="feat-desc" data-i18n="premiumBotDesc">Expanded support, priority notifications, and quick replies</div></div></div>
+  <div class="feat"><div class="feat-ico">🎙</div><div class="feat-text"><div class="feat-title" data-i18n="premiumVoiceTranscription">Voice transcription</div><div class="feat-desc" data-i18n="premiumVoiceTranscriptionDesc">Automatic conversion of voice messages to text</div></div></div>
+  <div class="feat"><div class="feat-ico">📁</div><div class="feat-text"><div class="feat-title" data-i18n="premiumUnlimitedFolders">Unlimited folders</div><div class="feat-desc" data-i18n="premiumUnlimitedFoldersDesc">Create unlimited chat folders</div></div></div>
+  <div class="feat"><div class="feat-ico">🔒</div><div class="feat-text"><div class="feat-title" data-i18n="premiumPrioritySupport">Priority support</div><div class="feat-desc" data-i18n="premiumPrioritySupportDesc">Response within 2 hours from the CraneApp team</div></div></div>
+  <div class="feat"><div class="feat-ico">🎭</div><div class="feat-text"><div class="feat-title" data-i18n="premiumUniqueThemes">Unique themes</div><div class="feat-desc" data-i18n="premiumUniqueThemesDesc">Exclusive color schemes and chat appearance</div></div></div>
+  <div class="feat"><div class="feat-ico">📢</div><div class="feat-text"><div class="feat-title" data-i18n="noAds">No ads</div><div class="feat-desc" data-i18n="premiumNoAdsDesc">A clean interface with no ad blocks</div></div></div>
+  <div class="feat"><div class="feat-ico">⚡</div><div class="feat-text"><div class="feat-title" data-i18n="premiumFastDownloads">Fast downloads</div><div class="feat-desc" data-i18n="premiumFastDownloadsDesc">Priority servers for downloading media files</div></div></div>
 </div>
 
-<div class="sec-label" id="plansLabel">Подписка</div>
+<div class="sec-label" id="plansLabel" data-i18n="subscriptionSection">Subscription</div>
 <div class="plans" id="plansSection">
   <div class="plan sel" onclick="selectPlan(this,'monthly',150)" data-plan="monthly">
-    <div class="plan-name">Месяц</div>
+    <div class="plan-name" data-i18n="monthPlan">Month</div>
     <div class="plan-price">150 ₽</div>
-    <div class="plan-per">в месяц</div>
+    <div class="plan-per" data-i18n="perMonth">per month</div>
   </div>
   <div class="plan" onclick="selectPlan(this,'yearly',990)" data-plan="yearly">
-    <div class="plan-badge">ВЫГОДНО</div>
-    <div class="plan-name">Год</div>
+    <div class="plan-badge" data-i18n="bestValue">BEST VALUE</div>
+    <div class="plan-name" data-i18n="yearPlan">Year</div>
     <div class="plan-price">990 ₽</div>
-    <div class="plan-per">в год</div>
-    <div class="plan-save">Экономия 810 ₽ (45%)</div>
+    <div class="plan-per" data-i18n="perYear">per year</div>
+    <div class="plan-save" data-i18n="yearPlanSave">Save 810 ₽ (45%)</div>
   </div>
   <div class="plan" onclick="selectPlan(this,'lifetime',2490)" data-plan="lifetime">
-    <div class="plan-name">Навсегда</div>
+    <div class="plan-name" data-i18n="lifetimePlan">Lifetime</div>
     <div class="plan-price">2 490 ₽</div>
-    <div class="plan-per">единоразово</div>
-    <div class="plan-save">Лучшее предложение</div>
+    <div class="plan-per" data-i18n="oneTime">one-time</div>
+    <div class="plan-save" data-i18n="bestOffer">Best offer</div>
   </div>
 </div>
 
-<div class="sec-label" id="payLabel">Оплата картой</div>
+<div class="sec-label" id="payLabel" data-i18n="cardPayment">Card payment</div>
 <div class="pay-form show" id="payForm">
   <div class="pay-row">
-    <span class="pay-label">Номер</span>
+    <span class="pay-label" data-i18n="cardNumber">Number</span>
     <input class="pay-input" id="cardNum" type="text" inputmode="numeric" placeholder="0000 0000 0000 0000" maxlength="19" oninput="fmtCard(this)">
   </div>
   <div class="pay-row">
-    <span class="pay-label">Имя</span>
+    <span class="pay-label" data-i18n="cardholderName">Name</span>
     <input class="pay-input" id="cardName" type="text" placeholder="IVAN IVANOV" style="text-transform:uppercase">
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr">
     <div class="pay-half">
-      <div class="pay-half-label">Срок</div>
+      <div class="pay-half-label" data-i18n="cardExpiry">Expiry</div>
       <input class="pay-half-input" id="cardExp" type="text" inputmode="numeric" placeholder="MM/YY" maxlength="5" oninput="fmtExp(this)">
     </div>
     <div class="pay-half">
@@ -90,9 +89,9 @@
   </div>
 </div>
 
-<button class="sub-btn" id="subBtn" onclick="subscribe()">Оплатить 150 ₽</button>
+<button class="sub-btn" id="subBtn" onclick="subscribe()" data-i18n="payMonthly">Pay 150 ₽</button>
 
-<div class="terms">Подписка продлевается автоматически. Отменить можно в любой момент в настройках.<br>Нажимая «Оплатить», вы соглашаетесь с условиями использования.</div>
+<div class="terms" data-i18n-html="premiumTerms">Subscription renews automatically. You can cancel anytime in settings.<br>By tapping "Pay", you agree to the terms of use.</div>
 
 <script src="./premium.js"></script>
 </body>

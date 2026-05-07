@@ -15,8 +15,8 @@
 
     <!-- Passcode Input Overlay -->
     <div class="passcode-overlay" id="passcodeOverlay">
-        <div class="passcode-title" id="overlayTitle">Введите код-пароль</div>
-        <div class="passcode-subtitle" id="overlaySubtitle">4-значный код</div>
+        <div class="passcode-title" id="overlayTitle" data-i18n="enterPasscode">Enter passcode</div>
+        <div class="passcode-subtitle" id="overlaySubtitle" data-i18n="fourDigitCode">4-digit code</div>
         <div class="passcode-dots" id="passcodeDots">
             <div class="passcode-dot" id="dot0"></div>
             <div class="passcode-dot" id="dot1"></div>
@@ -37,7 +37,7 @@
             <button class="numpad-btn" onclick="numpadPress('0')">0</button>
             <button class="numpad-btn delete" onclick="numpadDelete()">⌫</button>
         </div>
-        <button class="passcode-cancel" id="overlayCancel" onclick="closeOverlay()">Отмена</button>
+        <button class="passcode-cancel" id="overlayCancel" onclick="closeOverlay()" data-i18n="cancel">Cancel</button>
     </div>
 
     <!-- Picker -->
@@ -63,7 +63,7 @@
                     <div class="item-icon" style="background:rgba(255,165,0,0.2);">🔐</div>
                     <div class="item-text">
                         <div class="item-title" data-i18n="passcodeLabel">Код-пароль</div>
-                        <div class="item-subtitle" id="passcodeStatusText">Защитите приложение 4-значным кодом</div>
+                        <div class="item-subtitle" id="passcodeStatusText" data-i18n="passcodeDesc">Protect the app with a 4-digit code</div>
                     </div>
                 </div>
                 <div class="toggle-switch" id="passcodeToggle"></div>
@@ -89,7 +89,7 @@
                         <div class="item-subtitle" data-i18n="lockAfterDesc">Время бездействия до блокировки</div>
                     </div>
                 </div>
-                <span class="item-value" id="timeoutValue">1 минуту</span>
+                <span class="item-value" id="timeoutValue" data-i18n="oneMinute">1 minute</span>
                 <span class="item-arrow">›</span>
             </div>
         </div>
@@ -101,7 +101,7 @@
                     <div class="item-icon" style="background:rgba(0,255,0,0.2);">ℹ</div>
                     <div class="item-text">
                         <div class="item-subtitle" style="font-size:13px;line-height:1.5;" data-i18n="passcodeInfoText">
-                            Код-пароль блокирует приложение. При неверном вводе 5 раз подряд потребуется повторная авторизация.
+                            Passcode locks the app. After 5 incorrect attempts, you will need to log in again.
                         </div>
                     </div>
                 </div>
