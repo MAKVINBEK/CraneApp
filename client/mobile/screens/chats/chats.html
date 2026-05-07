@@ -25,9 +25,13 @@
     <!-- Side Menu (redesigned) -->
     <div class="side-menu" id="sideMenu">
         <div class="side-menu-header">
-            <div class="side-menu-avatar" id="sideMenuAvatar">
-                <span>👤</span>
-            </div>
+            <button type="button" class="side-menu-avatar-wrap" onclick="openSideMenuAvatarPicker()" data-i18n-aria-label="changePhoto" data-i18n-title="changePhoto">
+                <span class="side-menu-avatar" id="sideMenuAvatar">
+                    <span>👤</span>
+                </span>
+                <span class="side-menu-avatar-badge" aria-hidden="true">📷</span>
+            </button>
+            <input type="file" id="sideMenuAvatarInput" accept="image/*" style="display:none" onchange="handleSideMenuAvatarChange(this)">
             <div class="side-menu-name" id="sideMenuName" data-i18n="loading">Загрузка...</div>
             <div class="side-menu-username" id="sideMenuUsername">@username</div>
         </div>

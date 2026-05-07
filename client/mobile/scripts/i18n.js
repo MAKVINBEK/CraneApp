@@ -2319,6 +2319,9 @@
     Object.assign(translations.ru, {
         editProfileTitle: 'Редактировать профиль - CraneApp',
         changePhoto: 'Изменить фото',
+        avatarUpdated: 'Фото профиля обновлено',
+        avatarUpdateError: 'Не удалось обновить фото профиля',
+        avatarImageOnly: 'Выберите файл изображения',
         basicInfo: 'Основное',
         enterFirstName: 'Введите имя',
         optional: 'Необязательно',
@@ -2490,6 +2493,9 @@
     Object.assign(translations.en, {
         editProfileTitle: 'Edit profile - CraneApp',
         changePhoto: 'Change photo',
+        avatarUpdated: 'Profile photo updated',
+        avatarUpdateError: 'Could not update profile photo',
+        avatarImageOnly: 'Choose an image file',
         basicInfo: 'Basic info',
         enterFirstName: 'Enter first name',
         optional: 'Optional',
@@ -2657,6 +2663,62 @@
         enterPasscode: 'Enter passcode',
         fourDigitCode: '4-digit code',
         oneMinute: '1 minute'
+    });
+    Object.assign(translations.de, {
+        changePhoto: 'Foto ändern',
+        avatarUpdated: 'Profilfoto aktualisiert',
+        avatarUpdateError: 'Profilfoto konnte nicht aktualisiert werden',
+        avatarImageOnly: 'Wähle eine Bilddatei aus',
+        fileTooLarge5: 'Datei ist zu groß (max. 5 MB)'
+    });
+    Object.assign(translations.fr, {
+        changePhoto: 'Modifier la photo',
+        avatarUpdated: 'Photo de profil mise à jour',
+        avatarUpdateError: 'Impossible de mettre à jour la photo de profil',
+        avatarImageOnly: 'Choisissez un fichier image',
+        fileTooLarge5: 'Fichier trop volumineux (max. 5 Mo)'
+    });
+    Object.assign(translations.es, {
+        changePhoto: 'Cambiar foto',
+        avatarUpdated: 'Foto de perfil actualizada',
+        avatarUpdateError: 'No se pudo actualizar la foto de perfil',
+        avatarImageOnly: 'Elige un archivo de imagen',
+        fileTooLarge5: 'El archivo es demasiado grande (máx. 5 MB)'
+    });
+    Object.assign(translations.it, {
+        changePhoto: 'Cambia foto',
+        avatarUpdated: 'Foto profilo aggiornata',
+        avatarUpdateError: 'Impossibile aggiornare la foto profilo',
+        avatarImageOnly: 'Scegli un file immagine',
+        fileTooLarge5: 'File troppo grande (max 5 MB)'
+    });
+    Object.assign(translations.pt, {
+        changePhoto: 'Alterar foto',
+        avatarUpdated: 'Foto de perfil atualizada',
+        avatarUpdateError: 'Não foi possível atualizar a foto de perfil',
+        avatarImageOnly: 'Escolha um arquivo de imagem',
+        fileTooLarge5: 'Arquivo muito grande (máx. 5 MB)'
+    });
+    Object.assign(translations.pl, {
+        changePhoto: 'Zmień zdjęcie',
+        avatarUpdated: 'Zdjęcie profilowe zaktualizowane',
+        avatarUpdateError: 'Nie udało się zaktualizować zdjęcia profilowego',
+        avatarImageOnly: 'Wybierz plik obrazu',
+        fileTooLarge5: 'Plik jest za duży (maks. 5 MB)'
+    });
+    Object.assign(translations.uk, {
+        changePhoto: 'Змінити фото',
+        avatarUpdated: 'Фото профілю оновлено',
+        avatarUpdateError: 'Не вдалося оновити фото профілю',
+        avatarImageOnly: 'Виберіть файл зображення',
+        fileTooLarge5: 'Файл завеликий (макс. 5 МБ)'
+    });
+    Object.assign(translations.tr, {
+        changePhoto: 'Fotoğrafı değiştir',
+        avatarUpdated: 'Profil fotoğrafı güncellendi',
+        avatarUpdateError: 'Profil fotoğrafı güncellenemedi',
+        avatarImageOnly: 'Bir görsel dosyası seçin',
+        fileTooLarge5: 'Dosya çok büyük (en fazla 5 MB)'
     });
     Object.keys(translations).forEach(lang => {
         if (lang !== 'ru' && lang !== 'en') copyMissingFromEnglish(lang);

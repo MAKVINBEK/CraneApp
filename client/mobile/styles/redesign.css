@@ -358,14 +358,29 @@ body::before {
     text-align: center;
     border-bottom: 1px solid var(--rd-stroke);
 }
-.side-menu-avatar {
+.side-menu-avatar-wrap {
     width: 84px !important;
     height: 84px !important;
     margin: 0 auto 14px !important;
+}
+.side-menu-avatar {
+    width: 84px !important;
+    height: 84px !important;
+    margin: 0 !important;
     background: var(--rd-accent-grad) !important;
     border: 2px solid var(--rd-stroke-strong);
     box-shadow: 0 12px 32px rgba(255, 45, 139, 0.28);
     font-size: 30px !important;
+}
+.side-menu-avatar-badge {
+    width: 28px !important;
+    height: 28px !important;
+    right: 2px !important;
+    bottom: 2px !important;
+    border-color: var(--rd-panel) !important;
+    background: var(--rd-accent-grad) !important;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+    font-size: 13px !important;
 }
 .side-menu-name {
     font-family: var(--font-geologica) !important;

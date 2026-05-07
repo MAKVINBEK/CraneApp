@@ -761,21 +761,97 @@
             const nameEl = document.getElementById('sideMenuName');
             const usernameEl = document.getElementById('sideMenuUsername');
             const avatarEl = document.getElementById('sideMenuAvatar');
+            if (!nameEl || !usernameEl || !avatarEl) return;
             
-            nameEl.textContent = user.firstName || tr('user', 'Пользователь');
+            const displayName = ((user.firstName || '') + ' ' + (user.lastName || '')).trim() || user.username || tr('user', 'Пользователь');
+            nameEl.removeAttribute('data-i18n');
+            nameEl.textContent = displayName;
             usernameEl.textContent = user.username ? '@' + user.username : '@username';
 
             // Badge + Premium
             const badgesHtml = renderBadges(user.badges || [], user.isBot, user.isPremium, user.isFake, user.isScam);
             if (badgesHtml) {
-                nameEl.innerHTML = (user.firstName || tr('user', 'Пользователь')) + badgesHtml;
+                nameEl.innerHTML = escapeHtml(displayName) + badgesHtml;
             } else {
-                nameEl.textContent = user.firstName || tr('user', 'Пользователь');
-            }            
-            if (user.avatarUrl && (user.avatarUrl.startsWith('data:image') || user.avatarUrl.startsWith('http') || user.avatarUrl.startsWith('/'))) {
-                avatarEl.innerHTML = '<img src="' + user.avatarUrl + '" alt="">';
-            } else {
-                avatarEl.innerHTML = '<span>' + (user.firstName || '👤')[0].toUpperCase() + '</span>';
+                nameEl.textContent = displayName;
+            }
+            renderSideMenuAvatar(user.avatarUrl, displayName);
+        }
+
+        function renderSideMenuAvatar(url, name) {
+            const avatarEl = document.getElementById('sideMenuAvatar');
+            if (!avatarEl) return;
+            avatarEl.innerHTML = '';
+
+            if (url && (url.startsWith('data:image') || url.startsWith('http') || url.startsWith('/'))) {
+                const img = document.createElement('img');
+                img.src = url;
+                img.alt = '';
+                avatarEl.appendChild(img);
+                return;
+            }
+
+            const span = document.createElement('span');
+            span.textContent = ((name || user.firstName || user.username || '👤')[0] || '👤').toUpperCase();
+            avatarEl.appendChild(span);
+        }
+
+        function openSideMenuAvatarPicker() {
+            const input = document.getElementById('sideMenuAvatarInput');
+            if (input) input.click();
+        }
+
+        function readFileAsDataUrl(file) {
+            return new Promise(function(resolve, reject) {
+                const reader = new FileReader();
+                reader.onload = function(e) { resolve(e.target.result); };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function handleSideMenuAvatarChange(input) {
+            const file = input.files && input.files[0];
+            input.value = '';
+            if (!file) return;
+
+            if (!file.type || !file.type.startsWith('image/')) {
+                showToast('error', tr('avatarImageOnly', 'Choose an image file'), '❌');
+                return;
+            }
+            if (file.size > 5 * 1024 * 1024) {
+                showToast('error', tr('fileTooLarge5', 'File is too large (max. 5 MB)'), '❌');
+                return;
+            }
+
+            const wrap = document.querySelector('.side-menu-avatar-wrap');
+            const previousAvatarUrl = user.avatarUrl || '';
+            if (wrap) wrap.classList.add('is-uploading');
+
+            try {
+                const avatarBase64 = await readFileAsDataUrl(file);
+                const displayName = ((user.firstName || '') + ' ' + (user.lastName || '')).trim() || user.username || tr('user', 'User');
+                renderSideMenuAvatar(avatarBase64, displayName);
+
+                const res = await fetch('/api/v1/users/avatar', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    body: JSON.stringify({ avatar: avatarBase64 })
+                });
+                const data = await res.json().catch(function() { return {}; });
+                if (!res.ok) throw new Error(data.error || tr('saveError', 'Save error'));
+
+                user = { ...user, avatarUrl: data.avatarUrl || avatarBase64 };
+                const cached = JSON.parse(localStorage.getItem('craneapp_user_data') || '{}');
+                localStorage.setItem('craneapp_user_data', JSON.stringify({ ...cached, ...user }));
+                updateSideMenuProfile();
+                showToast('success', tr('avatarUpdated', 'Profile photo updated'), '✓');
+            } catch (err) {
+                user.avatarUrl = previousAvatarUrl;
+                updateSideMenuProfile();
+                showToast('error', err.message || tr('avatarUpdateError', 'Could not update profile photo'), '❌');
+            } finally {
+                if (wrap) wrap.classList.remove('is-uploading');
             }
         }
             
