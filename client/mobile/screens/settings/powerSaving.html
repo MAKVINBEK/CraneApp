@@ -13,7 +13,7 @@
     <div class="toast-container" id="toastContainer"></div>
     <div class="header">
         <button class="back-btn" onclick="history.back()">←</button>
-        <span class="header-title">Энергосбережение</span>
+        <span class="header-title" data-i18n="energySaving">Энергосбережение</span>
     </div>
     <div class="content">
         <!-- Уровень заряда -->
@@ -22,7 +22,7 @@
                 <div class="battery-icon" id="batteryIcon">🔋</div>
                 <div class="battery-info">
                     <div class="battery-level" id="batteryLevel">—</div>
-                    <div class="battery-status" id="batteryStatus">Определение...</div>
+                    <div class="battery-status" id="batteryStatus" data-i18n="detecting">Определение...</div>
                 </div>
             </div>
             <div class="battery-bar">
@@ -30,14 +30,14 @@
             </div>
         </div>
 
-        <div class="section-header">Режим энергосбережения</div>
+        <div class="section-header" data-i18n="powerSavingMode">Режим энергосбережения</div>
         <div class="section">
             <div class="item">
                 <div class="item-left">
                     <div class="item-icon" style="background:rgba(0,200,100,0.2);">🔋</div>
                     <div class="item-text">
-                        <div class="item-title">Энергосбережение</div>
-                        <div class="item-subtitle">Снижает потребление батареи</div>
+                        <div class="item-title" data-i18n="energySaving">Энергосбережение</div>
+                        <div class="item-subtitle" data-i18n="powerSavingDesc">Снижает потребление батареи</div>
                     </div>
                 </div>
                 <div class="toggle-switch" id="togglePowerSave" onclick="toggle('powerSave')"></div>
@@ -46,22 +46,22 @@
                 <div class="item-left">
                     <div class="item-icon" style="background:rgba(255,165,0,0.2);">⚡</div>
                     <div class="item-text">
-                        <div class="item-title">Авто при низком заряде</div>
-                        <div class="item-subtitle">Включать при заряде ниже 20%</div>
+                        <div class="item-title" data-i18n="autoLowBattery">Авто при низком заряде</div>
+                        <div class="item-subtitle" data-i18n="autoLowBatteryDesc">Включать при заряде ниже 20%</div>
                     </div>
                 </div>
                 <div class="toggle-switch active" id="toggleAutoLow" onclick="toggle('autoLow')"></div>
             </div>
         </div>
 
-        <div class="section-header">Анимации</div>
+        <div class="section-header" data-i18n="animationsSection">Анимации</div>
         <div class="section">
             <div class="item">
                 <div class="item-left">
                     <div class="item-icon" style="background:rgba(157,0,255,0.2);">✨</div>
                     <div class="item-text">
-                        <div class="item-title">Анимации интерфейса</div>
-                        <div class="item-subtitle">Переходы и эффекты</div>
+                        <div class="item-title" data-i18n="interfaceAnimations">Анимации интерфейса</div>
+                        <div class="item-subtitle" data-i18n="interfaceAnimationsDesc">Переходы и эффекты</div>
                     </div>
                 </div>
                 <div class="toggle-switch active" id="toggleAnimations" onclick="toggle('animations')"></div>
@@ -70,8 +70,8 @@
                 <div class="item-left">
                     <div class="item-icon" style="background:rgba(42,171,238,0.2);">🎞</div>
                     <div class="item-text">
-                        <div class="item-title">Автовоспроизведение GIF</div>
-                        <div class="item-subtitle">Воспроизводить GIF автоматически</div>
+                        <div class="item-title" data-i18n="autoplayGif">Автовоспроизведение GIF</div>
+                        <div class="item-subtitle" data-i18n="autoplayGifPowerDesc">Воспроизводить GIF автоматически</div>
                     </div>
                 </div>
                 <div class="toggle-switch active" id="toggleAutoGif" onclick="toggle('autoGif')"></div>
@@ -80,22 +80,22 @@
                 <div class="item-left">
                     <div class="item-icon" style="background:rgba(255,0,127,0.2);">🎭</div>
                     <div class="item-text">
-                        <div class="item-title">Анимированные стикеры</div>
-                        <div class="item-subtitle">Воспроизводить анимированные стикеры</div>
+                        <div class="item-title" data-i18n="animatedStickers">Анимированные стикеры</div>
+                        <div class="item-subtitle" data-i18n="animatedStickersDesc">Воспроизводить анимированные стикеры</div>
                     </div>
                 </div>
                 <div class="toggle-switch active" id="toggleAnimStickers" onclick="toggle('animStickers')"></div>
             </div>
         </div>
 
-        <div class="section-header">Сеть</div>
+        <div class="section-header" data-i18n="networkSection">Сеть</div>
         <div class="section">
             <div class="item">
                 <div class="item-left">
                     <div class="item-icon" style="background:rgba(0,136,255,0.2);">📡</div>
                     <div class="item-text">
-                        <div class="item-title">Фоновая синхронизация</div>
-                        <div class="item-subtitle">Обновлять данные в фоне</div>
+                        <div class="item-title" data-i18n="backgroundSync">Фоновая синхронизация</div>
+                        <div class="item-subtitle" data-i18n="backgroundSyncDesc">Обновлять данные в фоне</div>
                     </div>
                 </div>
                 <div class="toggle-switch active" id="toggleBgSync" onclick="toggle('bgSync')"></div>
@@ -104,15 +104,15 @@
                 <div class="item-left">
                     <div class="item-icon" style="background:rgba(0,200,100,0.2);">📥</div>
                     <div class="item-text">
-                        <div class="item-title">Автозагрузка медиа</div>
-                        <div class="item-subtitle">Загружать фото и видео автоматически</div>
+                        <div class="item-title" data-i18n="autoDownloadMedia">Автозагрузка медиа</div>
+                        <div class="item-subtitle" data-i18n="autoDownloadMediaDesc">Загружать фото и видео автоматически</div>
                     </div>
                 </div>
                 <div class="toggle-switch active" id="toggleAutoDownload" onclick="toggle('autoDownload')"></div>
             </div>
         </div>
 
-        <div class="hint">В режиме энергосбережения отключаются анимации, фоновая синхронизация и автозагрузка медиа. Это может увеличить время работы от батареи.</div>
+        <div class="hint" data-i18n="powerSavingHint">В режиме энергосбережения отключаются анимации, фоновая синхронизация и автозагрузка медиа. Это может увеличить время работы от батареи.</div>
     </div>
 
     <script src="./powerSaving.js"></script>

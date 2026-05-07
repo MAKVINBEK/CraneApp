@@ -173,7 +173,9 @@
         const token = localStorage.getItem('craneapp_auth_token');
         let user = JSON.parse(localStorage.getItem('craneapp_user_data') || '{}');
         function tr(key, fallback, vars) {
-            return window.i18n?.t(key, vars) || fallback;
+            const value = window.i18n?.t(key, vars);
+            if (value && value !== key) return value;
+            return window.i18n?.translations?.en?.[key] || fallback;
         }
         function tc(key, count, fallback) {
             return window.i18n?.tc ? window.i18n.tc(key, count) : (fallback || (count + ' ' + pluralMembers(count)));
@@ -715,9 +717,9 @@
             const meetIcon = '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>';
 
             if (section === 'channels') {
-                showPlaceholder(channelIcon, 'Каналы', 'Раздел в разработке. Скоро вы сможете создавать каналы и подписываться на них.');
+                showPlaceholder(channelIcon, tr('channels', 'Каналы'), tr('channelsSectionDesc', 'Раздел в разработке. Скоро вы сможете создавать каналы и подписываться на них.'));
             } else if (section === 'communities') {
-                showPlaceholder(commIcon, 'Сообщества', 'Раздел в разработке. Скоро вы сможете объединять чаты и каналы в сообщества.');
+                showPlaceholder(commIcon, tr('communities', 'Сообщества'), tr('communitiesSectionDesc', 'Раздел в разработке. Скоро вы сможете объединять чаты и каналы в сообщества.'));
             } else if (section === 'meetings') {
                 Array.from(list.children).forEach(ch => {
                     if (ch.id !== 'sectionPlaceholder') ch.style.display = 'none';
@@ -726,10 +728,10 @@
                 placeholder.style.display = 'flex';
                 placeholder.innerHTML =
                     '<div style="width:72px;height:72px;border-radius:20px;background:linear-gradient(135deg,#9b82ff,#5a8bff);display:flex;align-items:center;justify-content:center;margin-bottom:18px;box-shadow:0 14px 36px rgba(90,139,255,0.36);">' + meetIcon + '</div>' +
-                    '<div style="font-size:18px;font-weight:700;color:var(--rd-text,#fff);letter-spacing:-0.01em;margin-bottom:6px;">Встречи</div>' +
-                    '<div style="font-size:13px;color:var(--rd-text-3,rgba(235,235,245,0.46));max-width:280px;line-height:1.45;margin-bottom:18px;">Создайте видеовстречу и пригласите участников по ссылке. До 5 человек.</div>' +
-                    '<button onclick="startInstantMeeting()" style="height:46px;padding:0 24px;border-radius:12px;border:none;background:linear-gradient(135deg,#9b82ff,#5a8bff);color:#fff;font-family:Geologica,sans-serif;font-weight:600;font-size:14px;letter-spacing:-0.01em;cursor:pointer;box-shadow:0 12px 28px rgba(90,139,255,0.32);">+ Начать встречу</button>' +
-                    '<button onclick="joinMeetingByLink()" style="margin-top:10px;height:42px;padding:0 22px;border-radius:12px;border:1px solid var(--rd-stroke,rgba(255,255,255,0.1));background:transparent;color:var(--rd-text,#fff);font-family:Geologica,sans-serif;font-weight:500;font-size:13.5px;cursor:pointer;">Войти по ссылке…</button>';
+                    '<div style="font-size:18px;font-weight:700;color:var(--rd-text,#fff);letter-spacing:-0.01em;margin-bottom:6px;">' + escapeHtml(tr('meetings', 'Встречи')) + '</div>' +
+                    '<div style="font-size:13px;color:var(--rd-text-3,rgba(235,235,245,0.46));max-width:280px;line-height:1.45;margin-bottom:18px;">' + escapeHtml(tr('meetingsDesc', 'Создайте видеовстречу и пригласите участников по ссылке. До 5 человек.')) + '</div>' +
+                    '<button onclick="startInstantMeeting()" style="height:46px;padding:0 24px;border-radius:12px;border:none;background:linear-gradient(135deg,#9b82ff,#5a8bff);color:#fff;font-family:Geologica,sans-serif;font-weight:600;font-size:14px;letter-spacing:-0.01em;cursor:pointer;box-shadow:0 12px 28px rgba(90,139,255,0.32);">' + escapeHtml(tr('startMeeting', '+ Начать встречу')) + '</button>' +
+                    '<button onclick="joinMeetingByLink()" style="margin-top:10px;height:42px;padding:0 22px;border-radius:12px;border:1px solid var(--rd-stroke,rgba(255,255,255,0.1));background:transparent;color:var(--rd-text,#fff);font-family:Geologica,sans-serif;font-weight:500;font-size:13.5px;cursor:pointer;">' + escapeHtml(tr('joinByLink', 'Войти по ссылке…')) + '</button>';
             } else {
                 // dms / chats — фильтруем уже отрендеренные элементы списка
                 restoreList();
@@ -2139,8 +2141,8 @@
                     ? (Math.floor(dur/60) + ':' + String(dur%60).padStart(2,'0'))
                     : '';
                 const label = isMissed
-                    ? (isOutgoingCall ? 'Звонок без ответа' : 'Пропущенный звонок')
-                    : (isVideo ? 'Видеозвонок' : 'Аудиозвонок');
+                    ? (isOutgoingCall ? tr('unansweredCall', 'Звонок без ответа') : tr('incomingMissedCall', 'Пропущенный звонок'))
+                    : (isVideo ? tr('videoCall', 'Видеозвонок') : tr('audioCall', 'Аудиозвонок'));
                 const callIcon = isVideo
                     ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>'
                     : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.6 1.22h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.84a16 16 0 0 0 6 6l.94-.94a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.63 16l.36.95z"/></svg>';
@@ -3078,9 +3080,9 @@
             if (data && data.type === 'call_invite_response') {
                 if (window._cancelCallInviteRetry) { window._cancelCallInviteRetry(); window._cancelCallInviteRetry = null; }
                 if (data.accepted) {
-                    try { showToast && showToast('success', 'Собеседник принял звонок'); } catch(_){}
+                    try { showToast && showToast('success', tr('callAccepted', 'Собеседник принял звонок')); } catch(_){}
                 } else {
-                    try { showToast && showToast('info', 'Собеседник отклонил звонок'); } catch(_){}
+                    try { showToast && showToast('info', tr('callDeclined', 'Собеседник отклонил звонок')); } catch(_){}
                     // Закрываем окно звонка через postMessage в iframe
                     try { document.getElementById('callFrame').contentWindow.postMessage({ type: 'crane_hangup' }, '*'); } catch(_) {}
                 }
@@ -3190,7 +3192,7 @@
                             statusEl.textContent = 'онлайн';
                             statusEl.style.color = 'var(--success-color)';
                         } else if (data.lastSeen === null) {
-                            statusEl.textContent = 'последний визит скрыт';
+                            statusEl.textContent = tr('lastSeenHidden', 'последний визит скрыт');
                             statusEl.style.color = 'var(--text-muted)';
                         } else {
                             statusEl.textContent = 'был(а) недавно';
@@ -3497,19 +3499,19 @@
             const isVideo = callData.callKind !== 'audio';
 
             if (callData.status === 'missed') {
-                return isOutgoingCall ? '📞 Звонок без ответа' : '📞 Пропущенный звонок';
+                return isOutgoingCall ? '📞 ' + tr('unansweredCall', 'Звонок без ответа') : '📞 ' + tr('incomingMissedCall', 'Пропущенный звонок');
             }
 
-            return isVideo ? '📹 Видеозвонок' : '📞 Аудиозвонок';
+            return isVideo ? '📹 ' + tr('videoCall', 'Видеозвонок') : '📞 ' + tr('audioCall', 'Аудиозвонок');
         }
 
         function formatLastMessageType(c, text) {
-            if (c.lastMessageType === 'voice') return '🎤 Голосовое';
-            if (c.lastMessageType === 'image' || c.lastMessageType === 'photo') return '🖼️ Фото';
-            if (c.lastMessageType === 'video') return '🎬 Видео';
+            if (c.lastMessageType === 'voice') return '🎤 ' + tr('voiceMessage', 'Голосовое');
+            if (c.lastMessageType === 'image' || c.lastMessageType === 'photo') return '🖼️ ' + tr('photoMessage', 'Фото');
+            if (c.lastMessageType === 'video') return '🎬 ' + tr('videoMessage', 'Видео');
             if (c.lastMessageType === 'gif') return '🎞️ GIF';
-            if (c.lastMessageType === 'sticker') return '🎨 Стикер';
-            if (c.lastMessageType === 'video_note') return '⭕ Кружок';
+            if (c.lastMessageType === 'sticker') return '🎨 ' + tr('stickerMessage', 'Стикер');
+            if (c.lastMessageType === 'video_note') return '⭕ ' + tr('videoNoteMessage', 'Кружок');
             if (c.lastMessageType === 'call' || c.type === 'call') return formatCallLastMessage(c, text);
             return text || '';
         }
@@ -4234,7 +4236,7 @@
                     statusEl.style.color = 'var(--text-muted)';
                     if (data.lastSeen === null && !data.isOnline) {
                         // Пользователь скрыл последний визит
-                        statusEl.textContent = 'последний визит скрыт';
+                        statusEl.textContent = tr('lastSeenHidden', 'последний визит скрыт');
                     } else if (lastSeen) {
                         const now = new Date();
                         const diff = now - lastSeen;
@@ -4628,7 +4630,7 @@
             } else if (msg.type === 'sticker') {
                 pinnedText.innerHTML = '<span>🎨</span> Стикер';
             } else if (msg.type === 'voice') {
-                pinnedText.innerHTML = '<span>🎤</span> Голосовое';
+                pinnedText.innerHTML = '<span>🎤</span> ' + escapeHtml(tr('voiceMessage', 'Голосовое'));
             } else {
                 const text = msg.content || '';
             pinnedText.innerHTML = '<span>📌</span> <strong>' + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ':</strong> ' + (text.length > 60 ? text.substring(0, 60) + '...' : text);

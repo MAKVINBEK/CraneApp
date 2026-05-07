@@ -9,7 +9,16 @@ const token = localStorage.getItem('craneapp_auth_token');
         let settings = { ...DEFAULTS };
         let blockedUsers = [];
 
-        const valueLabels = { all: 'Все', contacts: 'Мои контакты', none: 'Никто' };
+        function t(key, fallback, vars) {
+            const value = window.i18n?.t(key, vars);
+            if (value && value !== key) return value;
+            return window.i18n?.translations?.en?.[key] || fallback;
+        }
+
+        function valueLabel(value) {
+            const key = { all: 'all', contacts: 'contacts_only', none: 'nobody' }[value];
+            return key ? t(key, value) : value;
+        }
 
         // ── Загрузка ──────────────────────────────────────────────────────
         async function loadSettings() {
@@ -61,8 +70,8 @@ const token = localStorage.getItem('craneapp_auth_token');
 
         // ── UI ────────────────────────────────────────────────────────────
         function updateUI() {
-            document.getElementById('lastSeenValue').textContent       = valueLabels[settings.lastSeen]       || 'Все';
-            document.getElementById('photoVisibilityValue').textContent = valueLabels[settings.photoVisibility] || 'Все';
+            document.getElementById('lastSeenValue').textContent = valueLabel(settings.lastSeen || 'all');
+            document.getElementById('photoVisibilityValue').textContent = valueLabel(settings.photoVisibility || 'all');
 
             updateToggle('toggle2FA',        settings.twoFactorAuth);
             update2FAStatus();            updateToggle('toggleE2E',        settings.e2eEncryption);
@@ -83,7 +92,7 @@ const token = localStorage.getItem('craneapp_auth_token');
                 container.innerHTML = `
                     <div class="empty-state">
                         <div style="font-size:48px;margin-bottom:12px;opacity:0.5;line-height:1;">🚫</div>
-                        <div>Нет заблокированных пользователей</div>
+                        <div>${t('noBlockedUsers', 'Нет заблокированных пользователей')}</div>
                     </div>`;
                 return;
             }
@@ -95,10 +104,10 @@ const token = localStorage.getItem('craneapp_auth_token');
                             : (u.firstName || u.username || '?')[0].toUpperCase()}
                     </div>
                     <div class="blocked-info">
-                        <div class="blocked-name">${u.firstName || u.username || 'Пользователь'}</div>
+                        <div class="blocked-name">${u.firstName || u.username || t('user', 'Пользователь')}</div>
                         <div class="blocked-username">@${u.username || ''}</div>
                     </div>
-                    <button class="unblock-btn" onclick="unblockUser('${u.id}')">Разблокировать</button>
+                    <button class="unblock-btn" onclick="unblockUser('${u.id}')">${t('unblock', 'Разблокировать')}</button>
                 </div>
             `).join('');
         }
@@ -131,13 +140,13 @@ const token = localStorage.getItem('craneapp_auth_token');
         function showPicker(key, options) {
             currentPickerKey = key;
             const titles = {
-                lastSeen: 'Последний визит',
-                photoVisibility: 'Фото профиля'
+                lastSeen: t('lastSeen', 'Последний визит'),
+                photoVisibility: t('profilePhoto', 'Фото профиля')
             };
-            document.getElementById('pickerTitle').textContent = titles[key] || 'Выберите';
+            document.getElementById('pickerTitle').textContent = titles[key] || t('choose', 'Выберите');
             document.getElementById('pickerOptions').innerHTML = options.map(opt => `
                 <div class="picker-option ${settings[key] === opt ? 'selected' : ''}" onclick="selectOption('${opt}')">
-                    <span>${valueLabels[opt] || opt}</span>
+                    <span>${valueLabel(opt)}</span>
                     ${settings[key] === opt ? '<span class="picker-option-check">✓</span>' : ''}
                 </div>
             `).join('');
@@ -152,11 +161,11 @@ const token = localStorage.getItem('craneapp_auth_token');
                 photoVisibility: 'photoVisibilityValue'
             };
             if (valueMap[currentPickerKey]) {
-                document.getElementById(valueMap[currentPickerKey]).textContent = valueLabels[value];
+                document.getElementById(valueMap[currentPickerKey]).textContent = valueLabel(value);
             }
             await saveSettings();
             closePicker();
-            showToast('success', 'Сохранено', '✓');
+            showToast('success', t('saved', 'Сохранено'), '✓');
         }
 
         function closePicker() {
@@ -175,12 +184,12 @@ const token = localStorage.getItem('craneapp_auth_token');
                 if (res.ok) {
                     blockedUsers = blockedUsers.filter(u => u.id !== userId);
                     renderBlockedUsers();
-                    showToast('success', 'Пользователь разблокирован', '✓');
+                    showToast('success', t('userUnblocked', 'Пользователь разблокирован'), '✓');
                 } else {
-                    showToast('error', 'Ошибка', '❌');
+                    showToast('error', t('error', 'Ошибка'), '❌');
                 }
             } catch (e) {
-                showToast('error', 'Ошибка сети', '❌');
+                showToast('error', t('networkError', 'Ошибка сети'), '❌');
             }
         }
 
@@ -225,8 +234,8 @@ const token = localStorage.getItem('craneapp_auth_token');
         function update2FAStatus() {
             document.getElementById('twoFAStatus').textContent = twoFAEnabled ? (window.i18n?.t('on') || 'Вкл') : (window.i18n?.t('off') || 'Выкл');
             document.getElementById('twoFASubtitle').textContent = twoFAEnabled
-                ? 'Дополнительный пароль установлен'
-                : 'Дополнительный пароль при входе';
+                ? t('twoFAEnabledDesc', 'Дополнительный пароль установлен')
+                : t('twoFALoginPassword', 'Дополнительный пароль при входе');
         }
 
         function open2FAModal() {
@@ -234,18 +243,18 @@ const token = localStorage.getItem('craneapp_auth_token');
             const overlay = document.getElementById('twoFAOverlay');
 
             if (twoFAEnabled) {
-                box.innerHTML = '<div class="modal-title">🔒 Двухфакторная аутентификация</div>'
-                    + '<div class="modal-desc">2FA включена. Введите текущий доп. пароль чтобы отключить.</div>'
-                    + '<input class="modal-input" type="password" id="twoFACurrentPwd" placeholder="Текущий доп. пароль">'
-                    + '<button class="modal-btn danger" onclick="disable2FA()">Отключить 2FA</button>'
-                    + '<button class="modal-btn secondary" onclick="close2FAModal()">Отмена</button>';
+                box.innerHTML = '<div class="modal-title">🔒 ' + t('twoFactorAuth', 'Двухфакторная аутентификация') + '</div>'
+                    + '<div class="modal-desc">' + t('disable2FADesc', '2FA включена. Введите текущий доп. пароль чтобы отключить.') + '</div>'
+                    + '<input class="modal-input" type="password" id="twoFACurrentPwd" placeholder="' + t('current2FAPassword', 'Текущий доп. пароль') + '">'
+                    + '<button class="modal-btn danger" onclick="disable2FA()">' + t('disable2FA', 'Отключить 2FA') + '</button>'
+                    + '<button class="modal-btn secondary" onclick="close2FAModal()">' + t('cancel', 'Отмена') + '</button>';
             } else {
-                box.innerHTML = '<div class="modal-title">🔒 Двухфакторная аутентификация</div>'
-                    + '<div class="modal-desc">Установите дополнительный пароль. При входе потребуется ввести его после основного.</div>'
-                    + '<input class="modal-input" type="password" id="twoFANewPwd" placeholder="Новый доп. пароль (мин. 6 символов)">'
-                    + '<input class="modal-input" type="password" id="twoFAConfirmPwd" placeholder="Повторите пароль">'
-                    + '<button class="modal-btn" onclick="enable2FA()">Включить 2FA</button>'
-                    + '<button class="modal-btn secondary" onclick="close2FAModal()">Отмена</button>';
+                box.innerHTML = '<div class="modal-title">🔒 ' + t('twoFactorAuth', 'Двухфакторная аутентификация') + '</div>'
+                    + '<div class="modal-desc">' + t('enable2FADesc', 'Установите дополнительный пароль. При входе потребуется ввести его после основного.') + '</div>'
+                    + '<input class="modal-input" type="password" id="twoFANewPwd" placeholder="' + t('new2FAPassword', 'Новый доп. пароль (мин. 6 символов)') + '">'
+                    + '<input class="modal-input" type="password" id="twoFAConfirmPwd" placeholder="' + t('repeatPassword', 'Повторите пароль') + '">'
+                    + '<button class="modal-btn" onclick="enable2FA()">' + t('enable2FA', 'Включить 2FA') + '</button>'
+                    + '<button class="modal-btn secondary" onclick="close2FAModal()">' + t('cancel', 'Отмена') + '</button>';
             }
 
             overlay.classList.add('active');
@@ -263,8 +272,8 @@ const token = localStorage.getItem('craneapp_auth_token');
             const pwd = document.getElementById('twoFANewPwd').value;
             const confirm = document.getElementById('twoFAConfirmPwd').value;
 
-            if (pwd.length < 6) { showToast('error', 'Минимум 6 символов', '❌'); return; }
-            if (pwd !== confirm) { showToast('error', 'Пароли не совпадают', '❌'); return; }
+            if (pwd.length < 6) { showToast('error', t('passwordMinError', 'Минимум 6 символов'), '❌'); return; }
+            if (pwd !== confirm) { showToast('error', t('passwordsMismatch', 'Пароли не совпадают'), '❌'); return; }
 
             try {
                 const res = await fetch('/api/v1/auth/2fa/enable', {
@@ -277,18 +286,18 @@ const token = localStorage.getItem('craneapp_auth_token');
                     twoFAEnabled = true;
                     update2FAStatus();
                     close2FAModal();
-                    showToast('success', '2FA включена', '✓');
+                    showToast('success', t('twoFAEnabledToast', '2FA включена'), '✓');
                 } else {
-                    showToast('error', data.error || 'Ошибка', '❌');
+                    showToast('error', data.error || t('error', 'Ошибка'), '❌');
                 }
             } catch (e) {
-                showToast('error', 'Ошибка сети', '❌');
+                showToast('error', t('networkError', 'Ошибка сети'), '❌');
             }
         }
 
         async function disable2FA() {
             const pwd = document.getElementById('twoFACurrentPwd').value;
-            if (!pwd) { showToast('error', 'Введите пароль', '❌'); return; }
+            if (!pwd) { showToast('error', t('enterPassword', 'Введите пароль'), '❌'); return; }
 
             try {
                 const res = await fetch('/api/v1/auth/2fa/disable', {
@@ -301,12 +310,12 @@ const token = localStorage.getItem('craneapp_auth_token');
                     twoFAEnabled = false;
                     update2FAStatus();
                     close2FAModal();
-                    showToast('success', '2FA отключена', '✓');
+                    showToast('success', t('twoFADisabledToast', '2FA отключена'), '✓');
                 } else {
-                    showToast('error', data.error || 'Неверный пароль', '❌');
+                    showToast('error', data.error || t('invalidPassword', 'Неверный пароль'), '❌');
                 }
             } catch (e) {
-                showToast('error', 'Ошибка сети', '❌');
+                showToast('error', t('networkError', 'Ошибка сети'), '❌');
             }
         }
 

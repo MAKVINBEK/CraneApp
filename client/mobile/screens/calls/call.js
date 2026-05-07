@@ -26,7 +26,11 @@
     const TOKEN = localStorage.getItem('craneapp_auth_token');
     let userData;
     try { userData = JSON.parse(localStorage.getItem('craneapp_user_data') || '{}'); } catch(_) { userData = {}; }
-    const tr = (key, fallback, vars) => window.i18n?.t(key, vars) || fallback;
+    const tr = (key, fallback, vars) => {
+        const value = window.i18n?.t(key, vars);
+        if (value && value !== key) return value;
+        return window.i18n?.translations?.en?.[key] || fallback;
+    };
     const ME = { id: userData.id || ('guest_'+Math.random().toString(36).slice(2,7)), name: userData.firstName || userData.username || tr('guest', 'Гость'), avatar: userData.avatarUrl || null };
 
     if (!TOKEN || !userData.id) {

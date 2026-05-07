@@ -24,7 +24,7 @@
     <div class="picker-overlay" id="pickerOverlay" onclick="closePicker()"></div>
     <div class="picker-modal" id="pickerModal">
         <div class="picker-header">
-            <span class="picker-title" id="pickerTitle">Выберите</span>
+            <span class="picker-title" id="pickerTitle" data-i18n="choose">Выберите</span>
             <button class="picker-close" onclick="closePicker()">×</button>
         </div>
         <div class="picker-options" id="pickerOptions"></div>
@@ -63,7 +63,7 @@
             </div>
         </div>
         
-        <div class="section-header">Сообщения</div>
+        <div class="section-header" data-i18n="messagesSection2">Сообщения</div>
         <div class="section">
         </div>
         
@@ -73,8 +73,8 @@
                 <div class="item-left">
                     <div class="item-icon" style="background:rgba(255,165,0,0.2);">🔐</div>
                     <div class="item-text">
-                        <div class="item-title">Код-пароль</div>
-                        <div class="item-subtitle">Защитите приложение паролем</div>
+                        <div class="item-title" data-i18n="passcodeLabel">Код-пароль</div>
+                        <div class="item-subtitle" data-i18n="passcodePasswordDesc">Защитите приложение паролем</div>
                     </div>
                 </div>
                 <span class="item-value" id="passcodeValue">Выкл</span>
@@ -84,8 +84,8 @@
                 <div class="item-left">
                     <div class="item-icon" style="background:rgba(0,255,0,0.2);">🔒</div>
                     <div class="item-text">
-                        <div class="item-title">Двухфакторная аутентификация</div>
-                        <div class="item-subtitle" id="twoFASubtitle">Дополнительный пароль при входе</div>
+                        <div class="item-title" data-i18n="twoFactorAuth">Двухфакторная аутентификация</div>
+                        <div class="item-subtitle" id="twoFASubtitle" data-i18n="twoFALoginPassword">Дополнительный пароль при входе</div>
                     </div>
                 </div>
                 <span class="item-value" id="twoFAStatus">Выкл</span>
@@ -95,8 +95,8 @@
                 <div class="item-left">
                     <div class="item-icon" style="background:rgba(42,171,238,0.2);">🔑</div>
                     <div class="item-text">
-                        <div class="item-title">E2E шифрование</div>
-                        <div class="item-subtitle">Сквозное шифрование сообщений</div>
+                        <div class="item-title" data-i18n="e2eEncryption">E2E шифрование</div>
+                        <div class="item-subtitle" data-i18n="e2eEncryptionDesc">Сквозное шифрование сообщений</div>
                     </div>
                 </div>
                 <div class="toggle-switch" id="toggleE2E" onclick="toggleSetting(this, 'e2eEncryption')"></div>
@@ -105,8 +105,8 @@
                 <div class="item-left">
                     <div class="item-icon" style="background:rgba(255,75,75,0.2);">🗑</div>
                     <div class="item-text">
-                        <div class="item-title">Автоудаление аккаунта</div>
-                        <div class="item-subtitle">Если не заходили 6 месяцев</div>
+                        <div class="item-title" data-i18n="autoDeleteAccount">Автоудаление аккаунта</div>
+                        <div class="item-subtitle" data-i18n="autoDeleteAccountDesc">Если не заходили 6 месяцев</div>
                     </div>
                 </div>
                 <div class="toggle-switch active" id="toggleAutoDelete" onclick="toggleSetting(this, 'autoDeleteAccount')"></div>
@@ -116,7 +116,7 @@
         <div class="section-header" data-i18n="blockedUsersSection">Заблокированные пользователи</div>        <div class="section" id="blockedList">
             <div class="loading-state">
                 <div class="spinner"></div>
-                <div>Загрузка...</div>
+                <div data-i18n="loading">Загрузка...</div>
             </div>
         </div>
     </div>

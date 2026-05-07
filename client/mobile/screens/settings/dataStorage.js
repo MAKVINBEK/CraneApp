@@ -28,6 +28,16 @@ const token = localStorage.getItem('craneapp_auth_token');
         }
         const SAVE_OPTIONS = ['no','photos','all'];
 
+        function t(key, fallback, vars) {
+            const value = window.i18n?.t(key, vars);
+            if (value && value !== key) return value;
+            return window.i18n?.translations?.en?.[key] || fallback;
+        }
+
+        function mediaFilesLimitLabel(media, files) {
+            return t('mediaFilesLimit', 'Медиа ({media}), Файлы ({files})', { media, files });
+        }
+
         async function load() {
             const local = JSON.parse(localStorage.getItem('craneapp_data_settings') || '{}');
             s = { ...DEFAULTS, ...local };
@@ -62,6 +72,8 @@ const token = localStorage.getItem('craneapp_auth_token');
             document.getElementById('savePrivateVal').textContent = SAVE_LABELS[s.savePrivate] || SAVE_LABELS.no;
             document.getElementById('saveGroupsVal').textContent = SAVE_LABELS[s.saveGroups] || SAVE_LABELS.no;
             document.getElementById('saveChannelsVal').textContent = SAVE_LABELS[s.saveChannels] || SAVE_LABELS.no;
+            document.getElementById('mobileDesc').textContent = mediaFilesLimitLabel('10 МБ', '1.0 МБ');
+            document.getElementById('wifiDesc').textContent = mediaFilesLimitLabel('15 МБ', '3.0 МБ');
 
             const total = storageData.messages + storageData.media + storageData.files + storageData.cache;
             document.getElementById('totalSize').textContent = formatSize(total);
@@ -91,8 +103,8 @@ const token = localStorage.getItem('craneapp_auth_token');
                 }));
             } else {
                 options = [
-                    { label: 'Медиа (10 МБ), Файлы (1.0 МБ)', value: 'low', selected: true },
-                    { label: 'Медиа (50 МБ), Файлы (5.0 МБ)', value: 'medium' },
+                    { label: mediaFilesLimitLabel('10 МБ', '1.0 МБ'), value: 'low', selected: true },
+                    { label: mediaFilesLimitLabel('50 МБ', '5.0 МБ'), value: 'medium' },
                     { label: window.i18n?.t('unlimited') || 'Без ограничений', value: 'high' }
                 ];
             }
@@ -124,8 +136,8 @@ const token = localStorage.getItem('craneapp_auth_token');
         }
 
         function resetAutoDownload() {
-            document.getElementById('mobileDesc').textContent = 'Медиа (10 МБ), Файлы (1.0 МБ)';
-            document.getElementById('wifiDesc').textContent = 'Медиа (15 МБ), Файлы (3.0 МБ)';
+            document.getElementById('mobileDesc').textContent = mediaFilesLimitLabel('10 МБ', '1.0 МБ');
+            document.getElementById('wifiDesc').textContent = mediaFilesLimitLabel('15 МБ', '3.0 МБ');
             toast(window.i18n?.t('settingsReset') || 'Настройки сброшены');
         }
 
