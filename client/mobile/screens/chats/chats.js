@@ -2069,7 +2069,7 @@
                 content.innerHTML = '<video src="' + dataUrl + '" controls style="max-width:100%;max-height:55vh;border-radius:12px;"></video>';
                 if (editBtnContainer) editBtnContainer.style.display = 'none';
             } else {
-                content.innerHTML = '<img src="' + dataUrl + '" style="max-width:100%;max-height:55vh;border-radius:12px;object-fit:contain;">';
+                content.innerHTML = '<img id="mediaSendPreviewImg" src="' + dataUrl + '" style="max-width:100%;max-height:55vh;border-radius:12px;object-fit:contain;">';
                 if (editBtnContainer) editBtnContainer.style.display = 'flex';
             }
 
@@ -2116,6 +2116,16 @@
             const iframe = document.getElementById('photoEditorIframe');
             if (modal) modal.style.display = 'none';
             if (iframe) iframe.src = 'about:blank'; // Очищаем память
+        };
+
+        // Получение результата из фоторедактора
+        window.onPhotoEditorComplete = function(dataUrl) {
+            _pendingMediaDataUrl = dataUrl;
+            const previewImg = document.getElementById('mediaSendPreviewImg');
+            if (previewImg) previewImg.src = dataUrl;
+            
+            // Если есть вьювер в фоне, обновляем и его (опционально)
+            console.log('✅ Изображение обновлено после редактора');
         };
 
         function cancelMediaSend() {
