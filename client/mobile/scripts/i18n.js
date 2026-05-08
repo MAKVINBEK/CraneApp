@@ -173,7 +173,7 @@
             fraud: '💰 Мошенничество', fakeAcc: '🎭 Фейковый аккаунт', other: '📝 Другое', description: 'Описание', scanQr: 'Отсканируйте QR-код<br>чтобы начать чат',
             addFolder: '📂 Добавить в папку', chooseTime: 'Выберите время', reason1: 'Причина (необязательно)', oneHour: '1 час', sixHours: '6 часов', oneDay: '1 день', oneWeek: '1 неделя',
             oneMonth: '1 месяц', forever: '🚫 Навсегда', youMuting: '🔇 Вы замучены', accMuting: 'Аккаунт замучен', reason2: 'Причина:', understand: 'Понятно', complain2: 'Пожаловаться',
-            addFolder2: 'Добавить в папку', notify: '🔔 Уведомления', files: 'Файлы', links: 'Ссылки'
+            addFolder2: 'Добавить в папку', markAsRead: 'Пометить прочитанным', chatMarkedAsRead: 'Чат помечен прочитанным', notify: '🔔 Уведомления', files: 'Файлы', links: 'Ссылки'
         },
         en: {
             settings: 'Settings', account: 'Account', privacy: 'Privacy',
@@ -1774,6 +1774,7 @@
             sixHours: '6 hours', oneDay: '1 day', oneWeek: '1 week', oneMonth: '1 month',
             forever: '🚫 Forever', youMuting: '🔇 You are muted', accMuting: 'Account muted',
             reason2: 'Reason:', understand: 'Got it', complain2: 'Report', addFolder2: 'Add to folder',
+            markAsRead: 'Mark as read', chatMarkedAsRead: 'Chat marked as read',
             notify: '🔔 Notifications', files: 'Files', links: 'Links',
             welcomeRegisterTitle: 'Welcome<br>to CraneApp',
             welcomeFeatureE2E: 'End-to-end encryption for every message',

@@ -1327,6 +1327,14 @@
         let folderSelectChatId = null;
         let folderSelectData = [];
 
+        function getFolderChatIds(folder) {
+            if (!folder) return [];
+            if (!Array.isArray(folder.chatIds)) {
+                folder.chatIds = Array.isArray(folder.chats) ? folder.chats : [];
+            }
+            return folder.chatIds;
+        }
+
         async function addToFolder() {
             toggleProfileMenu();
             if (!currentProfileUser) return;
@@ -1370,12 +1378,13 @@
                     const item = document.createElement('div');
                     item.className = 'folder-item';
                     item.onclick = () => selectFolder(index);
-                    const isInFolder = folder.chats && folder.chats.includes(folderSelectChatId);
+                    const chatIds = getFolderChatIds(folder);
+                    const isInFolder = chatIds.includes(folderSelectChatId);
                     item.innerHTML = `
                         <div class="folder-item-icon">${folder.icon || '📂'}</div>
                         <div class="folder-item-info">
                             <div class="folder-item-name">${folder.name}</div>
-                            <div class="folder-item-count">${folder.chats ? folder.chats.length : 0} чатов ${isInFolder ? '(уже в папке)' : ''}</div>
+                            <div class="folder-item-count">${chatIds.length} чатов ${isInFolder ? '(уже в папке)' : ''}</div>
                         </div>
                         ${isInFolder ? '✓' : ''}
                     `;
@@ -1390,18 +1399,18 @@
             if (!folderSelectChatId || index < 0 || index >= folderSelectData.length) return;
             
             const folder = folderSelectData[index];
-            if (!folder.chats) folder.chats = [];
+            const chatIds = getFolderChatIds(folder);
             
-            if (folder.chats.includes(folderSelectChatId)) {
+            if (chatIds.includes(folderSelectChatId)) {
                 showToast('info', tr('chatAlreadyInFolder', 'Чат уже в этой папке'), '📂');
                 closeFolderSelectModal();
                 return;
             }
             
-            folder.chats.push(folderSelectChatId);
+            chatIds.push(folderSelectChatId);
             
             try {
-                await fetch('/api/v1/users/folders', {
+                const saveRes = await fetch('/api/v1/users/folders', {
                     method: 'PUT',
                     headers: { 
                         'Content-Type': 'application/json',
@@ -1409,8 +1418,12 @@
                     },
                     body: JSON.stringify({ folders: folderSelectData })
                 });
+                if (!saveRes.ok) throw new Error('folder save failed');
                 
                 showToast('success', `Чат добавлен в папку "${folder.name}"`, '📂');
+                localStorage.setItem('craneapp_folders', JSON.stringify(folderSelectData));
+                initFolderTabs();
+                renderChatList();
                 closeFolderSelectModal();
             } catch (err) {
                 showToast('error', tr('saveError', 'Ошибка сохранения'), '❌');
@@ -3946,7 +3959,8 @@
                                     lastMessage: formatLastMessage(c),
                                     time: c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '',
                                     isOnline: cached.isOnline, isPinned: c.isPinned || false,
-                                    lastMessageType: c.lastMessageType
+                                    lastMessageType: c.lastMessageType,
+                                    unreadCount: c.unreadCount || 0
                                 }));
                                 if (c.isPinned) pinnedChatIds.add(c.id);
                             }
@@ -3993,7 +4007,8 @@
                                 isPinned: c.isPinned || false,
                                 lastMessageType: c.lastMessageType,
                                 badge: other.badge || null,
-                                isBot: other.is_bot || false
+                                isBot: other.is_bot || false,
+                                unreadCount: c.unreadCount || 0
                             }));
 
                             if (c.isPinned) pinnedChatIds.add(c.id);
@@ -4021,7 +4036,8 @@
                              lastMessage: lastMsgText,
                              lastMessageAt: c.lastMessageAt || null,
                              time: c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '',
-                             isPinned: c.isPinned || false
+                             isPinned: c.isPinned || false,
+                             unreadCount: c.unreadCount || 0
                          }));
                         
                         // Добавляем в pinnedChatIds если чат закреплён
@@ -4122,6 +4138,12 @@
             renderChatList();
         }
 
+        function renderUnreadBadge(chat) {
+            const count = Number(chat && chat.unreadCount) || 0;
+            if (count <= 0) return '';
+            return '<div class="unread-badge">' + (count > 99 ? '99+' : count) + '</div>';
+        }
+
         function renderChatList(filter) {
             filter = filter || '';
             
@@ -4144,7 +4166,7 @@
                 const folders = JSON.parse(localStorage.getItem('craneapp_folders') || '[]');
                 const folder = folders.find(f => f.id === activeFolder);
                 if (folder) {
-                    const ids = new Set(folder.chatIds || []);
+                    const ids = new Set(folder.chatIds || folder.chats || []);
                     chatsToShow = allChats.filter(c => ids.has(c.id));
                 }
             }
@@ -4177,6 +4199,7 @@
                         '<div class="chat-info"><div class="chat-name">' + name + '</div>' +
                         '<div class="chat-last">' + (c.lastMessage || tr('noMessages', 'Нет сообщений')) + '</div></div>' +
                         '<div class="chat-time">' + (c.time || '') + '</div>' +
+                        renderUnreadBadge(c) +
                         '<div class="chat-actions"><button class="chat-action-icon" onclick="event.stopPropagation(); unarchiveChat(\'' + c.id + '\')" title="' + tr('restore', 'Восстановить') + '">📥</button></div>' +
                         '</div>';
                 }).join('');
@@ -4202,6 +4225,7 @@
                         '<div class="chat-last">' + (c.lastMessage || tr('noMessages', 'Нет сообщений')) + '</div>' +
                         '</div>' +
                         '<div class="chat-time">' + (c.time || '') + '</div>' +
+                        renderUnreadBadge(c) +
                         '<div class="chat-actions">' +
                         '<button class="chat-action-icon pinned" onclick="event.stopPropagation(); unpinChat(\'' + c.id + '\')" title="' + tr('unpin', 'Открепить') + '" style="color: var(--accent-color);">📌</button>' +
                         '<button class="chat-action-icon archived" onclick="event.stopPropagation(); archiveChat(\'' + c.id + '\')" title="' + tr('archiveChat', 'Архивировать') + '">📁</button>' +
@@ -4241,6 +4265,7 @@
                         '<div class="chat-last">' + (c.lastMessage || tr('noMessages', 'Нет сообщений')) + '</div>' +
                         '</div>' +
                         '<div class="chat-time">' + (c.time || '') + '</div>' +
+                        renderUnreadBadge(c) +
                         '<div class="chat-actions">' +
                         '<button class="chat-action-icon" onclick="event.stopPropagation(); pinChat(\'' + c.id + '\')" title="' + tr('pin', 'Закрепить') + '">📌</button>' +
                         '<button class="chat-action-icon archived" onclick="event.stopPropagation(); archiveChat(\'' + c.id + '\')" title="' + tr('archiveChat', 'Архивировать') + '">📁</button>' +
@@ -5620,6 +5645,7 @@
                             av: chatAv,
                             avatarUrl: chatAv,
                             lastMessage: lastMsgText,
+                            unreadCount: c.unreadCount || 0,
                             time: c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''
                         });
                     }
@@ -5708,6 +5734,38 @@
         function unarchiveChatFromMenu() {
             document.getElementById('chatContextMenu').classList.remove('active');
             unarchiveChat(currentContextChatId);
+        }
+
+        async function addContextChatToFolder() {
+            const chatId = currentContextChatId;
+            document.getElementById('chatContextMenu').classList.remove('active');
+            if (!chatId) return;
+            folderSelectChatId = chatId;
+            await openFolderSelectModal();
+        }
+
+        async function markChatReadFromMenu() {
+            const chatId = currentContextChatId;
+            document.getElementById('chatContextMenu').classList.remove('active');
+            if (!chatId) return;
+
+            try {
+                const res = await fetch('/api/v1/chats/' + chatId + '/read', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+
+                if (!res.ok) throw new Error('mark read failed');
+
+                [allChats, archivedChats].forEach(function(list) {
+                    const chat = list.find(c => c.id === chatId);
+                    if (chat) chat.unreadCount = 0;
+                });
+                renderChatList();
+                showToast('success', tr('chatMarkedAsRead', 'Чат помечен прочитанным'), '✓');
+            } catch (err) {
+                showToast('error', tr('saveError', 'Ошибка сохранения'), '❌');
+            }
         }
 
         function deleteChatFromMenu() {

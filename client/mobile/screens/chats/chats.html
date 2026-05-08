@@ -1109,6 +1109,12 @@
         <div class="chat-context-item" onclick="archiveChatFromMenu()" id="contextArchiveItem">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg><span id="contextArchiveText" data-i18n="archiveChat">Архивировать</span>
         </div>
+        <div class="chat-context-item" onclick="addContextChatToFolder()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11v6"/><path d="M9 14h6"/></svg><span data-i18n="addFolder2">Добавить в папку</span>
+        </div>
+        <div class="chat-context-item" onclick="markChatReadFromMenu()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/><path d="m21 12-9 9-3-3"/></svg><span data-i18n="markAsRead">Пометить прочитанным</span>
+        </div>
         <div class="chat-context-divider"></div>
         <div class="chat-context-item danger" onclick="deleteChatFromMenu()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg><span data-i18n="deleteChat">Удалить</span>

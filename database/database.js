@@ -101,6 +101,18 @@ async function ensureTablesExist() {
     CREATE INDEX IF NOT EXISTS idx_chat_members_chat ON chat_members(chat_id);
     CREATE INDEX IF NOT EXISTS idx_chat_members_user ON chat_members(user_id);
 
+    -- Per-user chat settings
+    CREATE TABLE IF NOT EXISTS user_chat_settings (
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        chat_id UUID REFERENCES chats(id) ON DELETE CASCADE,
+        is_pinned BOOLEAN DEFAULT FALSE,
+        pinned_at TIMESTAMP,
+        is_archived BOOLEAN DEFAULT FALSE,
+        archived_at TIMESTAMP,
+        last_read_at TIMESTAMP,
+        PRIMARY KEY (user_id, chat_id)
+    );
+
     -- Messages table
     CREATE TABLE IF NOT EXISTS messages (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

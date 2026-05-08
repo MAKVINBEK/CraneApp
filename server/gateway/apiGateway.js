@@ -546,9 +546,11 @@ async function autoMigrate() {
                 pinned_at TIMESTAMP,
                 is_archived BOOLEAN DEFAULT FALSE,
                 archived_at TIMESTAMP,
+                last_read_at TIMESTAMP,
                 PRIMARY KEY (user_id, chat_id)
             )
         `).catch(() => {});
+        await query(`ALTER TABLE user_chat_settings ADD COLUMN IF NOT EXISTS last_read_at TIMESTAMP`).catch(() => {});
         
         // Сообщения
         await query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN DEFAULT FALSE`);
@@ -3574,6 +3576,7 @@ app.get('/api/v1/chats', authMiddleware, async (req, res) => {
                     COALESCE(ucs.is_pinned, FALSE)   AS user_is_pinned,
                     ucs.pinned_at                     AS user_pinned_at,
                     COALESCE(ucs.is_archived, FALSE)  AS user_is_archived,
+                    COALESCE(unread.unread_count, 0)   AS unread_count,
                     lm.content      AS last_message_content,
                     lm.type         AS last_message_type,
                     lm.sender_id    AS last_message_sender_id,
@@ -3590,6 +3593,14 @@ app.get('/api/v1/chats', authMiddleware, async (req, res) => {
                  ORDER BY created_at DESC
                  LIMIT 1
              ) lm ON TRUE
+             LEFT JOIN LATERAL (
+                 SELECT COUNT(*)::int AS unread_count
+                 FROM messages m
+                 WHERE m.chat_id = c.id
+                   AND m.is_deleted = FALSE
+                   AND m.sender_id <> $1
+                   AND (ucs.last_read_at IS NULL OR m.created_at > ucs.last_read_at)
+             ) unread ON TRUE
              WHERE COALESCE(ucs.is_archived, FALSE) = FALSE
              ORDER BY user_is_pinned DESC, user_pinned_at DESC NULLS LAST, lm.created_at DESC NULLS LAST`,
             [req.user.id]
@@ -3610,7 +3621,8 @@ app.get('/api/v1/chats', authMiddleware, async (req, res) => {
             lastMessageEncrypted: c.last_message_encrypted || false,
             lastMessageIv: c.last_message_iv || null,
             lastMessageType: c.last_message_type || 'text',
-            lastMessageSenderId: c.last_message_sender_id
+            lastMessageSenderId: c.last_message_sender_id,
+            unreadCount: c.unread_count || 0
         }));
         
         res.json({ chats });
@@ -4003,6 +4015,32 @@ app.delete('/api/v1/chats/:chatId/archive', authMiddleware, async (req, res) => 
     }
 });
 
+// Пометить чат прочитанным
+app.post('/api/v1/chats/:chatId/read', authMiddleware, async (req, res) => {
+    try {
+        const { chatId } = req.params;
+        const memberCheck = await query('SELECT 1 FROM chat_members WHERE chat_id = $1 AND user_id = $2', [chatId, req.user.id]);
+        if (!memberCheck.rows.length) return res.status(403).json({ error: req.t('accessDenied') });
+
+        const lastMessage = await query(
+            'SELECT MAX(created_at) AS last_message_at FROM messages WHERE chat_id = $1 AND is_deleted = FALSE',
+            [chatId]
+        );
+        const lastReadAt = lastMessage.rows[0]?.last_message_at || new Date();
+
+        await query(`
+            INSERT INTO user_chat_settings (user_id, chat_id, last_read_at)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (user_id, chat_id) DO UPDATE SET last_read_at = $3
+        `, [req.user.id, chatId, lastReadAt]);
+
+        res.json({ success: true, unreadCount: 0, lastReadAt });
+    } catch (error) {
+        logger.error('❌ Mark chat read error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Получить архивированные чаты
 app.get('/api/v1/chats/archived', authMiddleware, async (req, res) => {
     try {
@@ -4013,6 +4051,7 @@ app.get('/api/v1/chats/archived', authMiddleware, async (req, res) => {
                     lm.is_encrypted AS last_message_encrypted,
                     lm.encryption_iv AS last_message_iv,
                     lm.created_at   AS last_message_at,
+                    COALESCE(unread.unread_count, 0) AS unread_count,
                     ucs.archived_at AS user_archived_at
              FROM chats c
              JOIN chat_members cm ON c.id = cm.chat_id AND cm.user_id = $1
@@ -4023,6 +4062,14 @@ app.get('/api/v1/chats/archived', authMiddleware, async (req, res) => {
                  WHERE chat_id = c.id AND is_deleted = FALSE
                  ORDER BY created_at DESC LIMIT 1
              ) lm ON TRUE
+             LEFT JOIN LATERAL (
+                 SELECT COUNT(*)::int AS unread_count
+                 FROM messages m
+                 WHERE m.chat_id = c.id
+                   AND m.is_deleted = FALSE
+                   AND m.sender_id <> $1
+                   AND (ucs.last_read_at IS NULL OR m.created_at > ucs.last_read_at)
+             ) unread ON TRUE
              ORDER BY ucs.archived_at DESC`,
             [req.user.id]
         );
@@ -4039,6 +4086,7 @@ app.get('/api/v1/chats/archived', authMiddleware, async (req, res) => {
             lastMessageEncrypted: c.last_message_encrypted || false,
             lastMessageIv: c.last_message_iv || null,
             lastMessageType: c.last_message_type || 'text',
+            unreadCount: c.unread_count || 0,
             lastMessageAt: c.last_message_at,
             archivedAt: c.user_archived_at
         }));
