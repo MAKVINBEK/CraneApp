@@ -2536,11 +2536,11 @@
                 // Глазик: pending = часы, sent = одна галочка, read = две галочки
                 let statusIcon = '';
                 if (m.pending) {
-                    statusIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.6"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+                    statusIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.75"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
                 } else if (m.isRead || m.status === 'read') {
-                    statusIcon = '<svg width="16" height="10" viewBox="0 0 16 10" fill="none" style="color:var(--accent-color)"><path d="M1 5l3 3 5-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 5l3 3 5-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+                    statusIcon = '<svg width="16" height="10" viewBox="0 0 16 10" fill="none"><path d="M1 5l3 3 5-7" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 5l3 3 5-7" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
                 } else {
-                    statusIcon = '<svg width="12" height="10" viewBox="0 0 12 10" fill="none" style="opacity:.7"><path d="M1 5l3 3 7-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+                    statusIcon = '<svg width="12" height="10" viewBox="0 0 12 10" fill="none" style="opacity:.85"><path d="M1 5l3 3 7-7" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
                 }
                 timeDiv.innerHTML = timeText + ' <span style="display:inline-flex;align-items:center;margin-left:2px;vertical-align:middle">' + statusIcon + '</span>';
             } else {
@@ -3461,7 +3461,12 @@
                             }
                             return msg;
                         };
-                        decryptMsg(data.message).then(msg => addMessage(msg));
+                        decryptMsg(data.message).then(msg => {
+                            addMessage(msg);
+                            markChatAsRead(data.chatId, { silent: true }).catch(function(err) {
+                                console.error('Mark chat as read error:', err);
+                            });
+                        });
                     }
                     // Если чат новый (нас нет в chatUsers) — добавляем его сразу
                     if (data.chatId && !allChats.find(c => c.id === data.chatId)) {
@@ -4149,7 +4154,11 @@
 
             const res = await fetch('/api/v1/chats/' + chatId + '/read', {
                 method: 'POST',
-                headers: { 'Authorization': 'Bearer ' + token }
+                headers: {
+                    'Authorization': 'Bearer ' + token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({})
             });
             if (!res.ok) throw new Error('mark read failed');
 
@@ -6575,7 +6584,7 @@
      initFolderTabs();
      // Открываем чат из параметра URL (например из папки)
      const params = new URLSearchParams(window.location.search);
-     const openChatId = params.get('openChat');
+     const openChatId = params.get('openChat') || params.get('chat') || params.get('id');
      if (openChatId) {
          const chat = allChats.find(function(c) { return c.id === openChatId; });
          if (chat) {

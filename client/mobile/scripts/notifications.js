@@ -47,7 +47,7 @@
 
         n.onclick = () => {
             window.focus();
-            window.location.href = '/client/mobile/screens/chats/chat.html?id=' + chatId;
+            window.location.href = '/client/mobile/screens/chats/chats.html?openChat=' + encodeURIComponent(chatId);
             n.close();
         };
 
@@ -102,7 +102,7 @@
         `;
 
         toast.onclick = () => {
-            window.location.href = '/client/mobile/screens/chats/chat.html?id=' + chatId;
+            window.location.href = '/client/mobile/screens/chats/chats.html?openChat=' + encodeURIComponent(chatId);
         };
 
         container.appendChild(toast);

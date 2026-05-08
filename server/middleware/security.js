@@ -373,7 +373,9 @@ function securityHeadersMiddleware(req, res, next) {
 function validateContentType(req, res, next) {
     if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
         const ct = req.headers['content-type'] || '';
-        if (req.path.startsWith('/api/') && !ct.includes('application/json') && !ct.includes('multipart/form-data')) {
+        const contentLength = Number(req.headers['content-length'] || 0);
+        const hasBody = contentLength > 0 || Boolean(req.headers['transfer-encoding']);
+        if (req.path.startsWith('/api/') && hasBody && !ct.includes('application/json') && !ct.includes('multipart/form-data')) {
             return res.status(415).json({ error: i18n.t(i18n.languageFromHeaders(req), 'unsupportedMediaType') });
         }
     }
