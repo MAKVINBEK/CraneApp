@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>Photo Editor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geologica:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="../../scripts/lucide.min.js"></script>
+    <link rel="stylesheet" href="photo-editor.css">
+</head>
+<body>
+    <script>
+        // Sync theme with parent window
+        function syncTheme() {
+            const theme = document.documentElement.getAttribute('data-theme') || parent.document.documentElement.getAttribute('data-theme');
+            if (theme) document.documentElement.setAttribute('data-theme', theme);
+        }
+        syncTheme();
+        // Also listen for changes
+        const observer = new MutationObserver(syncTheme);
+        observer.observe(parent.document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    </script>
+    <div class="header">
+        <button class="btn-text" onclick="window.parent.closePhotoEditor()">Отмена</button>
+        <div class="header-title">Edit</div>
+        <button class="btn-text btn-done" onclick="window.parent.closePhotoEditor()">Готово</button>
+    </div>
+    
+    <div class="main-layout">
+        <div class="content-area">
+            <img id="previewImage" src="" style="display:none;">
+            <div id="loader">Загрузка...</div>
+        </div>
+        
+        <div class="controls-container">
+            <!-- Main Tools (Horizontal on both) -->
+            <div class="tools-panel">
+                <div class="tool-item" onclick="toggleSubPanel('draw', this)">
+                    <i data-lucide="pencil"></i>
+                </div>
+                <div class="tool-item" onclick="toggleSubPanel('text', this)">
+                    <i data-lucide="type"></i>
+                </div>
+                <div class="tool-item" onclick="toggleSubPanel('crop', this)">
+                    <i data-lucide="crop"></i>
+                </div>
+                <div class="tool-item" onclick="toggleSubPanel('filters', this)">
+                    <i data-lucide="sparkles"></i>
+                </div>
+            </div>
+
+            <!-- Sub Panels (Below icons on desktop, Above icons on mobile) -->
+            <div id="drawOptions" class="sub-panel">
+                <div style="width: 100%;">
+                    <span class="tool-label">Цвет</span>
+                    <div class="option-group">
+                        <div class="color-dot selected" style="background: #ff3b30;"></div>
+                        <div class="color-dot" style="background: #ffcc00;"></div>
+                        <div class="color-dot" style="background: #4cd964;"></div>
+                        <div class="color-dot" style="background: #007aff;"></div>
+                        <div class="color-dot" style="background: #fff;"></div>
+                    </div>
+                </div>
+                <div style="width: 100%; margin-top: 10px;">
+                    <span class="tool-label">Размер кисти</span>
+                    <div class="option-group">
+                        <div class="size-dot" style="width: 6px; height: 6px;"></div>
+                        <div class="size-dot" style="width: 12px; height: 12px;"></div>
+                        <div class="size-dot" style="width: 18px; height: 18px;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="cropOptions" class="sub-panel">
+                <span class="tool-label">Aspect ratio</span>
+                <button class="ratio-btn">Original</button>
+                <button class="ratio-btn">Square (1:1)</button>
+                <button class="ratio-btn">3:2</button>
+                <button class="ratio-btn">16:9</button>
+            </div>
+
+            <div id="textOptions" class="sub-panel">
+                <span class="tool-label">Шрифт</span>
+                <button class="ratio-btn">Sans Serif</button>
+                <button class="ratio-btn">Serif</button>
+                <button class="ratio-btn">Monospace</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function toggleSubPanel(type, el) {
+            const isActive = el.classList.contains('active');
+            document.querySelectorAll('.tool-item').forEach(item => item.classList.remove('active'));
+            document.querySelectorAll('.sub-panel').forEach(panel => panel.classList.remove('active'));
+
+            if (!isActive) {
+                el.classList.add('active');
+                const panel = document.getElementById(type + 'Options');
+                if (panel) panel.classList.add('active');
+            }
+        }
+
+        window.onload = function() {
+            if (window.lucide) lucide.createIcons();
+            const imageData = localStorage.getItem('craneapp_editor_image');
+            if (imageData) {
+                const img = document.getElementById('previewImage');
+                img.src = imageData;
+                img.onload = () => {
+                    img.style.display = 'block';
+                    document.getElementById('loader').style.display = 'none';
+                };
+            }
+        };
+    </script>
+</body>
+</html>
