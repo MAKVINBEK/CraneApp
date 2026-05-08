@@ -551,6 +551,28 @@ async function autoMigrate() {
             )
         `).catch(() => {});
         await query(`ALTER TABLE user_chat_settings ADD COLUMN IF NOT EXISTS last_read_at TIMESTAMP`).catch(() => {});
+        await query(`
+            INSERT INTO user_chat_settings (user_id, chat_id, last_read_at)
+            SELECT cm.user_id, cm.chat_id, COALESCE(MAX(m.created_at), NOW())
+            FROM chat_members cm
+            LEFT JOIN messages m ON m.chat_id = cm.chat_id
+            LEFT JOIN user_chat_settings ucs ON ucs.user_id = cm.user_id AND ucs.chat_id = cm.chat_id
+            WHERE ucs.user_id IS NULL
+            GROUP BY cm.user_id, cm.chat_id
+        `).catch(() => {});
+        await query(`
+            UPDATE user_chat_settings ucs
+            SET last_read_at = COALESCE(latest.last_message_at, NOW())
+            FROM (
+                SELECT cm.user_id, cm.chat_id, MAX(m.created_at) AS last_message_at
+                FROM chat_members cm
+                LEFT JOIN messages m ON m.chat_id = cm.chat_id
+                GROUP BY cm.user_id, cm.chat_id
+            ) latest
+            WHERE ucs.user_id = latest.user_id
+              AND ucs.chat_id = latest.chat_id
+              AND ucs.last_read_at IS NULL
+        `).catch(() => {});
         
         // Сообщения
         await query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN DEFAULT FALSE`);
@@ -4022,18 +4044,28 @@ app.post('/api/v1/chats/:chatId/read', authMiddleware, async (req, res) => {
         const memberCheck = await query('SELECT 1 FROM chat_members WHERE chat_id = $1 AND user_id = $2', [chatId, req.user.id]);
         if (!memberCheck.rows.length) return res.status(403).json({ error: req.t('accessDenied') });
 
-        const lastMessage = await query(
-            'SELECT MAX(created_at) AS last_message_at FROM messages WHERE chat_id = $1 AND is_deleted = FALSE',
-            [chatId]
-        );
-        const lastReadAt = lastMessage.rows[0]?.last_message_at || new Date();
-
         await query(`
-            INSERT INTO user_chat_settings (user_id, chat_id, last_read_at)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (user_id, chat_id) DO UPDATE SET last_read_at = $3
-        `, [req.user.id, chatId, lastReadAt]);
+            CREATE TABLE IF NOT EXISTS user_chat_settings (
+                user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                chat_id UUID REFERENCES chats(id) ON DELETE CASCADE,
+                is_pinned BOOLEAN DEFAULT FALSE,
+                pinned_at TIMESTAMP,
+                is_archived BOOLEAN DEFAULT FALSE,
+                archived_at TIMESTAMP,
+                last_read_at TIMESTAMP,
+                PRIMARY KEY (user_id, chat_id)
+            )
+        `).catch(() => {});
+        await query('ALTER TABLE user_chat_settings ADD COLUMN IF NOT EXISTS last_read_at TIMESTAMP').catch(() => {});
 
+        const readResult = await query(`
+            INSERT INTO user_chat_settings (user_id, chat_id, last_read_at)
+            VALUES ($1, $2, NOW())
+            ON CONFLICT (user_id, chat_id) DO UPDATE SET last_read_at = NOW()
+            RETURNING last_read_at
+        `, [req.user.id, chatId]);
+
+        const lastReadAt = readResult.rows[0]?.last_read_at || new Date();
         res.json({ success: true, unreadCount: 0, lastReadAt });
     } catch (error) {
         logger.error('❌ Mark chat read error:', error);

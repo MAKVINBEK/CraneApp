@@ -4144,6 +4144,27 @@
             return '<div class="unread-badge">' + (count > 99 ? '99+' : count) + '</div>';
         }
 
+        async function markChatAsRead(chatId, options = {}) {
+            if (!chatId) return false;
+
+            const res = await fetch('/api/v1/chats/' + chatId + '/read', {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            if (!res.ok) throw new Error('mark read failed');
+
+            [allChats, archivedChats].forEach(function(list) {
+                const chat = list.find(c => c.id === chatId);
+                if (chat) chat.unreadCount = 0;
+            });
+            renderChatList();
+
+            if (!options.silent) {
+                showToast('success', tr('chatMarkedAsRead', 'Чат помечен прочитанным'), '✓');
+            }
+            return true;
+        }
+
         function renderChatList(filter) {
             filter = filter || '';
             
@@ -4604,15 +4625,17 @@
         // ============================================
         async function loadMessages() {
             if (!activeChat) return;
+            const chatId = activeChat.id;
             
             const messagesEl = document.getElementById('messages');
             messagesEl.innerHTML = '';
             
             try {
-                const res = await fetch('/api/v1/messages/' + activeChat.id, {
+                const res = await fetch('/api/v1/messages/' + chatId, {
                     headers: { 'Authorization': 'Bearer ' + token }
                 });
                 const data = await res.json();
+                if (!activeChat || activeChat.id !== chatId) return;
                 
                 if (data.messages && data.messages.length > 0) {
                     // Расшифровываем сообщения если E2E включён
@@ -4640,6 +4663,9 @@
                     messagesEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px;font-size:14px;">' + tr('noMessages', 'Нет сообщений') + '</div>';
                 }
                 scrollToBottom();
+                markChatAsRead(chatId, { silent: true }).catch(function(err) {
+                    console.error('Mark chat as read error:', err);
+                });
             } catch (err) {
                 console.error('Load messages error:', err);
             }
@@ -5750,19 +5776,7 @@
             if (!chatId) return;
 
             try {
-                const res = await fetch('/api/v1/chats/' + chatId + '/read', {
-                    method: 'POST',
-                    headers: { 'Authorization': 'Bearer ' + token }
-                });
-
-                if (!res.ok) throw new Error('mark read failed');
-
-                [allChats, archivedChats].forEach(function(list) {
-                    const chat = list.find(c => c.id === chatId);
-                    if (chat) chat.unreadCount = 0;
-                });
-                renderChatList();
-                showToast('success', tr('chatMarkedAsRead', 'Чат помечен прочитанным'), '✓');
+                await markChatAsRead(chatId);
             } catch (err) {
                 showToast('error', tr('saveError', 'Ошибка сохранения'), '❌');
             }
