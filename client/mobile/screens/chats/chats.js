@@ -172,13 +172,37 @@
         // ============================================
         const token = localStorage.getItem('craneapp_auth_token');
         let user = JSON.parse(localStorage.getItem('craneapp_user_data') || '{}');
+        function formatI18n(value, vars) {
+            if (!vars || !value || typeof value !== 'string') return value;
+            return value.replace(/\{(\w+)\}/g, function(match, key) {
+                return vars[key] !== undefined ? vars[key] : match;
+            });
+        }
         function tr(key, fallback, vars) {
             const value = window.i18n?.t(key, vars);
             if (value && value !== key) return value;
-            return window.i18n?.translations?.en?.[key] || fallback;
+            return formatI18n(window.i18n?.translations?.en?.[key] || fallback, vars);
         }
         function tc(key, count, fallback) {
             return window.i18n?.tc ? window.i18n.tc(key, count) : (fallback || (count + ' ' + pluralMembers(count)));
+        }
+        function chatStatusText(userStatus) {
+            if (userStatus?.isBot) return tr('bot', 'bot');
+            if (!userStatus) return tr('online', 'online');
+            if (userStatus.isOnline || userStatus.online) return tr('online', 'online');
+            if (userStatus.lastSeen === null) return tr('lastSeenHidden', 'last seen hidden');
+            const lastSeen = userStatus.lastSeen ? new Date(userStatus.lastSeen) : null;
+            if (lastSeen && !Number.isNaN(lastSeen.getTime())) {
+                const diff = Date.now() - lastSeen.getTime();
+                const minutes = Math.floor(diff / 60000);
+                const hours = Math.floor(diff / 3600000);
+                const days = Math.floor(diff / 86400000);
+                if (minutes < 1) return tr('justNow', 'just now');
+                if (minutes < 60) return tr('minutesAgo', minutes + ' min. ago', { count: minutes });
+                if (hours < 24) return tr('hoursAgo', hours + ' h. ago', { count: hours });
+                if (days < 7) return tr('daysAgo', days + ' d. ago', { count: days });
+            }
+            return tr('lastSeenRecently', 'last seen recently');
         }
 
         // Инициализируем E2E шифрование
@@ -3264,15 +3288,9 @@
                     // Обновляем хедер если открыт чат с этим пользователем
                     if (activeChat && chatUsers[activeChat.id] && chatUsers[activeChat.id].id === data.userId) {
                         const statusEl = document.getElementById('chatStatus');
-                        if (data.isOnline) {
-                            statusEl.textContent = 'онлайн';
-                            statusEl.style.color = 'var(--success-color)';
-                        } else if (data.lastSeen === null) {
-                            statusEl.textContent = tr('lastSeenHidden', 'последний визит скрыт');
-                            statusEl.style.color = 'var(--text-muted)';
-                        } else {
-                            statusEl.textContent = 'был(а) недавно';
-                            statusEl.style.color = 'var(--text-muted)';
+                        if (statusEl) {
+                            statusEl.textContent = chatStatusText({ isOnline: data.isOnline, lastSeen: data.lastSeen });
+                            statusEl.style.color = data.isOnline ? 'var(--success-color)' : 'var(--text-muted)';
                         }
                     }
                     // Обновляем список чатов без полной перезагрузки
@@ -3328,22 +3346,16 @@
         function showTyping() {
             const statusEl = document.getElementById('chatStatus');
             if (!statusEl) return;
-            statusEl.textContent = 'печатает...';
+            statusEl.textContent = tr('typing', 'typing...');
             statusEl.style.color = 'var(--success-color)';
             clearTimeout(showTyping._t);
             showTyping._t = setTimeout(function() {
-                // Восстанавливаем реальный статус
                 if (activeChat && chatUsers[activeChat.id]) {
                     const u = chatUsers[activeChat.id];
-                    if (u.isOnline) {
-                        statusEl.textContent = 'онлайн';
-                        statusEl.style.color = 'var(--success-color)';
-                    } else {
-                        statusEl.textContent = 'был(а) недавно';
-                        statusEl.style.color = 'var(--text-muted)';
-                    }
+                    statusEl.textContent = chatStatusText(u);
+                    statusEl.style.color = (u.isOnline || u.online) ? 'var(--success-color)' : 'var(--text-muted)';
                 } else {
-                    statusEl.textContent = 'онлайн';
+                    statusEl.textContent = tr('online', 'online');
                 }
             }, 3000);
         }
@@ -3912,7 +3924,7 @@
             // Секция архивированных — ПЕРВОЙ (как в Telegram)
             if (archivedChats.length > 0 && !filter) {
                 html += '<div class="archived-chats-section">';
-                html += '<div class="archived-chats-header" onclick="toggleArchivedChats()">📁 Архивированные (' + archivedChats.length + ')</div>';
+                html += '<div class="archived-chats-header" onclick="toggleArchivedChats()">📁 ' + tr('archived', 'Archived') + ' (' + archivedChats.length + ')</div>';
                 html += '<div class="archived-chats-list" id="archivedChatsList" style="display: block;">';
                 html += archivedChats.map(function(c) {
                     const name = c.name || c.title || tr('chatShort', 'Чат');
@@ -3931,7 +3943,7 @@
             // Секция закреплённых
             if (pinnedChats.length > 0 && !filter) {
                 html += '<div class="pinned-chats-section" style="margin-bottom: 8px;">';
-                html += '<div class="pinned-chats-header" style="color: var(--accent-color); font-weight: 600;">📌 Закреплённые</div>';
+                html += '<div class="pinned-chats-header" style="color: var(--accent-color); font-weight: 600;">📌 ' + tr('pinned', 'Pinned') + '</div>';
                 
                 html += pinnedChats.map(function(c) {
                     const isActive = activeChat && activeChat.id === c.id;
@@ -4238,7 +4250,7 @@
             // Обновляем статус онлайн
             if (chatUser) {
                 if (chatUser.isBlocked) {
-                    statusEl.textContent = 'Аккаунт заблокирован';
+                    statusEl.textContent = tr('accountBlocked', 'Account blocked');
                     statusEl.style.color = '#FF4B4B';
                 } else {
                     updateChatUserStatus(chatUser.id);
@@ -4289,7 +4301,7 @@
             // Если это бот — показываем "бот" вместо статуса
             const chatUser = chatUsers[activeChat && activeChat.id];
             if (chatUser && chatUser.isBot) {
-                statusEl.textContent = 'бот';
+                statusEl.textContent = tr('bot', 'bot');
                 statusEl.style.color = 'var(--accent-color)';
                 return;
             }
@@ -4300,42 +4312,8 @@
                 });
                 const data = await res.json();
                 
-                const _isPrivate = activeChat && activeChat.type !== 'group';
-                const _audioBtn = document.getElementById('audioCallBtn');
-                const _videoBtn = document.getElementById('videoCallBtn');
-
-                if (data.isOnline) {
-                    statusEl.textContent = 'онлайн';
-                    statusEl.style.color = 'var(--success-color)';
-                } else {
-                    const lastSeen = data.lastSeen ? new Date(data.lastSeen) : null;
-                    statusEl.style.color = 'var(--text-muted)';
-                    if (data.lastSeen === null && !data.isOnline) {
-                        // Пользователь скрыл последний визит
-                        statusEl.textContent = tr('lastSeenHidden', 'последний визит скрыт');
-                    } else if (lastSeen) {
-                        const now = new Date();
-                        const diff = now - lastSeen;
-                        const minutes = Math.floor(diff / 60000);
-                        const hours = Math.floor(diff / 3600000);
-                        const days = Math.floor(diff / 86400000);
-                        
-                        if (minutes < 1) {
-                            statusEl.textContent = 'только что';
-                        } else if (minutes < 60) {
-                            statusEl.textContent = minutes + ' мин. назад';
-                        } else if (hours < 24) {
-                            statusEl.textContent = hours + ' ч. назад';
-                        } else if (days < 7) {
-                            statusEl.textContent = days + ' дн. назад';
-                        } else {
-                            statusEl.textContent = 'был(а) давно';
-                        }
-                    } else {
-                        statusEl.textContent = 'был(а) недавно';
-                    }
-                    statusEl.style.color = 'var(--text-muted)';
-                }
+                statusEl.textContent = chatStatusText({ isOnline: data.isOnline, lastSeen: data.lastSeen });
+                statusEl.style.color = data.isOnline ? 'var(--success-color)' : 'var(--text-muted)';
             } catch (e) {
                 statusEl.textContent = '';
             }
@@ -5445,22 +5423,27 @@
             
             // Обновляем текст пункта "Закрепить/Открепить"
             const pinText = document.getElementById('contextPinText');
-            const pinItem = document.getElementById('contextPinItem');
-            if (isPinned) {
-                pinText.textContent = 'Открепить';
-            } else {
-                pinText.textContent = 'Закрепить';
+            if (pinText) {
+                const pinKey = isPinned ? 'unpin' : 'pin';
+                pinText.setAttribute('data-i18n', pinKey);
+                pinText.textContent = tr(pinKey, isPinned ? 'Unpin' : 'Pin');
             }
             
             // Обновляем текст пункта "Архивировать/Разархивировать"
             const archiveText = document.getElementById('contextArchiveText');
             const archiveItem = document.getElementById('contextArchiveItem');
             if (isArchived) {
-                archiveText.textContent = 'Разархивировать';
-                archiveItem.onclick = function() { unarchiveChatFromMenu(); };
+                if (archiveText) {
+                    archiveText.setAttribute('data-i18n', 'unarchiveChat');
+                    archiveText.textContent = tr('unarchiveChat', 'Unarchive');
+                }
+                if (archiveItem) archiveItem.onclick = function() { unarchiveChatFromMenu(); };
             } else {
-                archiveText.textContent = 'Архивировать';
-                archiveItem.onclick = function() { archiveChatFromMenu(); };
+                if (archiveText) {
+                    archiveText.setAttribute('data-i18n', 'archiveChat');
+                    archiveText.textContent = tr('archiveChat', 'Archive');
+                }
+                if (archiveItem) archiveItem.onclick = function() { archiveChatFromMenu(); };
             }
         }
 
@@ -6301,6 +6284,36 @@
              const el = document.getElementById(id);
              if (el) window.i18n.translatePage(el);
          });
+     }
+     renderChatList();
+     if (activeChat && chatUsers[activeChat.id]) {
+         const statusEl = document.getElementById('chatStatus');
+         const chatUser = chatUsers[activeChat.id];
+         if (statusEl) {
+             if (chatUser.isBlocked) {
+                 statusEl.textContent = tr('accountBlocked', 'Account blocked');
+                 statusEl.style.color = '#FF4B4B';
+             } else {
+                 statusEl.textContent = chatStatusText(chatUser);
+                 statusEl.style.color = (chatUser.isOnline || chatUser.online) ? 'var(--success-color)' : 'var(--text-muted)';
+             }
+         }
+     }
+     if (currentContextChatId && document.getElementById('chatContextMenu')?.classList.contains('active')) {
+         const isPinned = pinnedChatIds.has(currentContextChatId);
+         const isArchived = archivedChats.some(c => c.id === currentContextChatId);
+         const pinText = document.getElementById('contextPinText');
+         const archiveText = document.getElementById('contextArchiveText');
+         if (pinText) {
+             const pinKey = isPinned ? 'unpin' : 'pin';
+             pinText.setAttribute('data-i18n', pinKey);
+             pinText.textContent = tr(pinKey, isPinned ? 'Unpin' : 'Pin');
+         }
+         if (archiveText) {
+             const archiveKey = isArchived ? 'unarchiveChat' : 'archiveChat';
+             archiveText.setAttribute('data-i18n', archiveKey);
+             archiveText.textContent = tr(archiveKey, isArchived ? 'Unarchive' : 'Archive');
+         }
      }
      _renderActiveCallBar();
  });
