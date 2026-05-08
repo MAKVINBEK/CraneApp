@@ -173,7 +173,12 @@
             fraud: '💰 Мошенничество', fakeAcc: '🎭 Фейковый аккаунт', other: '📝 Другое', description: 'Описание', scanQr: 'Отсканируйте QR-код<br>чтобы начать чат',
             addFolder: '📂 Добавить в папку', chooseTime: 'Выберите время', reason1: 'Причина (необязательно)', oneHour: '1 час', sixHours: '6 часов', oneDay: '1 день', oneWeek: '1 неделя',
             oneMonth: '1 месяц', forever: '🚫 Навсегда', youMuting: '🔇 Вы замучены', accMuting: 'Аккаунт замучен', reason2: 'Причина:', understand: 'Понятно', complain2: 'Пожаловаться',
-            addFolder2: 'Добавить в папку', markAsRead: 'Пометить прочитанным', chatMarkedAsRead: 'Чат помечен прочитанным', notify: '🔔 Уведомления', files: 'Файлы', links: 'Ссылки'
+            addFolder2: 'Добавить в папку', markAsRead: 'Пометить прочитанным', chatMarkedAsRead: 'Чат помечен прочитанным', notify: '🔔 Уведомления', files: 'Файлы', links: 'Ссылки',
+            // editor
+            editorCrop: 'Обрезка', editorRotate: 'Поворот', editorFlip: 'Отзеркалить',
+            editorTransform: 'Трансформация',
+            editorAspectRatio: 'Пропорции', editorFree: 'Произвольно',
+            editorOriginal: 'Оригинал', editorSquare: 'Квадрат'
         },
         en: {
             settings: 'Settings', account: 'Account', privacy: 'Privacy',
@@ -343,6 +348,11 @@
             chooseSticker: 'Select or create a sticker pack',
             logout2: 'Log out', logoutConfirm: 'Log out?',
             noMessages: 'No messages',
+            // editor
+            editorCrop: 'Crop', editorRotate: 'Rotate', editorFlip: 'Flip',
+            editorTransform: 'Transform',
+            editorAspectRatio: 'Aspect Ratio', editorFree: 'Free',
+            editorOriginal: 'Original', editorSquare: 'Square'
         },
         de: {
             settings: 'Einstellungen', account: 'Konto', privacy: 'Datenschutz',
@@ -477,6 +487,11 @@
             chooseSticker: 'Stickerpack auswählen oder erstellen',
             logout2: 'Abmelden', logoutConfirm: 'Abmelden?',
             noMessages: 'Keine Nachrichten',
+            // editor
+            editorCrop: 'Zuschneiden', editorRotate: 'Drehen', editorFlip: 'Spiegeln',
+            editorTransform: 'Transformation',
+            editorAspectRatio: 'Seitenverhältnis', editorFree: 'Frei',
+            editorOriginal: 'Original', editorSquare: 'Quadrat'
         },
         fr: {
             settings: 'Paramètres', account: 'Compte', privacy: 'Confidentialité',
@@ -611,6 +626,11 @@
             chooseSticker: 'Sélectionner ou créer un pack de stickers',
             logout2: 'Se déconnecter', logoutConfirm: 'Se déconnecter?',
             noMessages: 'Pas de messages',
+            // editor
+            editorCrop: 'Recadrer', editorRotate: 'Pivoter', editorFlip: 'Retourner',
+            editorTransform: 'Transformation',
+            editorAspectRatio: 'Ratio d\'aspect', editorFree: 'Libre',
+            editorOriginal: 'Original', editorSquare: 'Carré'
         },
         es: {
             settings: 'Configuración', account: 'Cuenta', privacy: 'Privacidad',
@@ -745,6 +765,11 @@
             chooseSticker: 'Seleccionar o crear pack de stickers',
             logout2: 'Cerrar sesión', logoutConfirm: '¿Cerrar sesión?',
             noMessages: 'Sin mensajes',
+            // editor
+            editorCrop: 'Recortar', editorRotate: 'Girar', editorFlip: 'Reflejar',
+            editorTransform: 'Transformación',
+            editorAspectRatio: 'Relación de aspecto', editorFree: 'Libre',
+            editorOriginal: 'Original', editorSquare: 'Cuadrado'
         },
         it: {
             settings: 'Impostazioni', account: 'Account', privacy: 'Privacy',
@@ -877,6 +902,11 @@
             chooseSticker: 'Seleziona o crea un pack sticker',
             logout2: 'Esci', logoutConfirm: 'Esci?',
             noMessages: 'Nessun messaggio',
+            // editor
+            editorCrop: 'Ritaglia', editorRotate: 'Ruota', editorFlip: 'Rifletti',
+            editorTransform: 'Trasformazione',
+            editorAspectRatio: 'Rapporto d\'aspetto', editorFree: 'Libero',
+            editorOriginal: 'Originale', editorSquare: 'Quadrato'
         },
         pt: {
             settings: 'Configurações', account: 'Conta', privacy: 'Privacidade',
@@ -1009,6 +1039,11 @@
             chooseSticker: 'Selecionar ou criar pack de stickers',
             logout2: 'Sair', logoutConfirm: 'Sair?',
             noMessages: 'Sem mensagens',
+            // editor
+            editorCrop: 'Recortar', editorRotate: 'Girar', editorFlip: 'Espelhar',
+            editorTransform: 'Transformação',
+            editorAspectRatio: 'Proporção', editorFree: 'Livre',
+            editorOriginal: 'Original', editorSquare: 'Quadrado'
         },
         pl: {
             settings: 'Ustawienia', account: 'Konto', privacy: 'Prywatność',
@@ -1141,6 +1176,11 @@
             chooseSticker: 'Wybierz lub utwórz pack naklejek',
             logout2: 'Wyloguj', logoutConfirm: 'Wylogować?',
             noMessages: 'Brak wiadomości',
+            // editor
+            editorCrop: 'Kadrowanie', editorRotate: 'Obróć', editorFlip: 'Odbicie',
+            editorTransform: 'Transformacja',
+            editorAspectRatio: 'Proporcje', editorFree: 'Dowolnie',
+            editorOriginal: 'Oryginał', editorSquare: 'Kwadrat'
         },
         uk: {
             settings: 'Налаштування', account: 'Акаунт', privacy: 'Конфіденційність',
@@ -1273,6 +1313,11 @@
             chooseSticker: 'Оберіть або створіть стікерпак',
             logout2: 'Вийти', logoutConfirm: 'Вийти з акаунту?',
             noMessages: 'Немає повідомлень',
+            // editor
+            editorCrop: 'Обрізка', editorRotate: 'Поворот', editorFlip: 'Віддзеркалити',
+            editorTransform: 'Трансформація',
+            editorAspectRatio: 'Пропорції', editorFree: 'Довільно',
+            editorOriginal: 'Оригінал', editorSquare: 'Квадрат'
         },
         tr: {
             settings: 'Ayarlar', account: 'Hesap', privacy: 'Gizlilik',
@@ -1405,6 +1450,11 @@
             chooseSticker: 'Çıkartma paketi seç veya oluştur',
             logout2: 'Çıkış yap', logoutConfirm: 'Çıkış yapılsın mı?',
             noMessages: 'Mesaj yok',
+            // editor
+            editorCrop: 'Kırp', editorRotate: 'Döndür', editorFlip: 'Yansıt',
+            editorTransform: 'Dönüştür',
+            editorAspectRatio: 'En-Boy Oranı', editorFree: 'Serbest',
+            editorOriginal: 'Orijinal', editorSquare: 'Kare'
         },
     };
 

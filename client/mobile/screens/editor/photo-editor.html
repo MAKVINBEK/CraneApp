@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Geologica:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="../../scripts/lucide.min.js"></script>
+    <script src="../../scripts/i18n.js"></script>
     <link rel="stylesheet" href="photo-editor.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
 </head>
@@ -15,7 +16,7 @@
     <div class="main-layout">
         <div class="content-area">
             <img id="previewImage" src="" style="display:none;">
-            <div id="loader">Загрузка...</div>
+            <div id="loader" data-i18n="loading">Загрузка...</div>
             
             <!-- Шкала поворота (Telegram style) -->
             <div id="rotationControl" class="rotation-control">
@@ -55,18 +56,18 @@
                     </div>
                 </div>
 
-                <div class="sub-panel" id="cropOptions">
-                    <span class="tool-label">Transform</span>
+                <div class="sub-panel active" id="cropOptions">
+                    <span class="tool-label" data-i18n="editorTransform">Transform</span>
                     <div class="option-group" style="margin-bottom: 15px;">
-                        <button class="tool-item" onclick="rotateImage()" title="Rotate 90°"><i data-lucide="rotate-cw"></i></button>
-                        <button class="tool-item" onclick="flipImage('h')" title="Flip Horizontal"><i data-lucide="flip-horizontal"></i></button>
-                        <button class="tool-item" onclick="flipImage('v')" title="Flip Vertical"><i data-lucide="flip-vertical"></i></button>
+                        <button class="tool-item" onclick="rotateImage()" title="Rotate 90°" data-i18n-title="editorRotate"><i data-lucide="rotate-cw"></i></button>
+                        <button class="tool-item" onclick="flipImage('h')" title="Flip Horizontal" data-i18n-title="editorFlip"><i data-lucide="flip-horizontal"></i></button>
+                        <button class="tool-item" onclick="flipImage('v')" title="Flip Vertical" data-i18n-title="editorFlip"><i data-lucide="flip-vertical"></i></button>
                     </div>
-                    <span class="tool-label">Aspect Ratio</span>
+                    <span class="tool-label" data-i18n="editorAspectRatio">Aspect Ratio</span>
                     <div class="option-group ratio-grid">
-                        <button class="ratio-btn active" onclick="setRatio(NaN)"><span class="ratio-icon ratio-free"></span>Free</button>
-                        <button class="ratio-btn" onclick="setRatio(0)"><span class="ratio-icon ratio-orig"></span>Original</button>
-                        <button class="ratio-btn" onclick="setRatio(1)"><span class="ratio-icon ratio-1-1"></span>Square</button>
+                        <button class="ratio-btn active" onclick="setRatio(NaN)"><span class="ratio-icon ratio-free"></span><span data-i18n="editorFree">Free</span></button>
+                        <button class="ratio-btn" onclick="setRatio(0)"><span class="ratio-icon ratio-orig"></span><span data-i18n="editorOriginal">Original</span></button>
+                        <button class="ratio-btn" onclick="setRatio(1)"><span class="ratio-icon ratio-1-1"></span><span data-i18n="editorSquare">Square</span></button>
                         <button class="ratio-btn" onclick="setRatio(3/2)"><span class="ratio-icon ratio-3-2"></span>3:2</button>
                         <button class="ratio-btn" onclick="setRatio(2/3)"><span class="ratio-icon ratio-2-3"></span>2:3</button>
                         <button class="ratio-btn" onclick="setRatio(4/3)"><span class="ratio-icon ratio-4-3"></span>4:3</button>
@@ -88,7 +89,7 @@
 
             <!-- Bottom Tools Bar -->
             <div class="tools-panel">
-                <div class="tool-item btn-cancel" onclick="window.parent.closePhotoEditor()">
+                <div class="tool-item btn-cancel" onclick="window.parent.closePhotoEditor()" data-i18n="cancel">
                     <i data-lucide="x"></i>
                 </div>
                 
@@ -100,7 +101,7 @@
                 <div class="tool-item" onclick="toggleSubPanel('text', this)">
                     <i data-lucide="type"></i>
                 </div>
-                <div class="tool-item" onclick="toggleSubPanel('crop', this)">
+                <div class="tool-item active" onclick="toggleSubPanel('crop', this)" data-i18n-title="editorCrop">
                     <i data-lucide="crop"></i>
                 </div>
                 <div class="tool-item" onclick="toggleSubPanel('filters', this)">
@@ -109,7 +110,7 @@
 
                 <div class="tool-spacer"></div>
 
-                <div class="tool-item btn-save" onclick="saveResult()">
+                <div class="tool-item btn-save" onclick="saveResult()" data-i18n="save">
                     <i data-lucide="check"></i>
                 </div>
             </div>
