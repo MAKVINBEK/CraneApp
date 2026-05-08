@@ -2537,7 +2537,7 @@
                 let statusIcon = '';
                 if (m.pending) {
                     statusIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.6"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
-                } else if (m.isRead) {
+                } else if (m.isRead || m.status === 'read') {
                     statusIcon = '<svg width="16" height="10" viewBox="0 0 16 10" fill="none" style="color:var(--accent-color)"><path d="M1 5l3 3 5-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 5l3 3 5-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
                 } else {
                     statusIcon = '<svg width="12" height="10" viewBox="0 0 12 10" fill="none" style="opacity:.7"><path d="M1 5l3 3 7-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';

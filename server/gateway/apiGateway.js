@@ -4154,6 +4154,7 @@ app.get('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
                 m.is_edited, m.edited_at, m.is_pinned, m.created_at,
                 m.media_url, m.media_type, m.voice_duration,
                 m.is_encrypted, m.encryption_iv,
+                COALESCE(read_state.is_read, FALSE) AS is_read,
                 u.username as sender_username, u.first_name as sender_first_name, u.avatar_url as sender_avatar, u.badge as sender_badge, u.badges as sender_badges, u.is_bot as sender_is_bot, u.is_premium as sender_is_premium,
                 reply.content as reply_to_content,
                 reply.is_encrypted as reply_to_encrypted,
@@ -4164,6 +4165,16 @@ app.get('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
              LEFT JOIN users u ON m.sender_id = u.id
              LEFT JOIN messages reply ON m.reply_to_message_id = reply.id
              LEFT JOIN users reply_user ON reply.sender_id = reply_user.id
+             LEFT JOIN LATERAL (
+                SELECT bool_and(ucs.last_read_at IS NOT NULL AND ucs.last_read_at >= m.created_at) AS is_read
+                FROM chat_members cm_readers
+                LEFT JOIN user_chat_settings ucs
+                  ON ucs.chat_id = cm_readers.chat_id
+                 AND ucs.user_id = cm_readers.user_id
+                WHERE cm_readers.chat_id = m.chat_id
+                  AND cm_readers.user_id <> m.sender_id
+                  AND cm_readers.joined_at <= m.created_at
+             ) read_state ON TRUE
              WHERE m.chat_id = $1 AND m.is_deleted = FALSE
              ORDER BY m.created_at DESC
              LIMIT $2 OFFSET $3`,
@@ -4195,6 +4206,7 @@ app.get('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
             isPinned: m.is_pinned,
             isEncrypted: m.is_encrypted || false,
             encryptionIv: m.encryption_iv || null,
+            isRead: m.sender_id === req.user.id && !!m.is_read,
             createdAt: m.created_at
         }));
 
