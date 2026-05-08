@@ -1178,6 +1178,7 @@ body {
 body.chat-open .tab-bar  { display: none !important; }
 @media (max-width: 767px) {
     body.chat-open #navRail  { display: none !important; }
+    body.call-open #sidebar { transform: translateX(-100%) !important; }
     body.call-open .tab-bar { display: none !important; }
     body.call-open #navRail { display: none !important; }
 }

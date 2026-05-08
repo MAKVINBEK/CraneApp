@@ -603,6 +603,8 @@
             _panel.style.display = 'flex';
             document.getElementById('activeCallBar').style.display = 'none';
             document.getElementById('noChat').style.display = 'none';
+            const sidebar = document.getElementById('sidebar');
+            if (sidebar) sidebar.classList.add('hidden');
             const chatView = document.getElementById('chatView');
             chatView.classList.remove('active');
             document.body.classList.remove('chat-open');
@@ -619,11 +621,14 @@
                 _renderActiveCallBar();
                 bar.style.display = 'flex';
             }
+            const sidebar = document.getElementById('sidebar');
             // Восстанавливаем предыдущий вид
             if (typeof activeChat !== 'undefined' && activeChat) {
+                if (sidebar) sidebar.classList.add('hidden');
                 document.getElementById('chatView').classList.add('active');
                 document.body.classList.add('chat-open');
             } else {
+                if (sidebar) sidebar.classList.remove('hidden');
                 document.getElementById('noChat').style.display = '';
             }
         }
@@ -642,10 +647,13 @@
             _panel.style.display = 'none';
             document.getElementById('callFrame').src = '';
             document.getElementById('activeCallBar').style.display = 'none';
+            const sidebar = document.getElementById('sidebar');
             if (typeof activeChat !== 'undefined' && activeChat) {
+                if (sidebar) sidebar.classList.add('hidden');
                 document.getElementById('chatView').classList.add('active');
                 document.body.classList.add('chat-open');
             } else {
+                if (sidebar) sidebar.classList.remove('hidden');
                 document.getElementById('noChat').style.display = '';
             }
         }
