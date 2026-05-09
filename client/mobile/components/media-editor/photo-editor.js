@@ -183,14 +183,14 @@ function handleSelection() {
 function updateBrush() {
     if (!fCanvas) return;
 
-    // Сброс режимов
+    // Сброс режимов и слушателей (важно при переключении с Arrow)
     fCanvas.isDrawingMode = false;
     fCanvas.off('mouse:down');
     fCanvas.off('mouse:move');
     fCanvas.off('mouse:up');
 
-    if (!currentBrushType) {
-        // Если кисть выключена, разрешаем перемещение объектов
+    // Если мы НЕ в режиме рисования, или кисть не выбрана - разрешаем выделение объектов
+    if (activeTool !== 'draw' || !currentBrushType) {
         fCanvas.selection = true;
         fCanvas.getObjects().forEach(obj => {
             obj.set({ selectable: true, evented: true });
@@ -452,28 +452,12 @@ async function toggleSubPanel(type, el) {
             await switchToDrawMode();
             rotationCtrl.classList.remove('active');
             if (topBar) topBar.classList.add('active');
-            if (fCanvas) {
-                fCanvas.isDrawingMode = false;
-                fCanvas.selection = true;
-                fCanvas.getObjects().forEach(obj => {
-                    obj.set({ selectable: true, evented: true });
-                });
-                fCanvas.discardActiveObject();
-                fCanvas.renderAll();
-            }
+            updateBrush(); // Сбросит кисти и включит выделение
         } else if (type === 'filters') {
             await switchToDrawMode();
             rotationCtrl.classList.remove('active');
             if (topBar) topBar.classList.add('active');
-            if (fCanvas) {
-                fCanvas.isDrawingMode = false;
-                fCanvas.selection = true;
-                fCanvas.getObjects().forEach(obj => {
-                    obj.set({ selectable: true, evented: true });
-                });
-                fCanvas.discardActiveObject();
-                fCanvas.renderAll();
-            }
+            updateBrush(); // Сбросит кисти и включит выделение
         } else {
             if (topBar) topBar.classList.remove('active');
             rotationCtrl.classList.remove('active');
@@ -845,6 +829,7 @@ function initBrushPickers() {
 
 async function saveResult() {
     let finalDataUrl;
+    const img = document.getElementById('previewImage');
     
     // Если открыт рисунок или текст, объединить с фото
     if (fCanvas && (activeTool === 'draw' || activeTool === 'text' || activeTool === 'filters')) {
