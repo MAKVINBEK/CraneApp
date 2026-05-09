@@ -21,6 +21,16 @@ let currentBrushSize = 8;
 let currentTextFont = 'Geologica';
 let currentTextColor = '#ffffff';
 
+// Filter settings
+let currentFilter = 'none';
+let filterSettings = {
+    brightness: 100,
+    contrast: 100,
+    saturate: 100,
+    sepia: 0,
+    blur: 0
+};
+
 // Undo/Redo stacks
 let undoStack = [];
 let redoStack = [];
@@ -136,14 +146,20 @@ function handleSelection() {
             const font = activeObj.fontFamily;
             
             // Sync color
+            let matched = false;
             document.querySelectorAll('#textColorPicker .color-dot').forEach(d => {
-                if (d.getAttribute('data-color') === color) {
+                const dotColor = d.getAttribute('data-color');
+                if (dotColor && dotColor.toLowerCase() === color.toLowerCase()) {
                     d.classList.add('selected');
+                    matched = true;
                 } else {
                     d.classList.remove('selected');
                 }
             });
-            // Update current if matched (custom could be complex, simple matches for now)
+            if (!matched) {
+                const customDot = document.querySelector('#textColorPicker .custom-color-trigger');
+                if (customDot) customDot.classList.add('selected');
+            }
             currentTextColor = color;
             
             // Sync font
@@ -316,6 +332,48 @@ function setupArrowLogic() {
 }
 
 /**
+ * Filter Tool Logic
+ */
+function updateFilterSetting(name, value) {
+    filterSettings[name] = value;
+    const badge = document.getElementById('val-' + name);
+    if (badge) {
+        if (name === 'blur') badge.textContent = value + 'px';
+        else badge.textContent = value + '%';
+    }
+    applyFilter();
+}
+
+function resetFilters() {
+    filterSettings = {
+        brightness: 100,
+        contrast: 100,
+        saturate: 100,
+        sepia: 0,
+        blur: 0
+    };
+    
+    for (let key in filterSettings) {
+        const slider = document.getElementById('sld-' + key);
+        const badge = document.getElementById('val-' + key);
+        if (slider) slider.value = filterSettings[key];
+        if (badge) {
+            if (key === 'blur') badge.textContent = filterSettings[key] + 'px';
+            else badge.textContent = filterSettings[key] + '%';
+        }
+    }
+    applyFilter();
+}
+
+function applyFilter() {
+    currentFilter = `brightness(${filterSettings.brightness}%) contrast(${filterSettings.contrast}%) saturate(${filterSettings.saturate}%) sepia(${filterSettings.sepia}%) blur(${filterSettings.blur}px)`;
+    const img = document.getElementById('previewImage');
+    if (img) {
+        img.style.filter = currentFilter;
+    }
+}
+
+/**
  * Сохранение истории (Undo/Redo)
  */
 function saveHistory() {
@@ -391,6 +449,19 @@ async function toggleSubPanel(type, el) {
             if (topBar) topBar.classList.add('active');
             updateBrush();
         } else if (type === 'text') {
+            await switchToDrawMode();
+            rotationCtrl.classList.remove('active');
+            if (topBar) topBar.classList.add('active');
+            if (fCanvas) {
+                fCanvas.isDrawingMode = false;
+                fCanvas.selection = true;
+                fCanvas.getObjects().forEach(obj => {
+                    obj.set({ selectable: true, evented: true });
+                });
+                fCanvas.discardActiveObject();
+                fCanvas.renderAll();
+            }
+        } else if (type === 'filters') {
             await switchToDrawMode();
             rotationCtrl.classList.remove('active');
             if (topBar) topBar.classList.add('active');
@@ -527,8 +598,10 @@ function mergeCanvasWithImage(imageSrc, fabricCanvas) {
             tempCanvas.height = img.height;
             const ctx = tempCanvas.getContext('2d');
             
-            // Рисуем оригинальное фото
+            // Рисуем оригинальное фото с фильтром
+            ctx.filter = currentFilter;
             ctx.drawImage(img, 0, 0);
+            ctx.filter = 'none';
             
             // Рисуем штрихи
             const strokesImage = new Image();
@@ -713,7 +786,7 @@ function initBrushPickers() {
     });
 
     // Text Color
-    document.querySelectorAll('#textColorPicker .color-dot').forEach(dot => {
+    document.querySelectorAll('#textColorPicker .color-dot:not(.custom-color-trigger)').forEach(dot => {
         dot.onclick = (e) => {
             document.querySelectorAll('#textColorPicker .color-dot').forEach(d => d.classList.remove('selected'));
             e.target.classList.add('selected');
@@ -729,6 +802,25 @@ function initBrushPickers() {
             }
         };
     });
+
+    // Custom Text Color
+    const customTextColorInput = document.getElementById('customTextColorInput');
+    if (customTextColorInput) {
+        customTextColorInput.oninput = (e) => {
+            currentTextColor = e.target.value;
+            document.querySelectorAll('#textColorPicker .color-dot').forEach(d => d.classList.remove('selected'));
+            e.target.parentElement.classList.add('selected');
+            
+            if (fCanvas && activeTool === 'text') {
+                const activeObj = fCanvas.getActiveObject();
+                if (activeObj && activeObj.type === 'i-text') {
+                    activeObj.set({ fill: currentTextColor });
+                    fCanvas.renderAll();
+                    saveHistory();
+                }
+            }
+        };
+    }
 
     // Font Picker
     document.querySelectorAll('#fontPicker .ratio-btn').forEach(btn => {
@@ -747,25 +839,48 @@ function initBrushPickers() {
             }
         };
     });
+
+    // Filters (old presets removed, handled via oninput in HTML)
 }
 
 async function saveResult() {
     let finalDataUrl;
     
-    // Если открыт рисунок, объединить с фото
-    if (fCanvas && activeTool === 'draw') {
-        const img = document.getElementById('previewImage');
+    // Если открыт рисунок или текст, объединить с фото
+    if (fCanvas && (activeTool === 'draw' || activeTool === 'text' || activeTool === 'filters')) {
         finalDataUrl = await mergeCanvasWithImage(img.src, fCanvas);
     } else if (cropper) {
-        finalDataUrl = cropper.getCroppedCanvas({
+        const cCanvas = cropper.getCroppedCanvas({
             maxWidth: 4096,
             maxHeight: 4096,
             fillColor: '#000',
             imageSmoothingEnabled: true,
             imageSmoothingQuality: 'high',
-        }).toDataURL('image/jpeg', 0.95);
+        });
+        
+        if (currentFilter !== 'none') {
+            const filteredCanvas = document.createElement('canvas');
+            filteredCanvas.width = cCanvas.width;
+            filteredCanvas.height = cCanvas.height;
+            const ctx = filteredCanvas.getContext('2d');
+            ctx.filter = currentFilter;
+            ctx.drawImage(cCanvas, 0, 0);
+            finalDataUrl = filteredCanvas.toDataURL('image/jpeg', 0.95);
+        } else {
+            finalDataUrl = cCanvas.toDataURL('image/jpeg', 0.95);
+        }
     } else {
-        finalDataUrl = document.getElementById('previewImage').src;
+        if (currentFilter !== 'none') {
+            const filteredCanvas = document.createElement('canvas');
+            filteredCanvas.width = img.naturalWidth;
+            filteredCanvas.height = img.naturalHeight;
+            const ctx = filteredCanvas.getContext('2d');
+            ctx.filter = currentFilter;
+            ctx.drawImage(img, 0, 0);
+            finalDataUrl = filteredCanvas.toDataURL('image/jpeg', 0.95);
+        } else {
+            finalDataUrl = img.src;
+        }
     }
 
     if (window.parent && window.parent.onPhotoEditorComplete) {
