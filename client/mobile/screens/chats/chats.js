@@ -2100,7 +2100,7 @@
                 const iframe = document.getElementById('photoEditorIframe');
                 
                 // Загружаем редактор в iframe
-                iframe.src = '../editor/photo-editor.html';
+                iframe.src = '../../components/media-editor/photo-editor.html';
                 modal.style.display = 'block';
                 
                 // Можно добавить анимацию или лоадер, если нужно

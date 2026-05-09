@@ -9,13 +9,27 @@
     <link href="https://fonts.googleapis.com/css2?family=Geologica:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="../../scripts/lucide.min.js"></script>
     <script src="../../scripts/i18n.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
     <link rel="stylesheet" href="photo-editor.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
 </head>
 <body>
     <div class="main-layout">
+        <!-- Top Bar for History -->
+        <div class="top-bar">
+            <button class="top-tool-item" id="undoBtn" onclick="undoHistory()" disabled data-i18n-title="editorUndo">
+                <i data-lucide="undo"></i>
+            </button>
+            <button class="top-tool-item" id="redoBtn" onclick="redoHistory()" disabled data-i18n-title="editorRedo">
+                <i data-lucide="redo"></i>
+            </button>
+        </div>
+
         <div class="content-area">
-            <img id="previewImage" src="" style="display:none;">
+            <div id="editorWrapper" class="editor-wrapper">
+                <img id="previewImage" src="" style="display:none;">
+                <canvas id="drawingCanvas"></canvas>
+            </div>
             <div id="loader" data-i18n="loading">Загрузка...</div>
             
             <!-- Шкала поворота (Telegram style) -->
@@ -37,21 +51,38 @@
             <div class="sub-panels-container">
                 <div id="drawOptions" class="sub-panel">
                     <div style="width: 100%;">
-                        <span class="tool-label">Цвет</span>
-                        <div class="option-group">
-                            <div class="color-dot selected" style="background: #ff3b30;"></div>
-                            <div class="color-dot" style="background: #ffcc00;"></div>
-                            <div class="color-dot" style="background: #4cd964;"></div>
-                            <div class="color-dot" style="background: #007aff;"></div>
-                            <div class="color-dot" style="background: #fff;"></div>
+                        <span class="tool-label" data-i18n="editorDrawColor">Цвет</span>
+                        <div class="option-group" id="colorPicker">
+                            <div class="color-dot selected" style="background: #ff3b30;" data-color="#ff3b30"></div>
+                            <div class="color-dot" style="background: #ffcc00;" data-color="#ffcc00"></div>
+                            <div class="color-dot" style="background: #4cd964;" data-color="#4cd964"></div>
+                            <div class="color-dot" style="background: #007aff;" data-color="#007aff"></div>
+                            <div class="color-dot" style="background: #ffffff;" data-color="#ffffff"></div>
+                            <div class="color-dot custom-color-trigger" style="background: conic-gradient(red, yellow, lime, aqua, blue, magenta, red);">
+                                <input type="color" id="customColorInput" style="opacity: 0; width: 100%; height: 100%; cursor: pointer;">
+                            </div>
                         </div>
                     </div>
-                    <div style="width: 100%; margin-top: 10px;">
-                        <span class="tool-label">Размер кисти</span>
-                        <div class="option-group">
-                            <div class="size-dot" style="width: 6px; height: 6px;"></div>
-                            <div class="size-dot" style="width: 12px; height: 12px;"></div>
-                            <div class="size-dot" style="width: 18px; height: 18px;"></div>
+
+                    <div style="width: 100%; margin-top: 15px;">
+                        <span class="tool-label" data-i18n="editorDrawBrush">Тип кисти</span>
+                        <div class="option-group brush-types" id="brushTypePicker">
+                            <button class="tool-item active" data-brush="pen" data-i18n-title="editorBrushPen"><i data-lucide="pen-tool"></i></button>
+                            <button class="tool-item" data-brush="marker" data-i18n-title="editorBrushMarker"><i data-lucide="highlighter"></i></button>
+                            <button class="tool-item" data-brush="neon" data-i18n-title="editorBrushNeon"><i data-lucide="zap"></i></button>
+                            <button class="tool-item" data-brush="arrow" data-i18n-title="editorBrushArrow"><i data-lucide="arrow-up-right"></i></button>
+                            <button class="tool-item" data-brush="blur" data-i18n-title="editorBrushBlur"><i data-lucide="droplets"></i></button>
+                            <button class="tool-item" data-brush="eraser" data-i18n-title="editorBrushEraser"><i data-lucide="eraser"></i></button>
+                        </div>
+                    </div>
+
+                    <div style="width: 100%; margin-top: 15px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span class="tool-label" style="margin-bottom: 0;" data-i18n="editorDrawSize">Размер кисти</span>
+                            <span id="brushSizeValue" class="value-badge">8</span>
+                        </div>
+                        <div class="range-container">
+                            <input type="range" id="brushSizeSlider" min="1" max="100" value="8" class="modern-range">
                         </div>
                     </div>
                 </div>
@@ -89,7 +120,7 @@
 
             <!-- Bottom Tools Bar -->
             <div class="tools-panel">
-                <div class="tool-item btn-cancel" onclick="window.parent.closePhotoEditor()" data-i18n="cancel">
+                <div class="tool-item btn-cancel" onclick="window.parent.closePhotoEditor()">
                     <i data-lucide="x"></i>
                 </div>
                 
@@ -110,7 +141,7 @@
 
                 <div class="tool-spacer"></div>
 
-                <div class="tool-item btn-save" onclick="saveResult()" data-i18n="save">
+                <div class="tool-item btn-save" onclick="saveResult()">
                     <i data-lucide="check"></i>
                 </div>
             </div>

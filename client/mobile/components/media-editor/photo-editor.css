@@ -153,6 +153,18 @@ body {
         display: flex;
         justify-content: space-between;
         width: 100%;
+        gap: 4px;
+    }
+
+    .tools-panel .tool-item {
+        width: 38px;
+        height: 38px;
+        flex: 0 0 38px;
+    }
+
+    .tools-panel .tool-item svg {
+        width: 18px;
+        height: 18px;
     }
     
     .option-group {
@@ -160,6 +172,7 @@ body {
         flex-direction: row !important;
         flex-wrap: wrap;
         gap: 12px;
+        padding: 4px;
         align-items: center;
         justify-content: flex-start;
     }
@@ -167,6 +180,9 @@ body {
 
 /* Mobile Styles */
 @media (max-width: 768px) {
+    .content-area {
+        padding: 10px;
+    }
     .controls-container {
         position: absolute;
         bottom: 0;
@@ -200,7 +216,7 @@ body {
         display: flex;
         gap: 12px;
         overflow-x: auto;
-        padding-bottom: 10px;
+        padding: 4px;
         -webkit-overflow-scrolling: touch;
     }
 }
@@ -341,3 +357,153 @@ body {
 .cropper-bg { background-image: none !important; background-color: #000 !important; }
 .cropper-container { background-color: #000 !important; }
 .cropper-view-box { outline: 1px solid rgba(255, 255, 255, 0.5); }
+
+/* Top Bar for History & Tools */
+.top-bar {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 15px;
+    background: rgba(10, 10, 15, 0.6);
+    backdrop-filter: blur(25px) saturate(160%);
+    -webkit-backdrop-filter: blur(25px) saturate(160%);
+    padding: 8px 16px;
+    border-radius: 24px;
+    z-index: 1100;
+    border: 1px solid var(--rd-stroke);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s, visibility 0.3s, transform 0.3s;
+}
+
+.top-bar.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.top-tool-item {
+    background: transparent;
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.top-tool-item:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
+.top-tool-item:active:not(:disabled) { transform: scale(0.9); }
+.top-tool-item:disabled { opacity: 0.25; cursor: default; }
+.top-tool-item svg { width: 20px; height: 20px; stroke-width: 2.5px; }
+
+/* Editor Area Layers */
+.editor-wrapper {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#drawingCanvas {
+    position: absolute;
+}
+
+.canvas-container {
+    position: absolute !important;
+    z-index: 10;
+}
+
+.upper-canvas {
+    z-index: 11 !important;
+}
+
+/* Color Selectors */
+.color-dot {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid rgba(255,255,255,0.1);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.color-dot.selected {
+    transform: scale(1.2);
+    border-color: #fff;
+    box-shadow: 0 0 15px rgba(255,255,255,0.3);
+}
+
+.custom-color-trigger {
+    position: relative;
+    overflow: hidden;
+}
+
+.custom-color-trigger input[type="color"] {
+    position: absolute;
+    top: -5px;
+    left: -5px;
+    width: 40px;
+    height: 40px;
+}
+
+/* Advanced Brush Controls */
+.brush-types {
+    display: flex;
+    gap: 8px;
+    padding: 4px;
+    overflow-x: auto;
+}
+
+.brush-types .tool-item {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.05);
+    color: var(--rd-text-2);
+}
+
+.brush-types .tool-item.active {
+    background: var(--rd-accent-grad);
+    color: #fff;
+}
+
+.range-container {
+    padding: 10px 0;
+}
+
+.modern-range {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 4px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 2px;
+    outline: none;
+}
+
+.modern-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    background: #fff;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    border: 2px solid var(--rd-accent);
+}
+
+.value-badge {
+    font-size: 11px;
+    font-weight: 800;
+    background: var(--rd-accent);
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 6px;
+}
