@@ -87,7 +87,7 @@
                     </div>
                 </div>
 
-                <div class="sub-panel active" id="cropOptions">
+                <div class="sub-panel" id="cropOptions">
                     <span class="tool-label" data-i18n="editorTransform">Transform</span>
                     <div class="option-group" style="margin-bottom: 15px;">
                         <button class="tool-item" onclick="rotateImage()" title="Rotate 90°" data-i18n-title="editorRotate"><i data-lucide="rotate-cw"></i></button>
@@ -111,10 +111,32 @@
                 </div>
 
                 <div id="textOptions" class="sub-panel">
-                    <span class="tool-label">Шрифт</span>
-                    <button class="ratio-btn">Sans Serif</button>
-                    <button class="ratio-btn">Serif</button>
-                    <button class="ratio-btn">Monospace</button>
+                    <div style="width: 100%; display: flex; gap: 10px; margin-bottom: 5px;">
+                        <button class="ratio-btn" style="flex: 1; background: var(--rd-accent-grad); color: white; border: none; font-weight: 600;" onclick="addText()"><i data-lucide="plus" style="width:16px;height:16px;margin-right:6px;"></i><span data-i18n="editorAddText">Добавить текст</span></button>
+                        <button class="ratio-btn" style="flex: 0 0 auto; color: #ff3b30;" onclick="deleteSelectedText()" id="deleteTextBtn" disabled data-i18n-title="editorDeleteText"><i data-lucide="trash-2"></i></button>
+                    </div>
+
+                    <div style="width: 100%;">
+                        <span class="tool-label" data-i18n="editorTextColor">Цвет</span>
+                        <div class="option-group" id="textColorPicker">
+                            <div class="color-dot selected" style="background: #ffffff;" data-color="#ffffff"></div>
+                            <div class="color-dot" style="background: #ff3b30;" data-color="#ff3b30"></div>
+                            <div class="color-dot" style="background: #ffcc00;" data-color="#ffcc00"></div>
+                            <div class="color-dot" style="background: #4cd964;" data-color="#4cd964"></div>
+                            <div class="color-dot" style="background: #007aff;" data-color="#007aff"></div>
+                            <div class="color-dot" style="background: #000000;" data-color="#000000"></div>
+                        </div>
+                    </div>
+
+                    <div style="width: 100%; margin-top: 15px;">
+                        <span class="tool-label" data-i18n="editorTextFont">Шрифт</span>
+                        <div class="option-group ratio-grid" id="fontPicker">
+                            <button class="ratio-btn active" data-font="Geologica">Modern</button>
+                            <button class="ratio-btn" data-font="sans-serif">Classic</button>
+                            <button class="ratio-btn" data-font="serif">Serif</button>
+                            <button class="ratio-btn" data-font="monospace">Mono</button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -132,7 +154,7 @@
                 <div class="tool-item" onclick="toggleSubPanel('text', this)">
                     <i data-lucide="type"></i>
                 </div>
-                <div class="tool-item active" onclick="toggleSubPanel('crop', this)" data-i18n-title="editorCrop">
+                <div class="tool-item" onclick="toggleSubPanel('crop', this)" data-i18n-title="editorCrop">
                     <i data-lucide="crop"></i>
                 </div>
                 <div class="tool-item" onclick="toggleSubPanel('filters', this)">

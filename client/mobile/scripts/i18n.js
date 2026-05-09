@@ -175,7 +175,7 @@
             oneMonth: '1 месяц', forever: '🚫 Навсегда', youMuting: '🔇 Вы замучены', accMuting: 'Аккаунт замучен', reason2: 'Причина:', understand: 'Понятно', complain2: 'Пожаловаться',
             addFolder2: 'Добавить в папку', markAsRead: 'Пометить прочитанным', chatMarkedAsRead: 'Чат помечен прочитанным', notify: '🔔 Уведомления', files: 'Файлы', links: 'Ссылки',
             // editor
-            editorDrawColor: 'Цвет', editorDrawBrush: 'Тип кисти', editorDrawSize: 'Размер кисти',
+            editorDrawColor: 'Цвет', editorDrawBrush: 'Тип кисти', editorDrawSize: 'Размер кисти', editorAddText: 'Добавить текст', editorDeleteText: 'Удалить', editorTextColor: 'Цвет', editorTextFont: 'Шрифт',
             editorUndo: 'Отменить', editorRedo: 'Повторить',
             editorBrushPen: 'Кисть', editorBrushMarker: 'Маркер', editorBrushNeon: 'Неон', editorBrushArrow: 'Стрелка', editorBrushBlur: 'Размытие', editorBrushEraser: 'Ластик',
             editorCrop: 'Обрезка', editorRotate: 'Поворот', editorFlip: 'Отзеркалить',
@@ -352,7 +352,7 @@
             logout2: 'Log out', logoutConfirm: 'Log out?',
             noMessages: 'No messages',
             // editor
-            editorDrawColor: 'Color', editorDrawBrush: 'Brush Type', editorDrawSize: 'Brush Size',
+            editorDrawColor: 'Color', editorDrawBrush: 'Brush Type', editorDrawSize: 'Brush Size', editorAddText: 'Add Text', editorDeleteText: 'Delete', editorTextColor: 'Color', editorTextFont: 'Font',
             editorUndo: 'Undo', editorRedo: 'Redo',
             editorBrushPen: 'Pen', editorBrushMarker: 'Marker', editorBrushNeon: 'Neon', editorBrushArrow: 'Arrow', editorBrushBlur: 'Blur', editorBrushEraser: 'Eraser',
             editorCrop: 'Crop', editorRotate: 'Rotate', editorFlip: 'Flip',
@@ -494,7 +494,7 @@
             logout2: 'Abmelden', logoutConfirm: 'Abmelden?',
             noMessages: 'Keine Nachrichten',
             // editor
-            editorDrawColor: 'Farbe', editorDrawBrush: 'Pinselart', editorDrawSize: 'Pinselgröße',
+            editorDrawColor: 'Farbe', editorDrawBrush: 'Pinselart', editorDrawSize: 'Pinselgröße', editorAddText: 'Text hinzufügen', editorDeleteText: 'Löschen', editorTextColor: 'Farbe', editorTextFont: 'Schriftart',
             editorUndo: 'Rückgängig', editorRedo: 'Wiederholen',
             editorBrushPen: 'Stift', editorBrushMarker: 'Marker', editorBrushNeon: 'Neon', editorBrushArrow: 'Pfeil', editorBrushBlur: 'Unschärfe', editorBrushEraser: 'Radiergummi',
             editorCrop: 'Zuschneiden', editorRotate: 'Drehen', editorFlip: 'Spiegeln',
@@ -636,7 +636,7 @@
             logout2: 'Se déconnecter', logoutConfirm: 'Se déconnecter?',
             noMessages: 'Pas de messages',
             // editor
-            editorDrawColor: 'Couleur', editorDrawBrush: 'Type de pinceau', editorDrawSize: 'Taille du pinceau',
+            editorDrawColor: 'Couleur', editorDrawBrush: 'Type de pinceau', editorDrawSize: 'Taille du pinceau', editorAddText: 'Ajouter du texte', editorDeleteText: 'Supprimer', editorTextColor: 'Couleur', editorTextFont: 'Police',
             editorUndo: 'Annuler', editorRedo: 'Rétablir',
             editorBrushPen: 'Stylo', editorBrushMarker: 'Marqueur', editorBrushNeon: 'Néon', editorBrushArrow: 'Flèche', editorBrushBlur: 'Flou', editorBrushEraser: 'Gomme',
             editorCrop: 'Recadrer', editorRotate: 'Pivoter', editorFlip: 'Retourner',
@@ -778,7 +778,7 @@
             logout2: 'Cerrar sesión', logoutConfirm: '¿Cerrar sesión?',
             noMessages: 'Sin mensajes',
             // editor
-            editorDrawColor: 'Color', editorDrawBrush: 'Tipo de pincel', editorDrawSize: 'Tamaño del pincel',
+            editorDrawColor: 'Color', editorDrawBrush: 'Tipo de pincel', editorDrawSize: 'Tamaño del pincel', editorAddText: 'Añadir texto', editorDeleteText: 'Eliminar', editorTextColor: 'Color', editorTextFont: 'Fuente',
             editorUndo: 'Deshacer', editorRedo: 'Rehacer',
             editorBrushPen: 'Bolígrafo', editorBrushMarker: 'Marcador', editorBrushNeon: 'Neón', editorBrushArrow: 'Flecha', editorBrushBlur: 'Desenfocar', editorBrushEraser: 'Borrador',
             editorCrop: 'Recortar', editorRotate: 'Girar', editorFlip: 'Reflejar',
@@ -918,7 +918,7 @@
             logout2: 'Esci', logoutConfirm: 'Esci?',
             noMessages: 'Nessun messaggio',
             // editor
-            editorDrawColor: 'Colore', editorDrawBrush: 'Tipo di pennello', editorDrawSize: 'Dimensione pennello',
+            editorDrawColor: 'Colore', editorDrawBrush: 'Tipo di pennello', editorDrawSize: 'Dimensione pennello', editorAddText: 'Aggiungi testo', editorDeleteText: 'Elimina', editorTextColor: 'Colore', editorTextFont: 'Carattere',
             editorUndo: 'Annulla', editorRedo: 'Ripeti',
             editorBrushPen: 'Penna', editorBrushMarker: 'Pennarello', editorBrushNeon: 'Neon', editorBrushArrow: 'Freccia', editorBrushBlur: 'Sfocatura', editorBrushEraser: 'Gomma',
             editorCrop: 'Ritaglia', editorRotate: 'Ruota', editorFlip: 'Rifletti',
@@ -1058,7 +1058,7 @@
             logout2: 'Sair', logoutConfirm: 'Sair?',
             noMessages: 'Sem mensagens',
             // editor
-            editorDrawColor: 'Cor', editorDrawBrush: 'Tipo de pincel', editorDrawSize: 'Tamanho do pincel',
+            editorDrawColor: 'Cor', editorDrawBrush: 'Tipo de pincel', editorDrawSize: 'Tamanho do pincel', editorAddText: 'Adicionar texto', editorDeleteText: 'Excluir', editorTextColor: 'Cor', editorTextFont: 'Fonte',
             editorUndo: 'Desfazer', editorRedo: 'Refazer',
             editorBrushPen: 'Caneta', editorBrushMarker: 'Marcador', editorBrushNeon: 'Néon', editorBrushArrow: 'Seta', editorBrushBlur: 'Desfoque', editorBrushEraser: 'Borracha',
             editorCrop: 'Recortar', editorRotate: 'Girar', editorFlip: 'Espelhar',
@@ -1198,7 +1198,7 @@
             logout2: 'Wyloguj', logoutConfirm: 'Wylogować?',
             noMessages: 'Brak wiadomości',
             // editor
-            editorDrawColor: 'Kolor', editorDrawBrush: 'Rodzaj pędzla', editorDrawSize: 'Rozmiar pędzla',
+            editorDrawColor: 'Kolor', editorDrawBrush: 'Rodzaj pędzla', editorDrawSize: 'Rozmiar pędzla', editorAddText: 'Dodaj tekst', editorDeleteText: 'Usuń', editorTextColor: 'Kolor', editorTextFont: 'Czcionka',
             editorUndo: 'Cofnij', editorRedo: 'Ponów',
             editorBrushPen: 'Pióro', editorBrushMarker: 'Zakreślacz', editorBrushNeon: 'Neon', editorBrushArrow: 'Strzałka', editorBrushBlur: 'Rozmycie', editorBrushEraser: 'Gumka',
             editorCrop: 'Kadrowanie', editorRotate: 'Obróć', editorFlip: 'Odbicie',
@@ -1338,7 +1338,7 @@
             logout2: 'Вийти', logoutConfirm: 'Вийти з акаунту?',
             noMessages: 'Немає повідомлень',
             // editor
-            editorDrawColor: 'Колір', editorDrawBrush: 'Тип пензля', editorDrawSize: 'Розмір пензля',
+            editorDrawColor: 'Колір', editorDrawBrush: 'Тип пензля', editorDrawSize: 'Розмір пензля', editorAddText: 'Додати текст', editorDeleteText: 'Видалити', editorTextColor: 'Колір', editorTextFont: 'Шрифт',
             editorUndo: 'Скасувати', editorRedo: 'Повторити',
             editorBrushPen: 'Пензель', editorBrushMarker: 'Маркер', editorBrushNeon: 'Неон', editorBrushArrow: 'Стрілка', editorBrushBlur: 'Розмиття', editorBrushEraser: 'Гумка',
             editorCrop: 'Обрізка', editorRotate: 'Поворот', editorFlip: 'Віддзеркалити',
@@ -1478,7 +1478,7 @@
             logout2: 'Çıkış yap', logoutConfirm: 'Çıkış yapılsın mı?',
             noMessages: 'Mesaj yok',
             // editor
-            editorDrawColor: 'Renk', editorDrawBrush: 'Fırça Tipi', editorDrawSize: 'Fırça Boyutu',
+            editorDrawColor: 'Renk', editorDrawBrush: 'Fırça Tipi', editorDrawSize: 'Fırça Boyutu', editorAddText: 'Metin Ekle', editorDeleteText: 'Sil', editorTextColor: 'Renk', editorTextFont: 'Yazı Tipi',
             editorUndo: 'Geri Al', editorRedo: 'Yinele',
             editorBrushPen: 'Kalem', editorBrushMarker: 'İşaretleyici', editorBrushNeon: 'Neon', editorBrushArrow: 'Ok', editorBrushBlur: 'Bulanıklık', editorBrushEraser: 'Silgi',
             editorCrop: 'Kırp', editorRotate: 'Döndür', editorFlip: 'Yansıt',

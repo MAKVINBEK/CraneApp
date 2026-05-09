@@ -307,7 +307,6 @@ body {
     background: var(--rd-stroke);
     border: none;
     color: var(--rd-text);
-    padding: 10px;
     border-radius: 12px;
     font-size: 13px;
     font-weight: 600;
@@ -324,6 +323,11 @@ body {
 .ratio-btn.active { 
     background: var(--rd-accent-grad); 
     color: #fff;
+}
+
+.ratio-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
 }
 
 .ratio-icon {

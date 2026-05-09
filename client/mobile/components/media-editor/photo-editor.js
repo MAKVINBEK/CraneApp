@@ -17,6 +17,10 @@ let currentBrushType = 'pen';
 let currentBrushColor = '#ff3b30';
 let currentBrushSize = 8;
 
+// Text settings
+let currentTextFont = 'Geologica';
+let currentTextColor = '#ffffff';
+
 // Undo/Redo stacks
 let undoStack = [];
 let redoStack = [];
@@ -65,6 +69,96 @@ function initFabric() {
     fCanvas.on('object:added', (e) => {
         if (!isStateChanging && e.target && e.target.type !== 'image') debouncedSaveHistory();
     });
+    
+    fCanvas.on('selection:created', handleSelection);
+    fCanvas.on('selection:updated', handleSelection);
+    fCanvas.on('selection:cleared', handleSelection);
+}
+
+/**
+ * Text Tool Logic
+ */
+function addText() {
+    if (!fCanvas) return;
+    
+    const text = new fabric.IText('Текст', {
+        left: fCanvas.width / 2,
+        top: fCanvas.height / 2,
+        fontFamily: currentTextFont,
+        fill: currentTextColor,
+        fontSize: Math.max(30, fCanvas.width / 10),
+        originX: 'center',
+        originY: 'center',
+        shadow: new fabric.Shadow({
+            color: 'rgba(0,0,0,0.5)',
+            blur: 4,
+            offsetX: 0,
+            offsetY: 2
+        }),
+        transparentCorners: false,
+        cornerColor: '#ff2d8b',
+        cornerStrokeColor: '#ffffff',
+        borderColor: '#ffffff',
+        cornerSize: 12,
+        padding: 10,
+        cornerStyle: 'circle'
+    });
+    
+    fCanvas.add(text);
+    fCanvas.setActiveObject(text);
+    fCanvas.renderAll();
+    saveHistory();
+}
+
+function deleteSelectedText() {
+    if (!fCanvas) return;
+    const activeObjects = fCanvas.getActiveObjects();
+    if (activeObjects.length) {
+        fCanvas.discardActiveObject();
+        activeObjects.forEach(obj => {
+            fCanvas.remove(obj);
+        });
+        saveHistory();
+    }
+}
+
+function handleSelection() {
+    const deleteBtn = document.getElementById('deleteTextBtn');
+    if (!deleteBtn) return;
+    
+    const activeObj = fCanvas ? fCanvas.getActiveObject() : null;
+    if (activeObj) {
+        deleteBtn.disabled = false;
+        
+        // Sync color/font UI
+        if (activeObj.type === 'i-text' && activeTool === 'text') {
+            const color = activeObj.fill;
+            const font = activeObj.fontFamily;
+            
+            // Sync color
+            document.querySelectorAll('#textColorPicker .color-dot').forEach(d => {
+                if (d.getAttribute('data-color') === color) {
+                    d.classList.add('selected');
+                } else {
+                    d.classList.remove('selected');
+                }
+            });
+            // Update current if matched (custom could be complex, simple matches for now)
+            currentTextColor = color;
+            
+            // Sync font
+            document.querySelectorAll('#fontPicker .ratio-btn').forEach(btn => {
+                if (btn.getAttribute('data-font') === font) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+            currentTextFont = font;
+        }
+    } else {
+        deleteBtn.disabled = true;
+    }
 }
 
 /**
@@ -296,6 +390,19 @@ async function toggleSubPanel(type, el) {
             rotationCtrl.classList.remove('active');
             if (topBar) topBar.classList.add('active');
             updateBrush();
+        } else if (type === 'text') {
+            await switchToDrawMode();
+            rotationCtrl.classList.remove('active');
+            if (topBar) topBar.classList.add('active');
+            if (fCanvas) {
+                fCanvas.isDrawingMode = false;
+                fCanvas.selection = true;
+                fCanvas.getObjects().forEach(obj => {
+                    obj.set({ selectable: true, evented: true });
+                });
+                fCanvas.discardActiveObject();
+                fCanvas.renderAll();
+            }
         } else {
             if (topBar) topBar.classList.remove('active');
             rotationCtrl.classList.remove('active');
@@ -370,6 +477,23 @@ function setupFabricCanvas(imgEl) {
     const rect = imgEl.getBoundingClientRect();
     const wrapperRect = document.getElementById('editorWrapper').getBoundingClientRect();
     
+    if (fCanvas.width > 0 && fCanvas.height > 0) {
+        const sx = rect.width / fCanvas.width;
+        const sy = rect.height / fCanvas.height;
+        
+        if (sx !== 1 || sy !== 1) {
+            fCanvas.getObjects().forEach(obj => {
+                obj.set({
+                    left: obj.left * sx,
+                    top: obj.top * sy,
+                    scaleX: obj.scaleX * sx,
+                    scaleY: obj.scaleY * sy
+                });
+                obj.setCoords();
+            });
+        }
+    }
+    
     fCanvas.setDimensions({ width: rect.width, height: rect.height });
     
     const container = document.querySelector('.canvas-container');
@@ -378,6 +502,7 @@ function setupFabricCanvas(imgEl) {
     container.style.left = (rect.left - wrapperRect.left) + 'px';
     
     fCanvas.calcOffset();
+    fCanvas.renderAll();
 
     // Не добавляем картинку в Canvas! Рисуем поверх нее (она видима под канвасом)
     if (undoStack.length === 0) saveHistory();
@@ -432,7 +557,7 @@ function setDrawerExpanded(expand) {
     
     setTimeout(() => { 
         if (cropper) cropper.resize(); 
-        if (fCanvas && activeTool === 'draw') {
+        if (fCanvas && (activeTool === 'draw' || activeTool === 'text')) {
             const img = document.getElementById('previewImage');
             setupFabricCanvas(img);
         }
@@ -586,6 +711,42 @@ function initBrushPickers() {
             }
         };
     });
+
+    // Text Color
+    document.querySelectorAll('#textColorPicker .color-dot').forEach(dot => {
+        dot.onclick = (e) => {
+            document.querySelectorAll('#textColorPicker .color-dot').forEach(d => d.classList.remove('selected'));
+            e.target.classList.add('selected');
+            currentTextColor = e.target.getAttribute('data-color');
+            
+            if (fCanvas && activeTool === 'text') {
+                const activeObj = fCanvas.getActiveObject();
+                if (activeObj && activeObj.type === 'i-text') {
+                    activeObj.set({ fill: currentTextColor });
+                    fCanvas.renderAll();
+                    saveHistory();
+                }
+            }
+        };
+    });
+
+    // Font Picker
+    document.querySelectorAll('#fontPicker .ratio-btn').forEach(btn => {
+        btn.onclick = (e) => {
+            document.querySelectorAll('#fontPicker .ratio-btn').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            currentTextFont = e.target.getAttribute('data-font');
+            
+            if (fCanvas && activeTool === 'text') {
+                const activeObj = fCanvas.getActiveObject();
+                if (activeObj && activeObj.type === 'i-text') {
+                    activeObj.set({ fontFamily: currentTextFont });
+                    fCanvas.renderAll();
+                    saveHistory();
+                }
+            }
+        };
+    });
 }
 
 async function saveResult() {
@@ -623,6 +784,14 @@ window.onload = function() {
     const observer = new MutationObserver(syncTheme);
     observer.observe(parent.document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
+    window.addEventListener('resize', () => {
+        if (cropper) cropper.resize();
+        if (fCanvas && (activeTool === 'draw' || activeTool === 'text')) {
+            const img = document.getElementById('previewImage');
+            setupFabricCanvas(img);
+        }
+    });
+
     const imageData = localStorage.getItem('craneapp_editor_image');
     if (imageData) {
         const img = document.getElementById('previewImage');
@@ -632,11 +801,6 @@ window.onload = function() {
             originalAspectRatio = img.naturalWidth / img.naturalHeight;
             const loader = document.getElementById('loader');
             if (loader) loader.style.display = 'none';
-            // Активируем Crop по умолчанию
-            if (window.innerWidth > 768) {
-                const cropBtn = document.querySelector('.tool-item[onclick*="crop"]');
-                if (cropBtn) toggleSubPanel('crop', cropBtn);
-            }
         };
     }
 };
