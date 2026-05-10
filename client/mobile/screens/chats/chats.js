@@ -2069,16 +2069,26 @@
 
             const content = document.getElementById('mediaSendPreviewContent');
             const caption = document.getElementById('mediaSendCaption');
+            const editBtnContainer = document.getElementById('editMediaBtnContainer');
+            
             caption.innerText = '';
 
             if (type === 'video') {
                 content.innerHTML = '<video src="' + dataUrl + '" controls style="max-width:100%;max-height:55vh;border-radius:12px;"></video>';
+                if (editBtnContainer) editBtnContainer.style.display = 'none';
             } else {
-                content.innerHTML = '<img src="' + dataUrl + '" style="max-width:100%;max-height:55vh;border-radius:12px;object-fit:contain;">';
+                content.innerHTML = '<img id="mediaSendPreviewImg" src="' + dataUrl + '" style="max-width:100%;max-height:55vh;border-radius:12px;object-fit:contain;">';
+                if (editBtnContainer) editBtnContainer.style.display = 'flex';
             }
 
             const modal = document.getElementById('mediaSendPreview');
             modal.style.display = 'flex';
+            
+            // Инициализация иконок Lucide
+            if (window.lucide) {
+                lucide.createIcons();
+            }
+
             setTimeout(() => caption.focus(), 100);
 
             // Закрыть по Escape
@@ -2087,6 +2097,44 @@
             }
             document.addEventListener('keydown', onEsc);
         }
+
+        function openEditorFromPreview() {
+            if (!_pendingMediaDataUrl) return;
+            
+            // Сохраняем изображение для редактора
+            try {
+                localStorage.setItem('craneapp_editor_image', _pendingMediaDataUrl);
+                const modal = document.getElementById('photoEditorModal');
+                const iframe = document.getElementById('photoEditorIframe');
+                
+                // Загружаем редактор в iframe
+                iframe.src = '../../components/media-editor/photo-editor.html';
+                modal.style.display = 'block';
+                
+                // Можно добавить анимацию или лоадер, если нужно
+            } catch (e) {
+                console.error('Editor open error:', e);
+                showToast('error', 'Изображение слишком большое для редактора', '❌');
+            }
+        }
+
+        // Глобальная функция для закрытия редактора из iframe
+        window.closePhotoEditor = function() {
+            const modal = document.getElementById('photoEditorModal');
+            const iframe = document.getElementById('photoEditorIframe');
+            if (modal) modal.style.display = 'none';
+            if (iframe) iframe.src = 'about:blank'; // Очищаем память
+        };
+
+        // Получение результата из фоторедактора
+        window.onPhotoEditorComplete = function(dataUrl) {
+            _pendingMediaDataUrl = dataUrl;
+            const previewImg = document.getElementById('mediaSendPreviewImg');
+            if (previewImg) previewImg.src = dataUrl;
+            
+            // Если есть вьювер в фоне, обновляем и его (опционально)
+            console.log('✅ Изображение обновлено после редактора');
+        };
 
         function cancelMediaSend() {
             _pendingMediaDataUrl = null;

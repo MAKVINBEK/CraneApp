@@ -173,7 +173,16 @@
             fraud: '💰 Мошенничество', fakeAcc: '🎭 Фейковый аккаунт', other: '📝 Другое', description: 'Описание', scanQr: 'Отсканируйте QR-код<br>чтобы начать чат',
             addFolder: '📂 Добавить в папку', chooseTime: 'Выберите время', reason1: 'Причина (необязательно)', oneHour: '1 час', sixHours: '6 часов', oneDay: '1 день', oneWeek: '1 неделя',
             oneMonth: '1 месяц', forever: '🚫 Навсегда', youMuting: '🔇 Вы замучены', accMuting: 'Аккаунт замучен', reason2: 'Причина:', understand: 'Понятно', complain2: 'Пожаловаться',
-            addFolder2: 'Добавить в папку', markAsRead: 'Пометить прочитанным', chatMarkedAsRead: 'Чат помечен прочитанным', notify: '🔔 Уведомления', files: 'Файлы', links: 'Ссылки'
+            addFolder2: 'Добавить в папку', markAsRead: 'Пометить прочитанным', chatMarkedAsRead: 'Чат помечен прочитанным', notify: '🔔 Уведомления', files: 'Файлы', links: 'Ссылки',
+            // editor
+            editorDrawColor: 'Цвет', editorDrawBrush: 'Тип кисти', editorDrawSize: 'Размер кисти', editorAddText: 'Добавить текст', editorDeleteText: 'Удалить', editorTextColor: 'Цвет', editorTextFont: 'Шрифт',
+            editorFilters: 'Фильтры', editorFilterNormal: 'Оригинал', editorFilterBW: 'ЧБ', editorFilterSepia: 'Сепия', editorFilterVintage: 'Винтаж', editorFilterBright: 'Яркость', editorFilterContrast: 'Контраст', editorFilterInvert: 'Инверсия', editorFilterBlur: 'Размытие', editorFilterSaturate: 'Насыщенность', editorFilterReset: 'Сбросить',
+            editorUndo: 'Отменить', editorRedo: 'Повторить',
+            editorBrushPen: 'Кисть', editorBrushMarker: 'Маркер', editorBrushNeon: 'Неон', editorBrushArrow: 'Стрелка', editorBrushBlur: 'Размытие', editorBrushEraser: 'Ластик',
+            editorCrop: 'Обрезка', editorRotate: 'Поворот', editorFlip: 'Отзеркалить',
+            editorTransform: 'Трансформация',
+            editorAspectRatio: 'Пропорции', editorFree: 'Произвольно',
+            editorOriginal: 'Оригинал', editorSquare: 'Квадрат'
         },
         en: {
             settings: 'Settings', account: 'Account', privacy: 'Privacy',
@@ -343,6 +352,15 @@
             chooseSticker: 'Select or create a sticker pack',
             logout2: 'Log out', logoutConfirm: 'Log out?',
             noMessages: 'No messages',
+            // editor
+            editorDrawColor: 'Color', editorDrawBrush: 'Brush Type', editorDrawSize: 'Brush Size', editorAddText: 'Add Text', editorDeleteText: 'Delete', editorTextColor: 'Color', editorTextFont: 'Font',
+            editorFilters: 'Filters', editorFilterNormal: 'Original', editorFilterBW: 'B&W', editorFilterSepia: 'Sepia', editorFilterVintage: 'Vintage', editorFilterBright: 'Brightness', editorFilterContrast: 'Contrast', editorFilterInvert: 'Invert', editorFilterBlur: 'Blur', editorFilterSaturate: 'Saturation', editorFilterReset: 'Reset',
+            editorUndo: 'Undo', editorRedo: 'Redo',
+            editorBrushPen: 'Pen', editorBrushMarker: 'Marker', editorBrushNeon: 'Neon', editorBrushArrow: 'Arrow', editorBrushBlur: 'Blur', editorBrushEraser: 'Eraser',
+            editorCrop: 'Crop', editorRotate: 'Rotate', editorFlip: 'Flip',
+            editorTransform: 'Transform',
+            editorAspectRatio: 'Aspect Ratio', editorFree: 'Free',
+            editorOriginal: 'Original', editorSquare: 'Square'
         },
         de: {
             settings: 'Einstellungen', account: 'Konto', privacy: 'Datenschutz',
@@ -477,6 +495,15 @@
             chooseSticker: 'Stickerpack auswählen oder erstellen',
             logout2: 'Abmelden', logoutConfirm: 'Abmelden?',
             noMessages: 'Keine Nachrichten',
+            // editor
+            editorDrawColor: 'Farbe', editorDrawBrush: 'Pinselart', editorDrawSize: 'Pinselgröße', editorAddText: 'Text hinzufügen', editorDeleteText: 'Löschen', editorTextColor: 'Farbe', editorTextFont: 'Schriftart',
+            editorFilters: 'Filter', editorFilterNormal: 'Original', editorFilterBW: 'S/W', editorFilterSepia: 'Sepia', editorFilterVintage: 'Vintage', editorFilterBright: 'Helligkeit', editorFilterContrast: 'Kontrast', editorFilterInvert: 'Invertieren', editorFilterBlur: 'Unschärfe', editorFilterSaturate: 'Sättigung', editorFilterReset: 'Zurücksetzen',
+            editorUndo: 'Rückgängig', editorRedo: 'Wiederholen',
+            editorBrushPen: 'Stift', editorBrushMarker: 'Marker', editorBrushNeon: 'Neon', editorBrushArrow: 'Pfeil', editorBrushBlur: 'Unschärfe', editorBrushEraser: 'Radiergummi',
+            editorCrop: 'Zuschneiden', editorRotate: 'Drehen', editorFlip: 'Spiegeln',
+            editorTransform: 'Transformation',
+            editorAspectRatio: 'Seitenverhältnis', editorFree: 'Frei',
+            editorOriginal: 'Original', editorSquare: 'Quadrat'
         },
         fr: {
             settings: 'Paramètres', account: 'Compte', privacy: 'Confidentialité',
@@ -611,6 +638,15 @@
             chooseSticker: 'Sélectionner ou créer un pack de stickers',
             logout2: 'Se déconnecter', logoutConfirm: 'Se déconnecter?',
             noMessages: 'Pas de messages',
+            // editor
+            editorDrawColor: 'Couleur', editorDrawBrush: 'Type de pinceau', editorDrawSize: 'Taille du pinceau', editorAddText: 'Ajouter du texte', editorDeleteText: 'Supprimer', editorTextColor: 'Couleur', editorTextFont: 'Police',
+            editorFilters: 'Filtres', editorFilterNormal: 'Original', editorFilterBW: 'N&B', editorFilterSepia: 'Sépia', editorFilterVintage: 'Vintage', editorFilterBright: 'Luminosité', editorFilterContrast: 'Contraste', editorFilterInvert: 'Inverser', editorFilterBlur: 'Flou', editorFilterSaturate: 'Saturation', editorFilterReset: 'Réinitialiser',
+            editorUndo: 'Annuler', editorRedo: 'Rétablir',
+            editorBrushPen: 'Stylo', editorBrushMarker: 'Marqueur', editorBrushNeon: 'Néon', editorBrushArrow: 'Flèche', editorBrushBlur: 'Flou', editorBrushEraser: 'Gomme',
+            editorCrop: 'Recadrer', editorRotate: 'Pivoter', editorFlip: 'Retourner',
+            editorTransform: 'Transformation',
+            editorAspectRatio: 'Ratio d\'aspect', editorFree: 'Libre',
+            editorOriginal: 'Original', editorSquare: 'Carré'
         },
         es: {
             settings: 'Configuración', account: 'Cuenta', privacy: 'Privacidad',
@@ -745,6 +781,15 @@
             chooseSticker: 'Seleccionar o crear pack de stickers',
             logout2: 'Cerrar sesión', logoutConfirm: '¿Cerrar sesión?',
             noMessages: 'Sin mensajes',
+            // editor
+            editorDrawColor: 'Color', editorDrawBrush: 'Tipo de pincel', editorDrawSize: 'Tamaño del pincel', editorAddText: 'Añadir texto', editorDeleteText: 'Eliminar', editorTextColor: 'Color', editorTextFont: 'Fuente',
+            editorFilters: 'Filtros', editorFilterNormal: 'Original', editorFilterBW: 'B/N', editorFilterSepia: 'Sepia', editorFilterVintage: 'Vintage', editorFilterBright: 'Brillo', editorFilterContrast: 'Contraste', editorFilterInvert: 'Invertir', editorFilterBlur: 'Desenfocar', editorFilterSaturate: 'Saturación', editorFilterReset: 'Restablecer',
+            editorUndo: 'Deshacer', editorRedo: 'Rehacer',
+            editorBrushPen: 'Bolígrafo', editorBrushMarker: 'Marcador', editorBrushNeon: 'Neón', editorBrushArrow: 'Flecha', editorBrushBlur: 'Desenfocar', editorBrushEraser: 'Borrador',
+            editorCrop: 'Recortar', editorRotate: 'Girar', editorFlip: 'Reflejar',
+            editorTransform: 'Transformación',
+            editorAspectRatio: 'Relación de aspecto', editorFree: 'Libre',
+            editorOriginal: 'Original', editorSquare: 'Cuadrado'
         },
         it: {
             settings: 'Impostazioni', account: 'Account', privacy: 'Privacy',
@@ -877,6 +922,15 @@
             chooseSticker: 'Seleziona o crea un pack sticker',
             logout2: 'Esci', logoutConfirm: 'Esci?',
             noMessages: 'Nessun messaggio',
+            // editor
+            editorDrawColor: 'Colore', editorDrawBrush: 'Tipo di pennello', editorDrawSize: 'Dimensione pennello', editorAddText: 'Aggiungi testo', editorDeleteText: 'Elimina', editorTextColor: 'Colore', editorTextFont: 'Carattere',
+            editorFilters: 'Filtri', editorFilterNormal: 'Originale', editorFilterBW: 'B/N', editorFilterSepia: 'Seppia', editorFilterVintage: 'Vintage', editorFilterBright: 'Luminosità', editorFilterContrast: 'Contrasto', editorFilterInvert: 'Inverti', editorFilterBlur: 'Sfocatura', editorFilterSaturate: 'Saturazione', editorFilterReset: 'Ripristina',
+            editorUndo: 'Annulla', editorRedo: 'Ripeti',
+            editorBrushPen: 'Penna', editorBrushMarker: 'Pennarello', editorBrushNeon: 'Neon', editorBrushArrow: 'Freccia', editorBrushBlur: 'Sfocatura', editorBrushEraser: 'Gomma',
+            editorCrop: 'Ritaglia', editorRotate: 'Ruota', editorFlip: 'Rifletti',
+            editorTransform: 'Trasformazione',
+            editorAspectRatio: 'Rapporto d\'aspetto', editorFree: 'Libero',
+            editorOriginal: 'Originale', editorSquare: 'Quadrato'
         },
         pt: {
             settings: 'Configurações', account: 'Conta', privacy: 'Privacidade',
@@ -1009,6 +1063,15 @@
             chooseSticker: 'Selecionar ou criar pack de stickers',
             logout2: 'Sair', logoutConfirm: 'Sair?',
             noMessages: 'Sem mensagens',
+            // editor
+            editorDrawColor: 'Cor', editorDrawBrush: 'Tipo de pincel', editorDrawSize: 'Tamanho do pincel', editorAddText: 'Adicionar texto', editorDeleteText: 'Excluir', editorTextColor: 'Cor', editorTextFont: 'Fonte',
+            editorFilters: 'Filtros', editorFilterNormal: 'Original', editorFilterBW: 'P/B', editorFilterSepia: 'Sépia', editorFilterVintage: 'Vintage', editorFilterBright: 'Brilho', editorFilterContrast: 'Contraste', editorFilterInvert: 'Inverter', editorFilterBlur: 'Desfoque', editorFilterSaturate: 'Saturação', editorFilterReset: 'Redefinir',
+            editorUndo: 'Desfazer', editorRedo: 'Refazer',
+            editorBrushPen: 'Caneta', editorBrushMarker: 'Marcador', editorBrushNeon: 'Néon', editorBrushArrow: 'Seta', editorBrushBlur: 'Desfoque', editorBrushEraser: 'Borracha',
+            editorCrop: 'Recortar', editorRotate: 'Girar', editorFlip: 'Espelhar',
+            editorTransform: 'Transformação',
+            editorAspectRatio: 'Proporção', editorFree: 'Livre',
+            editorOriginal: 'Original', editorSquare: 'Quadrado'
         },
         pl: {
             settings: 'Ustawienia', account: 'Konto', privacy: 'Prywatność',
@@ -1141,6 +1204,15 @@
             chooseSticker: 'Wybierz lub utwórz pack naklejek',
             logout2: 'Wyloguj', logoutConfirm: 'Wylogować?',
             noMessages: 'Brak wiadomości',
+            // editor
+            editorDrawColor: 'Kolor', editorDrawBrush: 'Rodzaj pędzla', editorDrawSize: 'Rozmiar pędzla', editorAddText: 'Dodaj tekst', editorDeleteText: 'Usuń', editorTextColor: 'Kolor', editorTextFont: 'Czcionka',
+            editorFilters: 'Filtry', editorFilterNormal: 'Oryginał', editorFilterBW: 'Cz/B', editorFilterSepia: 'Sepia', editorFilterVintage: 'Vintage', editorFilterBright: 'Jasność', editorFilterContrast: 'Kontrast', editorFilterInvert: 'Inwersja', editorFilterBlur: 'Rozmycie', editorFilterSaturate: 'Nasycenie', editorFilterReset: 'Resetuj',
+            editorUndo: 'Cofnij', editorRedo: 'Ponów',
+            editorBrushPen: 'Pióro', editorBrushMarker: 'Zakreślacz', editorBrushNeon: 'Neon', editorBrushArrow: 'Strzałka', editorBrushBlur: 'Rozmycie', editorBrushEraser: 'Gumka',
+            editorCrop: 'Kadrowanie', editorRotate: 'Obróć', editorFlip: 'Odbicie',
+            editorTransform: 'Transformacja',
+            editorAspectRatio: 'Proporcje', editorFree: 'Dowolnie',
+            editorOriginal: 'Oryginał', editorSquare: 'Kwadrat'
         },
         uk: {
             settings: 'Налаштування', account: 'Акаунт', privacy: 'Конфіденційність',
@@ -1273,6 +1345,15 @@
             chooseSticker: 'Оберіть або створіть стікерпак',
             logout2: 'Вийти', logoutConfirm: 'Вийти з акаунту?',
             noMessages: 'Немає повідомлень',
+            // editor
+            editorDrawColor: 'Колір', editorDrawBrush: 'Тип пензля', editorDrawSize: 'Розмір пензля', editorAddText: 'Додати текст', editorDeleteText: 'Видалити', editorTextColor: 'Колір', editorTextFont: 'Шрифт',
+            editorFilters: 'Фільтри', editorFilterNormal: 'Оригінал', editorFilterBW: 'ЧБ', editorFilterSepia: 'Сепія', editorFilterVintage: 'Вінтаж', editorFilterBright: 'Яскравість', editorFilterContrast: 'Контраст', editorFilterInvert: 'Інверсія', editorFilterBlur: 'Розмиття', editorFilterSaturate: 'Насиченість', editorFilterReset: 'Скинути',
+            editorUndo: 'Скасувати', editorRedo: 'Повторити',
+            editorBrushPen: 'Пензель', editorBrushMarker: 'Маркер', editorBrushNeon: 'Неон', editorBrushArrow: 'Стрілка', editorBrushBlur: 'Розмиття', editorBrushEraser: 'Гумка',
+            editorCrop: 'Обрізка', editorRotate: 'Поворот', editorFlip: 'Віддзеркалити',
+            editorTransform: 'Трансформація',
+            editorAspectRatio: 'Пропорції', editorFree: 'Довільно',
+            editorOriginal: 'Оригінал', editorSquare: 'Квадрат'
         },
         tr: {
             settings: 'Ayarlar', account: 'Hesap', privacy: 'Gizlilik',
@@ -1405,6 +1486,15 @@
             chooseSticker: 'Çıkartma paketi seç veya oluştur',
             logout2: 'Çıkış yap', logoutConfirm: 'Çıkış yapılsın mı?',
             noMessages: 'Mesaj yok',
+            // editor
+            editorDrawColor: 'Renk', editorDrawBrush: 'Fırça Tipi', editorDrawSize: 'Fırça Boyutu', editorAddText: 'Metin Ekle', editorDeleteText: 'Sil', editorTextColor: 'Renk', editorTextFont: 'Yazı Tipi',
+            editorFilters: 'Filtreler', editorFilterNormal: 'Orijinal', editorFilterBW: 'S/B', editorFilterSepya: 'Sepya', editorFilterVintage: 'Vintage', editorFilterBright: 'Parlaklık', editorFilterContrast: 'Kontrast', editorFilterInvert: 'Tersine Çevir', editorFilterBlur: 'Bulanık', editorFilterSaturate: 'Doygunluk', editorFilterReset: 'Sıfırla',
+            editorUndo: 'Geri Al', editorRedo: 'Yinele',
+            editorBrushPen: 'Kalem', editorBrushMarker: 'İşaretleyici', editorBrushNeon: 'Neon', editorBrushArrow: 'Ok', editorBrushBlur: 'Bulanıklık', editorBrushEraser: 'Silgi',
+            editorCrop: 'Kırp', editorRotate: 'Döndür', editorFlip: 'Yansıt',
+            editorTransform: 'Dönüştür',
+            editorAspectRatio: 'En-Boy Oranı', editorFree: 'Serbest',
+            editorOriginal: 'Orijinal', editorSquare: 'Kare'
         },
     };
 
