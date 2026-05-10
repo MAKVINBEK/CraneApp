@@ -16,7 +16,7 @@
     --rd-accent: #ff2d8b;
     --rd-accent-grad: linear-gradient(135deg, #ff2d8b 0%, #9b5cff 100%);
     
-    --sidebar-width: 320px;
+    --sidebar-width: 340px;
     --bottom-bar-height: 80px;
 }
 
@@ -303,6 +303,12 @@ body {
     display: grid !important;
     grid-template-columns: repeat(2, 1fr);
     gap: 10px !important;
+}
+
+@media (min-width: 769px) {
+    .ratio-btn.full-width {
+        grid-column: span 2;
+    }
 }
 
 .ratio-btn {
