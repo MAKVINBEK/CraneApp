@@ -3554,6 +3554,16 @@
                         }
                         loadChats();
                     }
+                    
+                    // Показываем уведомление для новых сообщений
+                    if (!activeChat || activeChat.id !== data.chatId || !document.hasFocus()) {
+                        const chatInfo = allChats.find(c => c.id === data.chatId) || {
+                            id: data.chatId,
+                            name: data.message.senderFirstName || 'Пользователь',
+                            type: 'private'
+                        };
+                        notifyNewMessage(data.message, chatInfo);
+                    }
                     break;
                     
                 case 'message_edited':
@@ -3628,6 +3638,195 @@
                     updateMessageReactions(data.messageId, data.reactions);
                     break;
             }
+        }
+
+        // ============================================
+        // BROWSER NOTIFICATIONS
+        // ============================================
+        let notificationPermission = 'default';
+        let notificationSettings = {
+            desktop: true,
+            sound: true,
+            preview: true
+        };
+
+        // Инициализация уведомлений
+        async function initNotifications() {
+            if (!('Notification' in window)) {
+                console.log('Браузер не поддерживает уведомления');
+                return;
+            }
+
+            // Загружаем настройки
+            const saved = localStorage.getItem('craneapp_notification_settings');
+            if (saved) {
+                notificationSettings = JSON.parse(saved);
+            }
+
+            // Проверяем текущий статус разрешений
+            notificationPermission = Notification.permission;
+            
+            // Если разрешение еще не запрошено, запрашиваем при первом сообщении
+            if (notificationPermission === 'default') {
+                await requestNotificationPermission();
+            }
+        }
+
+        // Запрос разрешения на уведомления
+        async function requestNotificationPermission() {
+            if (!('Notification' in window)) return false;
+            
+            try {
+                const permission = await Notification.requestPermission();
+                notificationPermission = permission;
+                
+                if (permission === 'granted') {
+                    showToast('success', 'Уведомления включены! 🔔', '✅');
+                    return true;
+                } else if (permission === 'denied') {
+                    showToast('error', 'Уведомления отключены в настройках браузера', '❌');
+                    return false;
+                }
+            } catch (error) {
+                console.error('Ошибка запроса разрешений:', error);
+            }
+            return false;
+        }
+
+        // Показать браузерное уведомление
+        function showBrowserNotification(title, options = {}) {
+            if (!('Notification' in window)) return;
+            if (notificationPermission !== 'granted') return;
+            if (!notificationSettings.desktop) return;
+
+            const defaultOptions = {
+                icon: '/logo.png',
+                badge: '/logo.png',
+                tag: 'craneapp-message',
+                requireInteraction: false,
+                silent: !notificationSettings.sound
+            };
+
+            const notificationOptions = { ...defaultOptions, ...options };
+
+            try {
+                const notification = new Notification(title, notificationOptions);
+                
+                // Автоматически закрываем через 5 секунд
+                setTimeout(() => {
+                    notification.close();
+                }, 5000);
+
+                // Обработка клика по уведомлению
+                notification.onclick = function() {
+                    window.focus();
+                    notification.close();
+                    
+                    // Если есть chatId, открываем соответствующий чат
+                    if (options.data && options.data.chatId) {
+                        openChat(options.data.chatId, options.data.chatName);
+                    }
+                };
+
+                return notification;
+            } catch (error) {
+                console.error('Ошибка показа уведомления:', error);
+            }
+        }
+
+        // Уведомление о новом сообщении
+        function notifyNewMessage(message, chatInfo) {
+            // Не показываем уведомление если:
+            // 1. Чат активен и страница в фокусе
+            // 2. Отправитель - текущий пользователь
+            // 3. Уведомления отключены
+            
+            if (activeChat && activeChat.id === chatInfo.id && document.hasFocus()) {
+                return;
+            }
+            
+            if (message.senderId === user.id) {
+                return;
+            }
+
+            if (!notificationSettings.desktop) {
+                return;
+            }
+
+            // Запрашиваем разрешение если еще не получено
+            if (notificationPermission === 'default') {
+                requestNotificationPermission().then(granted => {
+                    if (granted) {
+                        showNotificationNow(message, chatInfo);
+                    }
+                });
+            } else if (notificationPermission === 'granted') {
+                showNotificationNow(message, chatInfo);
+            }
+        }
+
+        // Показать уведомление прямо сейчас
+        function showNotificationNow(message, chatInfo) {
+            const senderName = message.senderFirstName || message.sender?.firstName || message.senderName || 'Пользователь';
+            let title = senderName;
+            let body = '';
+            let icon = '/logo.png';
+
+            // Для групповых чатов добавляем имя чата
+            if (chatInfo.type === 'group' || chatInfo.type === 'channel') {
+                title = `${chatInfo.name} • ${senderName}`;
+            }
+
+            // Определяем содержимое уведомления в зависимости от типа сообщения
+            if (message.type === 'text' || !message.type) {
+                body = message.content || message.text || '';
+                if (body.length > 100) {
+                    body = body.substring(0, 100) + '...';
+                }
+            } else if (message.type === 'image' || message.type === 'photo') {
+                body = '📷 Фото';
+                if (message.mediaUrl) {
+                    icon = message.mediaUrl;
+                }
+            } else if (message.type === 'video') {
+                body = '🎬 Видео';
+            } else if (message.type === 'voice') {
+                body = '🎤 Голосовое сообщение';
+                // Голосовые сообщения требуют внимания
+            } else if (message.type === 'sticker') {
+                body = '🎨 Стикер';
+                if (message.mediaUrl) {
+                    icon = message.mediaUrl;
+                }
+            } else if (message.type === 'gif') {
+                body = '🎬 GIF';
+                if (message.mediaUrl) {
+                    icon = message.mediaUrl;
+                }
+            } else if (message.type === 'file') {
+                body = '📎 Файл';
+            } else {
+                body = message.content || 'Новое сообщение';
+            }
+
+            // Показываем уведомление
+            showBrowserNotification(title, {
+                body: body,
+                icon: icon,
+                tag: `chat-${chatInfo.id}`,
+                data: {
+                    chatId: chatInfo.id,
+                    chatName: chatInfo.name,
+                    messageId: message.id
+                },
+                requireInteraction: message.type === 'voice' || message.type === 'call'
+            });
+        }
+
+        // Обновление настроек уведомлений
+        function updateNotificationSettings(settings) {
+            notificationSettings = { ...notificationSettings, ...settings };
+            localStorage.setItem('craneapp_notification_settings', JSON.stringify(notificationSettings));
         }
         
         function addMessage(msg) {
@@ -6636,6 +6835,8 @@
             return wrapper;
         }
  connectWebSocket();
+// Инициализируем браузерные уведомления
+initNotifications();
  loadChats().then(function() {
      initFolderTabs();
      // Открываем чат из параметра URL (например из папки)
