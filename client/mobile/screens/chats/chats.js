@@ -3531,14 +3531,14 @@
                         const senderAv = msg.senderAvatar || msg.sender?.avatarUrl || senderName[0];
                         const senderId = msg.senderId || msg.sender?.id;
                         if (senderId && senderId !== user.id) {
-                            chatUsers[data.chatId] = { id: senderId, name: senderName, av: senderAv, isOnline: true };
+                            chatUsers[data.chatId] = { id: senderId, name: senderName, av: senderAv, isOnline: false };
                         }
                         allChats.unshift({
                             id: data.chatId, name: senderName, av: senderAv,
                             lastMessage: formatLastMessageFromMessage(msg),
                             lastMessageAt: new Date().toISOString(),
                             time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
-                            isOnline: true, isPinned: false, lastMessageType: msg.type || 'text',
+                            isOnline: false, isPinned: false, lastMessageType: msg.type || 'text',
                             lastMessageSenderId: msg.sender_id || msg.senderId || msg.sender?.id
                         });
                         renderChatList();
@@ -3622,12 +3622,12 @@
                         const name = data.senderName || data.title || 'Чат';
                         const av = data.senderAvatar || name[0];
                         if (data.senderId) {
-                            chatUsers[data.chatId] = { id: data.senderId, name, av, isOnline: true };
+                            chatUsers[data.chatId] = { id: data.senderId, name, av, isOnline: false };
                         }
                         allChats.unshift({
                             id: data.chatId, name, av,
                             lastMessage: '', time: '',
-                            isOnline: true, isPinned: false,
+                            isOnline: false, isPinned: false,
                             lastMessageType: 'text'
                         });
                         renderChatList();
