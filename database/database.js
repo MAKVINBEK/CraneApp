@@ -1,10 +1,44 @@
 require('dotenv').config();
 const { Pool } = require('pg');
 
+function shouldUseSsl(connectionString) {
+    if (!connectionString) return false;
+    if (process.env.DB_SSL) return process.env.DB_SSL === 'true';
+    if (process.env.PGSSLMODE === 'disable') return false;
+
+    try {
+        const hostname = new URL(connectionString).hostname;
+        if (['localhost', '127.0.0.1', 'db'].includes(hostname)) {
+            return false;
+        }
+    } catch (_) {
+        return process.env.NODE_ENV === 'production';
+    }
+
+    return process.env.NODE_ENV === 'production';
+}
+
+function normalizeConnectionString(connectionString) {
+    if (!connectionString) return connectionString;
+    if (process.env.DB_PREFER_IPV6 === 'true') return connectionString;
+
+    try {
+        const url = new URL(connectionString);
+        if (url.hostname === 'localhost') {
+            url.hostname = '127.0.0.1';
+        }
+        return url.toString();
+    } catch (_) {
+        return connectionString;
+    }
+}
+
+const databaseUrl = normalizeConnectionString(process.env.DATABASE_URL);
+
 // Railway автоматически даёт эти переменные при добавлении PostgreSQL
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
+    connectionString: databaseUrl,
+    ssl: shouldUseSsl(databaseUrl) ? { rejectUnauthorized: false } : false,
     max: 10,
     connectionTimeoutMillis: 5000,
     idleTimeoutMillis: 30000,
