@@ -2338,6 +2338,7 @@
             div.className = 'message ' + (isOutgoing ? 'outgoing' : 'incoming');
             if (m.pending) div.classList.add('pending');
             if (isBotMessage) div.classList.add('bot-message');
+            if (m.isPinned) div.classList.add('pinned');
             div.dataset.messageId = m.id;
 
             div.addEventListener('contextmenu', function(e) {
@@ -3572,6 +3573,16 @@
                     
                 case 'message_pinned':
                     if (activeChat && data.chatId === activeChat.id) {
+                        // Снимаем флаг закрепления со всех сообщений в кэше
+                        Object.values(messagesData).forEach(m => {
+                            if (m.isPinned) m.isPinned = false;
+                        });
+                        if (messagesData[data.message.id]) {
+                            messagesData[data.message.id].isPinned = true;
+                        }
+                        // Снимаем визуальный класс с остальных сообщений
+                        document.querySelectorAll('.message.pinned').forEach(el => el.classList.remove('pinned'));
+                        
                         showPinnedMessage(data.message);
                         const msgEl = document.querySelector('[data-message-id="' + data.message.id + '"]');
                         if (msgEl) msgEl.classList.add('pinned');
@@ -3580,6 +3591,9 @@
                     
                 case 'message_unpinned':
                     if (activeChat && data.chatId === activeChat.id) {
+                        if (messagesData[data.messageId]) {
+                            messagesData[data.messageId].isPinned = false;
+                        }
                         hidePinnedMessage();
                         const msgEl = document.querySelector('[data-message-id="' + data.messageId + '"]');
                         if (msgEl) msgEl.classList.remove('pinned');
@@ -3842,6 +3856,9 @@
             const el = document.querySelector('[data-message-id="' + messageId + '"]');
             if (el) el.remove();
             delete messagesData[messageId];
+            if (currentPinnedMessage && currentPinnedMessage.id === messageId) {
+                hidePinnedMessage();
+            }
         }
         
         function showTyping() {
@@ -4260,7 +4277,9 @@
                                 lastMessageType: c.lastMessageType,
                                 badge: other.badge || null,
                                 isBot: other.is_bot || false,
-                                unreadCount: c.unreadCount || 0
+                                unreadCount: c.unreadCount || 0,
+                                role: c.role,
+                                ownerId: c.ownerId
                             }));
 
                             if (c.isPinned) pinnedChatIds.add(c.id);
@@ -4289,7 +4308,9 @@
                              lastMessageAt: c.lastMessageAt || null,
                              time: c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '',
                              isPinned: c.isPinned || false,
-                             unreadCount: c.unreadCount || 0
+                             unreadCount: c.unreadCount || 0,
+                              role: c.role,
+                              ownerId: c.ownerId
                          }));
                         
                         // Добавляем в pinnedChatIds если чат закреплён
@@ -4697,7 +4718,14 @@
                 else localStorage.removeItem('crane_draft_' + activeChat.id);
             }
 
-            activeChat = { id: id, name: name, type: allChats.find(c => c.id === id)?.type || 'private' };
+            const chatInfo = allChats.find(c => c.id === id);
+            activeChat = { 
+                id: id, 
+                name: name, 
+                type: chatInfo?.type || 'private',
+                ownerId: chatInfo?.ownerId,
+                role: chatInfo?.role
+            };
 
             // Показываем кнопку участников только для групп
             const membersBtn = document.getElementById('membersBtn');
@@ -4770,7 +4798,6 @@
             const statusEl = document.getElementById('chatStatus');
 
             // Для групп — берём аватарку из allChats
-            const chatInfo = allChats.find(c => c.id === id);
             const groupAvatarUrl = chatInfo?.avatarUrl || chatInfo?.av;
 
             if (activeChat && activeChat.type === 'group') {
@@ -4974,6 +5001,26 @@
             if (downloadItem) downloadItem.style.display = isMedia ? 'flex' : 'none';
         if (copyLabel) copyLabel.textContent = isMedia ? (window.i18n?.t('copyPhoto') || 'Скопировать фото') : (window.i18n?.t('copyText') || 'Копировать текст');
             if (copyItem) copyItem.onclick = isMedia ? copyMessagePhoto : copyMessageText;
+
+            // Настраиваем пункт закрепления (Закрепить / Открепить)
+            const pinItem = document.getElementById('pinMessageText')?.parentNode;
+            const pinTextSpan = document.getElementById('pinMessageText');
+            if (pinItem && pinTextSpan) {
+                // Если это группа, закреплять может только создатель (владелец) чата
+                if (activeChat && activeChat.type === 'group' && activeChat.role !== 'owner') {
+                    pinItem.style.display = 'none';
+                } else {
+                    pinItem.style.display = 'flex';
+                    const isPinned = msg && (msg.isPinned || msg.pinned || element.classList.contains('pinned'));
+                    if (isPinned) {
+                        pinTextSpan.textContent = tr('unpinMessage', 'Открепить');
+                        pinItem.onclick = unpinMessage;
+                    } else {
+                        pinTextSpan.textContent = tr('pinMessage', 'Закрепить');
+                        pinItem.onclick = pinMessage;
+                    }
+                }
+            }
             
             const menu = document.getElementById('messageContextMenu');
             const x = e.pageX || (e.touches && e.touches[0].pageX) || e.clientX || 0;
@@ -5129,8 +5176,7 @@
                     headers: { 'Authorization': 'Bearer ' + token }
                 });
                 if (res.ok) {
-                    currentMessageElement.remove();
-                    delete messagesData[currentMessageId];
+                    removeMessage(currentMessageId);
                     showToast('success', 'Удалено', '✓');
                 }
             } catch (err) {
@@ -5157,6 +5203,8 @@
         // ============================================
         // PIN MESSAGE
         // ============================================
+        let currentPinnedMessage = null;
+
         async function pinMessage() {
             document.getElementById('messageContextMenu').classList.remove('active');
             
@@ -5171,8 +5219,19 @@
                 const data = await res.json();
                 
                 if (res.ok && data.success) {
+                    // Снимаем визуальный класс с других сообщений
+                    document.querySelectorAll('.message.pinned').forEach(el => el.classList.remove('pinned'));
+                    
                     // Добавляем визуальный индикатор
                     currentMessageElement.classList.add('pinned');
+                    
+                    // Обновляем кэш
+                    Object.values(messagesData).forEach(m => {
+                        if (m.isPinned) m.isPinned = false;
+                    });
+                    if (messagesData[currentMessageId]) {
+                        messagesData[currentMessageId].isPinned = true;
+                    }
                     
                     // Обновляем UI - показываем закрепленное сообщение
                     showPinnedMessage(data.message);
@@ -5188,31 +5247,47 @@
         }
 
         async function unpinMessage() {
-            if (!currentMessageId) return;
+            const messageIdToUnpin = currentMessageId || (currentPinnedMessage && currentPinnedMessage.id);
+            if (!messageIdToUnpin) return;
+            document.getElementById('messageContextMenu').classList.remove('active');
             
             try {
-                const res = await fetch('/api/v1/messages/' + currentMessageId + '/pin', {
+                const res = await fetch('/api/v1/messages/' + messageIdToUnpin + '/pin', {
                     method: 'DELETE',
                     headers: { 'Authorization': 'Bearer ' + token }
                 });
                 
-                if (res.ok) {
+                const data = await res.json();
+                if (res.ok && data.success) {
                     // Убираем визуальный индикатор
-                    if (currentMessageElement) {
-                        currentMessageElement.classList.remove('pinned');
+                    const msgEl = document.querySelector('[data-message-id="' + messageIdToUnpin + '"]');
+                    if (msgEl) {
+                        msgEl.classList.remove('pinned');
+                    }
+                    if (messagesData[messageIdToUnpin]) {
+                        messagesData[messageIdToUnpin].isPinned = false;
                     }
                     
                     // Скрываем закрепленное сообщение
                     hidePinnedMessage();
                     
                     showToast('success', 'Сообщение откреплено', '📌');
+                } else {
+                    showToast('error', data.error || 'Ошибка', '❌');
                 }
             } catch (err) {
                 showToast('error', 'Ошибка', '❌');
             }
         }
 
-        function showPinnedMessage(msg) {
+        async function showPinnedMessage(msg) {
+            if (msg.isEncrypted && msg.encryptionIv && window.E2E) {
+                try {
+                    msg.content = await window.E2E.decrypt(msg.content, msg.encryptionIv, activeChat.id, token);
+                } catch (_) {}
+            }
+            currentPinnedMessage = msg;
+            
             // Используем новую панельку в header
             const barEl = document.getElementById('pinnedMessageBar');
             const textEl = document.getElementById('pinnedMessageBarText');
@@ -5226,19 +5301,30 @@
             const pinnedText = document.getElementById('pinnedMessageBarText');
             
             if (msg.type === 'image' || msg.type === 'photo') {
-                pinnedText.innerHTML = '<span>📷</span> Фото';
+                pinnedText.innerHTML = '<span>📷</span> ' + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ': Фото';
             } else if (msg.type === 'video') {
-                pinnedText.innerHTML = '<span>🎬</span> Видео';
+                pinnedText.innerHTML = '<span>🎬</span> ' + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ': Видео';
             } else if (msg.type === 'gif') {
-                pinnedText.innerHTML = '<span>🎞</span> GIF';
+                pinnedText.innerHTML = '<span>🎞</span> ' + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ': GIF';
             } else if (msg.type === 'sticker') {
-                pinnedText.innerHTML = '<span>🎨</span> Стикер';
+                pinnedText.innerHTML = '<span>🎨</span> ' + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ': Стикер';
             } else {
                 const text = msg.content || '';
-            pinnedText.innerHTML = '<span>📌</span> <strong>' + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ':</strong> ' + (text.length > 60 ? text.substring(0, 60) + '...' : text);
+                pinnedText.innerHTML = '<span>📌</span> <strong>' + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ':</strong> ' + (text.length > 60 ? text.substring(0, 60) + '...' : text);
             }
             
             pinnedBar.classList.add('active');
+            
+            // Настраиваем кнопку скрытия/открепления (крестик)
+            const closeBtn = pinnedBar.querySelector('.pinned-message-bar-close');
+            if (closeBtn) {
+                // В группах скрываем крестик для не-владельцев
+                if (activeChat && activeChat.type === 'group' && activeChat.role !== 'owner') {
+                    closeBtn.style.display = 'none';
+                } else {
+                    closeBtn.style.display = 'block';
+                }
+            }
             
             // Также обновляем старую панель (если есть)
             const container = document.getElementById('pinnedMessageContainer');
@@ -5252,6 +5338,7 @@
         }
 
         function hidePinnedMessage() {
+            currentPinnedMessage = null;
             // Скрываем новую панельку в header
             const barEl = document.getElementById('pinnedMessageBar');
             if (barEl) {
@@ -5265,9 +5352,32 @@
             }
         }
 
-        function hidePinnedMessageBar() {
-            hidePinnedMessage();
+        async function hidePinnedMessageBar() {
             event.stopPropagation();
+            if (!currentPinnedMessage) return;
+            
+            // В группах откреплять может только создатель (владелец) чата
+            if (activeChat && activeChat.type === 'group' && activeChat.role !== 'owner') {
+                hidePinnedMessage();
+                return;
+            }
+            
+            if (confirm('Открепить это сообщение для всех участников?')) {
+                try {
+                    const res = await fetch('/api/v1/messages/' + currentPinnedMessage.id + '/pin', {
+                        method: 'DELETE',
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                        showToast('success', 'Сообщение откреплено', '📌');
+                    } else {
+                        showToast('error', data.error || 'Ошибка', '❌');
+                    }
+                } catch (err) {
+                    console.error('Failed to unpin message:', err);
+                }
+            }
         }
 
         function createPinnedMessageBar() {
@@ -5307,14 +5417,17 @@
         }
 
         function openPinnedMessage() {
+            if (!currentPinnedMessage) return;
             // Прокрутка к закрепленному сообщению
-            const pinnedMsgEl = document.querySelector('.message.pinned');
+            const pinnedMsgEl = document.querySelector('[data-message-id="' + currentPinnedMessage.id + '"]');
             if (pinnedMsgEl) {
                 pinnedMsgEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 pinnedMsgEl.classList.add('highlight');
                 setTimeout(function() {
                     pinnedMsgEl.classList.remove('highlight');
                 }, 2000);
+            } else {
+                showToast('info', 'Сообщение находится выше по истории', '📌');
             }
         }
 

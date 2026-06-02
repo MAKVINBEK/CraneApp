@@ -2823,11 +2823,14 @@ body.chat-open .tab-bar  { display: none !important; }
    ============================================ */
 .pinned-message-container {
     display: none;
-    padding: 8px 12px;
-    background: linear-gradient(90deg, rgba(255, 215, 0, 0.15) 0%, rgba(255, 215, 0, 0.05) 100%);
-    border-bottom: 1px solid rgba(255, 215, 0, 0.3);
+    padding: 8px 16px;
+    background: rgba(255, 45, 139, 0.05);
+    backdrop-filter: var(--rd-blur);
+    -webkit-backdrop-filter: var(--rd-blur);
+    border-bottom: 1px solid rgba(255, 45, 139, 0.2);
+    border-left: 3px solid var(--rd-accent);
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     cursor: pointer;
     flex-shrink: 0;
 }
@@ -2839,7 +2842,8 @@ body.chat-open .tab-bar  { display: none !important; }
 #pinnedMessageContent {
     flex: 1;
     font-size: 13px;
-    color: #FFD700;
+    color: var(--rd-text);
+    opacity: 0.9;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -2849,6 +2853,7 @@ body.chat-open .tab-bar  { display: none !important; }
 }
 
 #pinnedMessageContent strong {
+    color: var(--rd-accent);
     font-weight: 600;
 }
 
@@ -2870,19 +2875,22 @@ body.chat-open .tab-bar  { display: none !important; }
 
 /* Message pinned indicator */
 .message.pinned {
-    border: 2px solid #FFD700;
-    background: rgba(255, 215, 0, 0.1) !important;
+    box-shadow: 0 0 12px rgba(255, 45, 139, 0.2) !important;
+    position: relative;
 }
 
-.message.pinned::before {
-    content: '📌';
-    font-size: 10px;
-    position: absolute;
-    top: -8px;
-    left: 8px;
-    background: #FFD700;
-    padding: 2px 4px;
-    border-radius: 4px;
+.message.pinned .msg-time::after {
+    content: '';
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    background-color: currentColor;
+    -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'><path d='M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z'/></svg>") no-repeat center / contain;
+    mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'><path d='M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z'/></svg>") no-repeat center / contain;
+    margin-left: 5px;
+    vertical-align: middle;
+    transform: rotate(45deg);
+    opacity: 0.8;
 }
 
 /* Highlight animation for pinned message */
@@ -2892,13 +2900,13 @@ body.chat-open .tab-bar  { display: none !important; }
 
 @keyframes highlight-pulse {
     0% {
-        box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.7);
+        box-shadow: 0 0 0 0 rgba(255, 45, 139, 0.7);
     }
     50% {
-        box-shadow: 0 0 20px 10px rgba(255, 215, 0, 0.3);
+        box-shadow: 0 0 20px 10px rgba(255, 45, 139, 0.3);
     }
     100% {
-        box-shadow: 0 0 0 0 rgba(255, 215, 0, 0);
+        box-shadow: 0 0 0 0 rgba(255, 45, 139, 0);
     }
 }
 
@@ -2947,18 +2955,21 @@ body.chat-open .tab-bar  { display: none !important; }
    ============================================ */
 .pinned-message-bar {
     display: none;
-    padding: 8px 12px;
-    background: linear-gradient(90deg, rgba(255, 215, 0, 0.15) 0%, rgba(255, 215, 0, 0.05) 100%);
-    border-bottom: 1px solid rgba(255, 215, 0, 0.3);
+    padding: 10px 16px;
+    background: rgba(255, 255, 255, 0.02);
+    backdrop-filter: var(--rd-blur);
+    -webkit-backdrop-filter: var(--rd-blur);
+    border-bottom: 1px solid var(--rd-stroke);
+    border-left: 3px solid var(--rd-accent);
     align-items: center;
-    gap: 8px;
+    gap: 12px;
     cursor: pointer;
     flex-shrink: 0;
-    transition: background 0.2s;
+    transition: all 0.2s ease;
 }
 
 .pinned-message-bar:hover {
-    background: linear-gradient(90deg, rgba(255, 215, 0, 0.25) 0%, rgba(255, 215, 0, 0.1) 100%);
+    background: rgba(255, 255, 255, 0.05);
 }
 
 .pinned-message-bar.active {
@@ -2973,7 +2984,8 @@ body.chat-open .tab-bar  { display: none !important; }
 .pinned-message-bar-text {
     flex: 1;
     font-size: 13px;
-    color: #FFD700;
+    color: var(--rd-text);
+    opacity: 0.95;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

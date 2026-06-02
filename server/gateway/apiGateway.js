@@ -4437,7 +4437,7 @@ app.delete('/api/v1/messages/:messageId', authMiddleware, async (req, res) => {
             return res.status(403).json({ error: 'Only sender can delete for everyone' });
         }
         
-        await query(`UPDATE messages SET is_deleted = TRUE WHERE id = $1`, [messageId]);
+        await query(`UPDATE messages SET is_deleted = TRUE, is_pinned = FALSE, pinned_at = NULL WHERE id = $1`, [messageId]);
 
         broadcastToChat(message.chat_id, { type: 'message_deleted', messageId, chatId: message.chat_id, forEveryone: forEveryone === 'true' });
         
@@ -4478,8 +4478,8 @@ app.post('/api/v1/messages/:messageId/pin', authMiddleware, async (req, res) => 
         const chatType = await query('SELECT type FROM chats WHERE id = $1', [chatId]);
         const isGroup = chatType.rows[0]?.type === 'group' || chatType.rows[0]?.type === 'channel';
         const role = memberCheck.rows[0].role;
-        if (isGroup && role === 'member') {
-            return res.status(403).json({ error: req.t('adminsPinOnly') });
+        if (isGroup && role !== 'owner') {
+            return res.status(403).json({ error: req.t('adminsPinOnly') || 'Only the creator can pin messages' });
         }
 
         // Снимаем закрепление с других сообщений в этом чате
@@ -4515,6 +4515,8 @@ app.post('/api/v1/messages/:messageId/pin', authMiddleware, async (req, res) => 
             type: msg.media_type || msg.type,
             mediaUrl: msg.media_url,
             isPinned: true,
+            isEncrypted: msg.is_encrypted || false,
+            encryptionIv: msg.encryption_iv || null,
             createdAt: msg.created_at
         };
         
@@ -4539,12 +4541,32 @@ app.delete('/api/v1/messages/:messageId/pin', authMiddleware, async (req, res) =
             return res.status(404).json({ error: 'Message not found' });
         }
         
+        const chatId = msgCheck.rows[0].chat_id;
+        
+        // Проверяем, является ли пользователь участником чата
+        const memberCheck = await query(
+            'SELECT role FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, req.user.id]
+        );
+
+        if (memberCheck.rows.length === 0) {
+            return res.status(403).json({ error: req.t('accessDenied') });
+        }
+
+        // В группах/каналах — только owner может откреплять
+        const chatType = await query('SELECT type FROM chats WHERE id = $1', [chatId]);
+        const isGroup = chatType.rows[0]?.type === 'group' || chatType.rows[0]?.type === 'channel';
+        const role = memberCheck.rows[0].role;
+        if (isGroup && role !== 'owner') {
+            return res.status(403).json({ error: req.t('adminsPinOnly') || 'Only the creator can unpin messages' });
+        }
+
         await query(
             `UPDATE messages SET is_pinned = FALSE, pinned_at = NULL WHERE id = $1`,
             [messageId]
         );
         
-        broadcastToChat(msgCheck.rows[0].chat_id, { type: 'message_unpinned', messageId, chatId: msgCheck.rows[0].chat_id });
+        broadcastToChat(chatId, { type: 'message_unpinned', messageId, chatId });
         
         logger.info('✅ Message unpinned:', messageId);
         res.json({ success: true, isPinned: false });
@@ -4573,7 +4595,7 @@ app.get('/api/v1/chats/:chatId/pinned', authMiddleware, async (req, res) => {
             `SELECT m.*, u.username as sender_username, u.first_name as sender_first_name, u.avatar_url as sender_avatar
              FROM messages m
              LEFT JOIN users u ON m.sender_id = u.id
-             WHERE m.chat_id = $1 AND m.is_pinned = TRUE
+             WHERE m.chat_id = $1 AND m.is_pinned = TRUE AND m.is_deleted = FALSE
              ORDER BY m.pinned_at DESC
              LIMIT 1`,
             [chatId]
@@ -4596,6 +4618,8 @@ app.get('/api/v1/chats/:chatId/pinned', authMiddleware, async (req, res) => {
             mediaUrl: msg.media_url,
             isPinned: true,
             pinnedAt: msg.pinned_at,
+            isEncrypted: msg.is_encrypted || false,
+            encryptionIv: msg.encryption_iv || null,
             createdAt: msg.created_at
         };
         
