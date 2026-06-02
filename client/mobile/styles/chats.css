@@ -2880,17 +2880,9 @@ body.chat-open .tab-bar  { display: none !important; }
 }
 
 .message.pinned .msg-time::after {
-    content: '';
-    display: inline-block;
-    width: 10px;
-    height: 10px;
-    background-color: currentColor;
-    -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'><path d='M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z'/></svg>") no-repeat center / contain;
-    mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'><path d='M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z'/></svg>") no-repeat center / contain;
-    margin-left: 5px;
-    vertical-align: middle;
-    transform: rotate(45deg);
-    opacity: 0.8;
+    content: ' 📌';
+    font-size: 9px;
+    opacity: 0.7;
 }
 
 /* Highlight animation for pinned message */
