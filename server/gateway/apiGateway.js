@@ -4482,12 +4482,20 @@ app.post('/api/v1/messages/:messageId/pin', authMiddleware, async (req, res) => 
             return res.status(403).json({ error: req.t('adminsPinOnly') || 'Only the creator can pin messages' });
         }
 
-        // Снимаем закрепление с других сообщений в этом чате
-        await query(
-            `UPDATE messages SET is_pinned = FALSE, pinned_at = NULL 
-             WHERE chat_id = $1 AND is_pinned = TRUE`,
+        // Проверяем лимит закрепленных сообщений (макс 50)
+        const pinnedCount = await query(
+            'SELECT COUNT(*) as cnt FROM messages WHERE chat_id = $1 AND is_pinned = TRUE AND is_deleted = FALSE',
             [chatId]
         );
+        if (parseInt(pinnedCount.rows[0].cnt) >= 50) {
+            return res.status(400).json({ error: 'Maximum 50 pinned messages per chat' });
+        }
+
+        // Проверяем, не закреплено ли уже
+        const alreadyPinned = await query('SELECT is_pinned FROM messages WHERE id = $1', [messageId]);
+        if (alreadyPinned.rows[0]?.is_pinned) {
+            return res.status(400).json({ error: 'Message is already pinned' });
+        }
 
         // Закрепляем сообщение
         await query(
@@ -4597,16 +4605,11 @@ app.get('/api/v1/chats/:chatId/pinned', authMiddleware, async (req, res) => {
              LEFT JOIN users u ON m.sender_id = u.id
              WHERE m.chat_id = $1 AND m.is_pinned = TRUE AND m.is_deleted = FALSE
              ORDER BY m.pinned_at DESC
-             LIMIT 1`,
+             LIMIT 50`,
             [chatId]
         );
         
-        if (result.rows.length === 0) {
-            return res.json({ message: null });
-        }
-        
-        const msg = result.rows[0];
-        const message = {
+        const messages = result.rows.map(msg => ({
             id: msg.id,
             chatId: msg.chat_id,
             senderId: msg.sender_id,
@@ -4621,9 +4624,10 @@ app.get('/api/v1/chats/:chatId/pinned', authMiddleware, async (req, res) => {
             isEncrypted: msg.is_encrypted || false,
             encryptionIv: msg.encryption_iv || null,
             createdAt: msg.created_at
-        };
+        }));
         
-        res.json({ message });
+        // Обратная совместимость: message = последнее закрепленное
+        res.json({ message: messages[0] || null, messages });
     } catch (error) {
         logger.error('❌ Get pinned message error:', error);
         res.status(500).json({ error: error.message });

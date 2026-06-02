@@ -3573,17 +3573,15 @@
                     
                 case 'message_pinned':
                     if (activeChat && data.chatId === activeChat.id) {
-                        // Снимаем флаг закрепления со всех сообщений в кэше
-                        Object.values(messagesData).forEach(m => {
-                            if (m.isPinned) m.isPinned = false;
-                        });
                         if (messagesData[data.message.id]) {
                             messagesData[data.message.id].isPinned = true;
                         }
-                        // Снимаем визуальный класс с остальных сообщений
-                        document.querySelectorAll('.message.pinned').forEach(el => el.classList.remove('pinned'));
-                        
-                        showPinnedMessage(data.message);
+                        // Добавляем в массив закрепленных (в начало — самое свежее)
+                        if (!pinnedMessages.find(m => m.id === data.message.id)) {
+                            pinnedMessages.unshift(data.message);
+                        }
+                        currentPinnedIndex = 0;
+                        showPinnedMessage(pinnedMessages[0]);
                         const msgEl = document.querySelector('[data-message-id="' + data.message.id + '"]');
                         if (msgEl) msgEl.classList.add('pinned');
                     }
@@ -3594,9 +3592,16 @@
                         if (messagesData[data.messageId]) {
                             messagesData[data.messageId].isPinned = false;
                         }
-                        hidePinnedMessage();
+                        pinnedMessages = pinnedMessages.filter(m => m.id !== data.messageId);
                         const msgEl = document.querySelector('[data-message-id="' + data.messageId + '"]');
                         if (msgEl) msgEl.classList.remove('pinned');
+                        if (pinnedMessages.length === 0) {
+                            currentPinnedIndex = 0;
+                            hidePinnedMessage();
+                        } else {
+                            if (currentPinnedIndex >= pinnedMessages.length) currentPinnedIndex = 0;
+                            showPinnedMessage(pinnedMessages[currentPinnedIndex]);
+                        }
                     }
                     break;
                     
@@ -3856,8 +3861,17 @@
             const el = document.querySelector('[data-message-id="' + messageId + '"]');
             if (el) el.remove();
             delete messagesData[messageId];
-            if (currentPinnedMessage && currentPinnedMessage.id === messageId) {
-                hidePinnedMessage();
+            // Удаляем из массива закрепленных
+            const wasPinned = pinnedMessages.some(m => m.id === messageId);
+            if (wasPinned) {
+                pinnedMessages = pinnedMessages.filter(m => m.id !== messageId);
+                if (pinnedMessages.length === 0) {
+                    currentPinnedIndex = 0;
+                    hidePinnedMessage();
+                } else {
+                    if (currentPinnedIndex >= pinnedMessages.length) currentPinnedIndex = 0;
+                    showPinnedMessage(pinnedMessages[currentPinnedIndex]);
+                }
             }
         }
         
