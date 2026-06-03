@@ -5538,6 +5538,8 @@
         // PIN MESSAGE
         // ============================================
         let currentPinnedMessage = null;
+        let pinnedMessages = [];
+        let currentPinnedIndex = 0;
 
         async function pinMessage() {
             document.getElementById('messageContextMenu').classList.remove('active');
@@ -5553,22 +5555,22 @@
                 const data = await res.json();
                 
                 if (res.ok && data.success) {
-                    // Снимаем визуальный класс с других сообщений
-                    document.querySelectorAll('.message.pinned').forEach(el => el.classList.remove('pinned'));
-                    
                     // Добавляем визуальный индикатор
                     currentMessageElement.classList.add('pinned');
                     
                     // Обновляем кэш
-                    Object.values(messagesData).forEach(m => {
-                        if (m.isPinned) m.isPinned = false;
-                    });
                     if (messagesData[currentMessageId]) {
                         messagesData[currentMessageId].isPinned = true;
                     }
                     
+                    // Добавляем в массив закрепленных (в начало — самое свежее)
+                    if (!pinnedMessages.find(m => m.id === data.message.id)) {
+                        pinnedMessages.unshift(data.message);
+                    }
+                    currentPinnedIndex = 0;
+                    
                     // Обновляем UI - показываем закрепленное сообщение
-                    showPinnedMessage(data.message);
+                    showPinnedMessage(pinnedMessages[0]);
                     
                     showToast('success', 'Сообщение закреплено', '📌');
                 } else {
@@ -5602,8 +5604,15 @@
                         messagesData[messageIdToUnpin].isPinned = false;
                     }
                     
-                    // Скрываем закрепленное сообщение
-                    hidePinnedMessage();
+                    // Убираем из массива закрепленных
+                    pinnedMessages = pinnedMessages.filter(m => m.id !== messageIdToUnpin);
+                    if (pinnedMessages.length === 0) {
+                        currentPinnedIndex = 0;
+                        hidePinnedMessage();
+                    } else {
+                        if (currentPinnedIndex >= pinnedMessages.length) currentPinnedIndex = 0;
+                        showPinnedMessage(pinnedMessages[currentPinnedIndex]);
+                    }
                     
                     showToast('success', 'Сообщение откреплено', '📌');
                 } else {
@@ -5634,18 +5643,34 @@
             const pinnedBar = document.getElementById('pinnedMessageBar');
             const pinnedText = document.getElementById('pinnedMessageBarText');
             
+            let mediaIcon = '📷';
+            if (msg.type === 'video') mediaIcon = '🎬';
+            else if (msg.type === 'gif') mediaIcon = '🎞';
+            else if (msg.type === 'sticker') mediaIcon = '🎨';
+            else if (msg.type === 'voice') mediaIcon = '🎙️';
+            
+            let prefix = '<span>📌</span> ';
+            if (pinnedMessages && pinnedMessages.length > 1) {
+                const total = pinnedMessages.length;
+                const current = currentPinnedIndex + 1;
+                prefix = `<span>📌</span> <span class="pinned-counter">(${current}/${total})</span> `;
+            }
+            
+            let contentText = '';
             if (msg.type === 'image' || msg.type === 'photo') {
-                pinnedText.innerHTML = '<span>📷</span> ' + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ': Фото';
+                contentText = `<span>${mediaIcon}</span> ` + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ': Фото';
             } else if (msg.type === 'video') {
-                pinnedText.innerHTML = '<span>🎬</span> ' + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ': Видео';
+                contentText = `<span>${mediaIcon}</span> ` + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ': Видео';
             } else if (msg.type === 'gif') {
-                pinnedText.innerHTML = '<span>🎞</span> ' + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ': GIF';
+                contentText = `<span>${mediaIcon}</span> ` + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ': GIF';
             } else if (msg.type === 'sticker') {
-                pinnedText.innerHTML = '<span>🎨</span> ' + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ': Стикер';
+                contentText = `<span>${mediaIcon}</span> ` + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ': Стикер';
             } else {
                 const text = msg.content || '';
-                pinnedText.innerHTML = '<span>📌</span> <strong>' + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ':</strong> ' + (text.length > 60 ? text.substring(0, 60) + '...' : text);
+                contentText = '<strong>' + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ':</strong> ' + (text.length > 60 ? text.substring(0, 60) + '...' : text);
             }
+            
+            pinnedText.innerHTML = prefix + contentText;
             
             pinnedBar.classList.add('active');
             
@@ -5773,9 +5798,13 @@
         }
 
         function openPinnedMessage() {
-            if (!currentPinnedMessage) return;
+            if (!pinnedMessages || pinnedMessages.length === 0) return;
+            
+            const msg = pinnedMessages[currentPinnedIndex];
+            if (!msg) return;
+            
             // Прокрутка к закрепленному сообщению
-            const pinnedMsgEl = document.querySelector('[data-message-id="' + currentPinnedMessage.id + '"]');
+            const pinnedMsgEl = document.querySelector('[data-message-id="' + msg.id + '"]');
             if (pinnedMsgEl) {
                 pinnedMsgEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 pinnedMsgEl.classList.add('highlight');
@@ -5784,6 +5813,12 @@
                 }, 2000);
             } else {
                 showToast('info', 'Сообщение находится выше по истории', '📌');
+            }
+            
+            // Если закрепленных сообщений несколько, переключаем на следующее для следующего клика
+            if (pinnedMessages.length > 1) {
+                currentPinnedIndex = (currentPinnedIndex + 1) % pinnedMessages.length;
+                showPinnedMessage(pinnedMessages[currentPinnedIndex]);
             }
         }
 
@@ -5796,14 +5831,20 @@
                 
                 const data = await res.json();
                 
-                if (data.message) {
-                    showPinnedMessage(data.message);
+                // Инициализируем массив закрепленных сообщений
+                pinnedMessages = data.messages || [];
+                currentPinnedIndex = 0;
+                
+                if (pinnedMessages.length > 0) {
+                    showPinnedMessage(pinnedMessages[0]);
                     
-                    // Добавляем класс pinned соответствующему сообщению
-                    const msgEl = document.querySelector('[data-message-id="' + data.message.id + '"]');
-                    if (msgEl) {
-                        msgEl.classList.add('pinned');
-                    }
+                    // Добавляем класс pinned всем закрепленным сообщениям в текущем виде
+                    pinnedMessages.forEach(m => {
+                        const msgEl = document.querySelector('[data-message-id="' + m.id + '"]');
+                        if (msgEl) {
+                            msgEl.classList.add('pinned');
+                        }
+                    });
                 } else {
                     hidePinnedMessage();
                 }
