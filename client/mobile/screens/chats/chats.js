@@ -2356,6 +2356,11 @@
             if (m.pending) div.classList.add('pending');
             if (isBotMessage) div.classList.add('bot-message');
             if (m.isPinned) div.classList.add('pinned');
+            if (!m.type || m.type === 'text') {
+                div.classList.add('text-msg');
+            } else {
+                div.classList.add('media-msg');
+            }
             div.dataset.messageId = m.id;
 
             div.addEventListener('contextmenu', function(e) {

@@ -762,6 +762,32 @@ body {
     line-height: 1.4;
 }
 
+/* Premium styling for text messages to keep them as pills, not cramped ovals */
+.message.text-msg {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 4px 8px;
+}
+
+.message.text-msg .message-text {
+    flex: 0 1 auto;
+    word-break: break-word;
+}
+
+.message.text-msg .msg-time {
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.message.text-msg .msg-reply-preview,
+.message.text-msg .message-reactions,
+.message.text-msg > div:not(.msg-time) {
+    width: 100%;
+    flex-basis: 100%;
+}
+
 .message.incoming {
     background: var(--bg-tertiary);
     border-bottom-left-radius: 4px;
