@@ -171,7 +171,12 @@
         // INIT
         // ============================================
         const token = localStorage.getItem('craneapp_auth_token');
-        let user = JSON.parse(localStorage.getItem('craneapp_user_data') || '{}');
+        let user = {};
+        try {
+            user = JSON.parse(localStorage.getItem('craneapp_user_data') || '{}') || {};
+        } catch (e) {
+            console.error('Error parsing craneapp_user_data:', e);
+        }
         function formatI18n(value, vars) {
             if (!vars || !value || typeof value !== 'string') return value;
             return value.replace(/\{(\w+)\}/g, function(match, key) {
@@ -5296,54 +5301,6 @@
                 console.error('Load messages error:', err);
             }
         }
-            
-            if (!barEl) {
-                createPinnedMessageBar();
-            }
-            
-            const pinnedBar = document.getElementById('pinnedMessageBar');
-            const pinnedText = document.getElementById('pinnedMessageBarText');
-            
-            if (pinnedBar) pinnedBar.style.display = ''; // Убираем inline none
-            
-            // Форматируем текст
-            let contentText = msg.content || '';
-            if (msg.type === 'image' || msg.type === 'photo') contentText = '📷 Фото';
-            if (msg.type === 'video') contentText = '🎥 Видео';
-            if (msg.type === 'audio' || msg.type === 'voice') contentText = '🎤 Голосовое сообщение';
-            if (msg.type === 'document' || msg.type === 'file') contentText = '📄 Файл';
-            
-            // Если есть несколько сообщений, добавляем счетчик
-            let prefix = '<span>📌</span> ';
-            if (pinnedMessages && pinnedMessages.length > 1) {
-                const total = pinnedMessages.length;
-                const current = currentPinnedIndex + 1;
-                prefix = `<span>📌</span> <span class="pinned-counter">(${current}/${total})</span> `;
-            }
-            
-            pinnedText.innerHTML = prefix + contentText;
-            
-            if (pinnedBar) pinnedBar.classList.add('active');
-            
-            // Настраиваем кнопку закрытия
-            if (pinnedBar) {
-                const closeBtn = pinnedBar.querySelector('.pinned-message-bar-close');
-                if (closeBtn) {
-                    closeBtn.onclick = hidePinnedMessageBar;
-                }
-            }
-
-            // Также обновляем старый контейнер, если он используется
-            createPinnedMessageContainer();
-            const container = document.getElementById('pinnedMessageContainer');
-            if (container) {
-                container.style.display = ''; // Убираем inline none
-                const contentEl = document.getElementById('pinnedMessageContent');
-                if (contentEl) {
-                    contentEl.innerHTML = pinnedText.innerHTML;
-                }
-                container.classList.add('active');
-            }
 
                 // ============================================
         // CONTEXT MENU
@@ -5735,7 +5692,10 @@
             
             pinnedText.innerHTML = prefix + contentText;
             
-            pinnedBar.classList.add('active');
+            if (pinnedBar) {
+                pinnedBar.style.display = '';
+                pinnedBar.classList.add('active');
+            }
             
             // Настраиваем кнопку скрытия/открепления (крестик)
             const closeBtn = pinnedBar.querySelector('.pinned-message-bar-close');
@@ -7230,31 +7190,53 @@
 
             return wrapper;
         }
-         connectWebSocket();
-// Инициализируем браузерные уведомления
-initNotifications();
- loadChats().then(function() {
-     initFolderTabs();
-     // Открываем чат из параметра URL (например из папки)
-     const params = new URLSearchParams(window.location.search);
-     const openChatId = params.get('openChat') || params.get('chat') || params.get('id');
-     if (openChatId) {
-         const chat = allChats.find(function(c) { return c.id === openChatId; });
-         if (chat) {
-             openChat(chat.id, chat.name || chat.title);
+         try {
+             connectWebSocket();
+         } catch (e) {
+             console.error('Error connecting websocket:', e);
          }
-         // Убираем параметр из URL
-         history.replaceState({}, '', window.location.pathname);
-     }
- });
- syncUserData();
- updateSideMenuProfile();
- if (window.applyTheme) window.applyTheme();
- if (window.initEmojis) window.initEmojis();
- loadGifs();
- loadStickerPacks();
- // Применяем переводы
- setTimeout(function() { if (window.i18n) window.i18n.translatePage(); }, 200);
+         // Инициализируем браузерные уведомления
+         try {
+             initNotifications();
+         } catch (e) {
+             console.error('Error initializing notifications:', e);
+         }
+         try {
+             loadChats().then(function() {
+                 initFolderTabs();
+                 // Открываем чат из параметра URL (например из папки)
+                 const params = new URLSearchParams(window.location.search);
+                 const openChatId = params.get('openChat') || params.get('chat') || params.get('id');
+                 if (openChatId) {
+                     const chat = allChats.find(function(c) { return c.id === openChatId; });
+                     if (chat) {
+                         openChat(chat.id, chat.name || chat.title);
+                     }
+                     // Убираем параметр из URL
+                     history.replaceState({}, '', window.location.pathname);
+                 }
+             }).catch(function(e) {
+                 console.error('Error in loadChats promise chain:', e);
+             });
+         } catch (e) {
+             console.error('Error loading chats:', e);
+         }
+         syncUserData();
+         updateSideMenuProfile();
+         try {
+             if (window.applyTheme) window.applyTheme();
+         } catch (e) { console.error(e); }
+         try {
+             if (window.initEmojis) window.initEmojis();
+         } catch (e) { console.error(e); }
+         try {
+             loadGifs();
+         } catch (e) { console.error(e); }
+         try {
+             loadStickerPacks();
+         } catch (e) { console.error(e); }
+         // Применяем переводы
+         setTimeout(function() { if (window.i18n) window.i18n.translatePage(); }, 200);
  window.addEventListener('craneapp:languagechange', function() {
      if (window.i18n) {
          ['activeCallBar', 'inputLeftBtns', 'attachmentPanel', 'emojiPicker'].forEach(function(id) {
