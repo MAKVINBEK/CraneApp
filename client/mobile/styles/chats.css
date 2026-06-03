@@ -764,28 +764,44 @@ body {
 
 /* Premium styling for text messages to keep them as pills, not cramped ovals */
 .message.text-msg {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    gap: 4px 8px;
+    display: flow-root;
 }
 
 .message.text-msg .message-text {
-    flex: 0 1 auto;
+    display: inline;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
     word-break: break-word;
 }
 
 .message.text-msg .msg-time {
-    margin-left: auto;
-    flex-shrink: 0;
+    display: inline-block;
+    float: right;
+    margin-left: 8px;
+    margin-top: 4px;
+    position: relative;
+    bottom: -2px;
 }
 
-.message.text-msg .msg-reply-preview,
-.message.text-msg .message-reactions,
-.message.text-msg > div:not(.msg-time) {
+.message.text-msg .msg-reply-preview {
+    display: block;
     width: 100%;
-    flex-basis: 100%;
+    margin-bottom: 8px;
+}
+
+.message.text-msg .message-reactions {
+    clear: both;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+.message.text-msg > div:not(.msg-time):not(.message-reactions):not(.msg-reply-preview) {
+    display: block;
+    width: 100%;
+    clear: both;
 }
 
 .message.incoming {
