@@ -5644,9 +5644,13 @@
         }
 
         async function showPinnedMessage(msg) {
-            if (msg.isEncrypted && msg.encryptionIv && window.E2E) {
+            if (msg.isEncrypted && msg.encryptionIv && window.E2E && !msg._isDecrypted) {
                 try {
-                    msg.content = await window.E2E.decrypt(msg.content, msg.encryptionIv, activeChat.id, token);
+                    const decrypted = await window.E2E.decrypt(msg.content, msg.encryptionIv, activeChat.id, token);
+                    if (decrypted && decrypted !== '🔒 [зашифровано]') {
+                        msg.content = decrypted;
+                        msg._isDecrypted = true;
+                    }
                 } catch (_) {}
             }
             currentPinnedMessage = msg;
