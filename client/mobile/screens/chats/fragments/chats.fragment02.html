@@ -42,12 +42,112 @@
 
     <!-- Group Members Modal -->
     <div class="modal-overlay" id="groupMembersModal">
-        <div class="modal" style="max-height:80vh;overflow-y:auto;">
-            <div class="modal-header">
+        <div class="modal" style="max-height:80vh;overflow-y:auto;max-width:460px;">
+            <div class="modal-header" style="display:flex;justify-content:space-between;align-items:center;">
                 <span class="modal-title" id="groupMembersTitle">Участники</span>
-                <button class="modal-close" onclick="closeGroupMembers()">×</button>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <button id="groupBansBtn" onclick="openBannedUsersModal()" style="display:none;background:rgba(255,75,98,0.12);border:1px solid rgba(255,75,98,0.3);color:#FF4B62;padding:6px 12px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;transition:background 0.2s;">Забаненные 🚫</button>
+                    <button id="groupInviteBtn" onclick="openGroupInviteModal()" style="display:none;background:rgba(0,230,118,0.12);border:1px solid rgba(0,230,118,0.3);color:#00E676;padding:6px 12px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;transition:background 0.2s;">+ Добавить</button>
+                    <button class="modal-close" onclick="closeGroupMembers()">×</button>
+                </div>
             </div>
             <div id="groupMembersList" style="padding:8px 0;"></div>
+        </div>
+    </div>
+
+    <!-- Member Actions Modal -->
+    <div class="modal-overlay" id="memberActionsModal">
+        <div class="modal" style="max-width:320px;">
+            <div class="modal-header">
+                <span class="modal-title" id="memberActionsTitle">Действия</span>
+                <button class="modal-close" onclick="closeMemberActions()">×</button>
+            </div>
+            <div id="memberActionsContent" style="padding:8px 0;display:flex;flex-direction:column;gap:4px;"></div>
+        </div>
+    </div>
+
+    <!-- Admin Permissions Modal -->
+    <div class="modal-overlay" id="adminPermissionsModal">
+        <div class="modal" style="max-height:85vh;overflow-y:auto;max-width:400px;width:95%;">
+            <div class="modal-header">
+                <span class="modal-title">Права администратора</span>
+                <button class="modal-close" onclick="closeAdminPermissions()">×</button>
+            </div>
+            <div style="padding:16px;display:flex;flex-direction:column;gap:16px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <span style="font-size:14px;font-weight:500;">Изменение инфо группы</span>
+                    <input type="checkbox" id="permChangeInfo" style="width:20px;height:20px;accent-color:var(--accent-color);cursor:pointer;">
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <span style="font-size:14px;font-weight:500;">Удаление сообщений</span>
+                    <input type="checkbox" id="permDeleteMessages" style="width:20px;height:20px;accent-color:var(--accent-color);cursor:pointer;">
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <span style="font-size:14px;font-weight:500;">Блокировка пользователей</span>
+                    <input type="checkbox" id="permBanUsers" style="width:20px;height:20px;accent-color:var(--accent-color);cursor:pointer;">
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <span style="font-size:14px;font-weight:500;">Добавление участников</span>
+                    <input type="checkbox" id="permInviteUsers" style="width:20px;height:20px;accent-color:var(--accent-color);cursor:pointer;">
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <span style="font-size:14px;font-weight:500;">Закрепление сообщений</span>
+                    <input type="checkbox" id="permPinMessages" style="width:20px;height:20px;accent-color:var(--accent-color);cursor:pointer;">
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <span style="font-size:14px;font-weight:500;">Назначение администраторов</span>
+                    <input type="checkbox" id="permAddAdmins" style="width:20px;height:20px;accent-color:var(--accent-color);cursor:pointer;">
+                </div>
+                <button onclick="saveAdminPermissions()" style="margin-top:10px;padding:12px;border-radius:12px;border:none;background:linear-gradient(135deg,#FF007F,#9D00FF);color:#fff;font-weight:600;cursor:pointer;box-shadow:0 4px 12px rgba(255,0,127,0.25);">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Group Duration Modal -->
+    <div class="modal-overlay" id="groupDurationModal">
+        <div class="modal" style="max-width:360px;width:95%;">
+            <div class="modal-header">
+                <span class="modal-title" id="groupDurationTitle">Ограничение участника</span>
+                <button class="modal-close" onclick="closeGroupDurationModal()">×</button>
+            </div>
+            <div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
+                <div style="font-size:13px;color:var(--text-muted);">Выберите срок действия:</div>
+                <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
+                    <button onclick="applyGroupDuration('1h')" style="padding:12px;border-radius:10px;border:1px solid var(--border-color);background:var(--bg-tertiary);color:var(--text-primary);cursor:pointer;font-weight:600;transition:all 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='var(--bg-tertiary)'">1 час</button>
+                    <button onclick="applyGroupDuration('1d')" style="padding:12px;border-radius:10px;border:1px solid var(--border-color);background:var(--bg-tertiary);color:var(--text-primary);cursor:pointer;font-weight:600;transition:all 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='var(--bg-tertiary)'">1 день</button>
+                    <button onclick="applyGroupDuration('1w')" style="padding:12px;border-radius:10px;border:1px solid var(--border-color);background:var(--bg-tertiary);color:var(--text-primary);cursor:pointer;font-weight:600;transition:all 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='var(--bg-tertiary)'">1 неделя</button>
+                    <button onclick="applyGroupDuration('forever')" style="padding:12px;border-radius:10px;border:1px solid var(--border-color);background:var(--bg-tertiary);color:var(--text-primary);cursor:pointer;font-weight:600;transition:all 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='var(--bg-tertiary)'">Навсегда</button>
+                </div>
+                <div style="margin-top:6px;">
+                    <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">Причина:</div>
+                    <input type="text" id="groupDurationReason" placeholder="Укажите причину..." style="width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid var(--border-color);background:var(--bg-tertiary);color:var(--text-primary);outline:none;font-size:14px;">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Banned Users Modal -->
+    <div class="modal-overlay" id="bannedUsersModal">
+        <div class="modal" style="max-height:80vh;overflow-y:auto;max-width:440px;width:95%;">
+            <div class="modal-header">
+                <span class="modal-title">Забаненные пользователи</span>
+                <button class="modal-close" onclick="closeBannedUsersModal()">×</button>
+            </div>
+            <div id="bannedUsersList" style="padding:8px 0;"></div>
+        </div>
+    </div>
+
+    <!-- Group Invite Modal -->
+    <div class="modal-overlay" id="groupInviteModal">
+        <div class="modal" style="max-height:80vh;overflow-y:auto;max-width:440px;width:95%;">
+            <div class="modal-header">
+                <span class="modal-title">Добавить участника</span>
+                <button class="modal-close" onclick="closeGroupInviteModal()">×</button>
+            </div>
+            <div style="padding:16px;">
+                <input type="text" id="groupInviteSearch" placeholder="Поиск по имени или @username..." style="width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid var(--border-color);background:var(--bg-tertiary);color:var(--text-primary);font-size:14px;outline:none;margin-bottom:12px;" oninput="searchGroupInviteMembers(this.value)">
+                <div id="groupInviteList" style="max-height:300px;overflow-y:auto;border-radius:12px;border:1px solid var(--border-color);"></div>
+            </div>
         </div>
     </div>
 

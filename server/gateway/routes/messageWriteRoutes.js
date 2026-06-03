@@ -8,9 +8,16 @@ function createMessageWriteRoutes({ authMiddleware, broadcastToChat, handleBotCo
     router.post('/:chatId', async (req, res) => {
         try {
             if (req.user.is_muted) return sendMutedError(req, res);
-            if (!(await isChatMember(query, req.params.chatId, req.user.id))) {
+
+            const memberRes = await query('SELECT role, muted_until FROM chat_members WHERE chat_id = $1 AND user_id = $2', [req.params.chatId, req.user.id]);
+            if (memberRes.rows.length === 0) {
                 return res.status(403).json({ error: req.t('accessDenied') });
             }
+            const member = memberRes.rows[0];
+            if (member.role === 'member' && member.muted_until && new Date(member.muted_until) > new Date()) {
+                return res.status(403).json({ error: req.t('mutedCannotSend') || 'You are muted in this group' });
+            }
+
             await validateReply(query, req);
 
             const message = await insertMessage({ query, req, uuidv4 });
@@ -53,7 +60,17 @@ function createMessageWriteRoutes({ authMiddleware, broadcastToChat, handleBotCo
             const message = await getMessageOwner(query, req.params.messageId);
             if (!message) return res.status(404).json({ error: 'Message not found' });
             const forEveryone = req.query.forEveryone === 'true';
-            if (forEveryone && message.sender_id !== req.user.id) return res.status(403).json({ error: 'Only sender can delete for everyone' });
+            if (forEveryone && message.sender_id !== req.user.id) {
+                const memberRes = await query('SELECT role, permissions FROM chat_members WHERE chat_id = $1 AND user_id = $2', [message.chat_id, req.user.id]);
+                if (memberRes.rows.length === 0) return res.status(403).json({ error: 'Access denied' });
+                const mem = memberRes.rows[0];
+                const perms = typeof mem.permissions === 'string' ? JSON.parse(mem.permissions) : (mem.permissions || {});
+                
+                const isAuthorized = mem.role === 'owner' || (mem.role === 'admin' && perms.can_delete_messages === true);
+                if (!isAuthorized) {
+                    return res.status(403).json({ error: 'Only sender or admins with can_delete_messages can delete messages for everyone' });
+                }
+            }
 
             await query('UPDATE messages SET is_deleted = TRUE WHERE id = $1', [req.params.messageId]);
             broadcastToChat(message.chat_id, { type: 'message_deleted', messageId: req.params.messageId, chatId: message.chat_id, forEveryone });
@@ -81,6 +98,20 @@ function createMessageWriteRoutes({ authMiddleware, broadcastToChat, handleBotCo
         try {
             const message = await getMessageIdAndChat(query, req.params.messageId);
             if (!message) return res.status(404).json({ error: 'Message not found' });
+
+            const memberRes = await query('SELECT role, permissions FROM chat_members WHERE chat_id = $1 AND user_id = $2', [message.chat_id, req.user.id]);
+            if (!memberRes.rows.length) return res.status(403).json({ error: req.t('accessDenied') });
+            const mem = memberRes.rows[0];
+
+            const chat = await query('SELECT type FROM chats WHERE id = $1', [message.chat_id]);
+            const isGroup = chat.rows[0]?.type === 'group' || chat.rows[0]?.type === 'channel';
+            if (isGroup) {
+                const perms = typeof mem.permissions === 'string' ? JSON.parse(mem.permissions) : (mem.permissions || {});
+                if (mem.role === 'member') return res.status(403).json({ error: 'Only admins can unpin messages' });
+                if (mem.role === 'admin' && perms.can_pin_messages !== true) {
+                    return res.status(403).json({ error: 'Missing permission: can_pin_messages' });
+                }
+            }
 
             await query('UPDATE messages SET is_pinned = FALSE, pinned_at = NULL WHERE id = $1', [req.params.messageId]);
             broadcastToChat(message.chat_id, { type: 'message_unpinned', messageId: req.params.messageId, chatId: message.chat_id });
@@ -208,12 +239,19 @@ async function pinMessage({ query, req }) {
     const message = await getMessageIdAndChat(query, req.params.messageId);
     if (!message) throw statusError('Message not found', 404);
 
-    const member = await query('SELECT role FROM chat_members WHERE chat_id = $1 AND user_id = $2', [message.chat_id, req.user.id]);
+    const member = await query('SELECT role, permissions FROM chat_members WHERE chat_id = $1 AND user_id = $2', [message.chat_id, req.user.id]);
     if (!member.rows.length) throw statusError(req.t('accessDenied'), 403);
 
     const chat = await query('SELECT type FROM chats WHERE id = $1', [message.chat_id]);
     const isGroup = chat.rows[0]?.type === 'group' || chat.rows[0]?.type === 'channel';
-    if (isGroup && member.rows[0].role === 'member') throw statusError(req.t('adminsPinOnly'), 403);
+    if (isGroup) {
+        const mem = member.rows[0];
+        const perms = typeof mem.permissions === 'string' ? JSON.parse(mem.permissions) : (mem.permissions || {});
+        if (mem.role === 'member') throw statusError(req.t('adminsPinOnly') || 'Only admins can pin messages', 403);
+        if (mem.role === 'admin' && perms.can_pin_messages !== true) {
+            throw statusError('Missing permission: can_pin_messages', 403);
+        }
+    }
 
     await query('UPDATE messages SET is_pinned = FALSE, pinned_at = NULL WHERE chat_id = $1 AND is_pinned = TRUE', [message.chat_id]);
     await query('UPDATE messages SET is_pinned = TRUE, pinned_at = NOW() WHERE id = $1', [req.params.messageId]);

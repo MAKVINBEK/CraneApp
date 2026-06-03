@@ -34,7 +34,7 @@ function createChatReadRoutes({ authMiddleware, logger, query }) {
 
             const result = await query(
                 `SELECT u.id, u.username, u.first_name, u.last_name, u.avatar_url, u.last_seen, u.badge, u.badges,
-                        u.is_bot, u.is_premium, u.is_blocked, cm.role,
+                        u.is_bot, u.is_premium, u.is_blocked, cm.role, cm.permissions, cm.muted_until,
                         CASE WHEN u.last_seen > NOW() - INTERVAL '5 minutes' THEN TRUE ELSE FALSE END as is_online
                  FROM chat_members cm JOIN users u ON cm.user_id = u.id
                  WHERE cm.chat_id = $1`,
@@ -50,7 +50,7 @@ function createChatReadRoutes({ authMiddleware, logger, query }) {
     router.get('/:chatId/members-online', async (req, res) => {
         try {
             const result = await query(
-                `SELECT u.id, u.username, u.first_name, u.last_name, u.avatar_url, u.is_bot, cm.role,
+                `SELECT u.id, u.username, u.first_name, u.last_name, u.avatar_url, u.is_bot, cm.role, cm.permissions, cm.muted_until,
                         CASE WHEN u.is_bot = TRUE THEN FALSE
                              WHEN u.last_seen > NOW() - INTERVAL '5 minutes' THEN TRUE
                              ELSE FALSE END as is_online
@@ -179,6 +179,8 @@ function mapMemberRow(member) {
         last_name: member.last_name,
         avatar_url: member.avatar_url,
         role: member.role,
+        permissions: typeof member.permissions === 'string' ? JSON.parse(member.permissions) : (member.permissions || {}),
+        muted_until: member.muted_until,
         last_seen: member.last_seen,
         is_online: member.is_online,
         badge: member.badge || null,
@@ -197,6 +199,8 @@ function mapOnlineMemberRow(member) {
         lastName: member.last_name,
         avatarUrl: member.avatar_url,
         role: member.role,
+        permissions: typeof member.permissions === 'string' ? JSON.parse(member.permissions) : (member.permissions || {}),
+        mutedUntil: member.muted_until,
         isBot: member.is_bot || false,
         isOnline: member.is_online,
     };

@@ -1,0 +1,357 @@
+        function showMemberActionsMenu(idx) {
+            const member = activeGroupMembers[idx];
+            if (!member) return;
+            selectedGroupMember = member;
+
+            const myMember = activeGroupMembers.find(m => m.id === user.id);
+            const myRole = myMember ? myMember.role : 'member';
+            const isOwner = myRole === 'owner';
+
+            const name = (member.firstName || '') + (member.lastName ? ' ' + member.lastName : '') || member.username;
+            document.getElementById('memberActionsTitle').textContent = name;
+            
+            const content = document.getElementById('memberActionsContent');
+            content.innerHTML = '';
+
+            const isMuted = member.mutedUntil && new Date(member.mutedUntil) > new Date();
+
+            // Mute/Unmute
+            const muteBtn = document.createElement('button');
+            muteBtn.style.cssText = 'padding:12px;background:none;border:none;color:var(--text-primary);text-align:left;cursor:pointer;font-size:14px;';
+            muteBtn.innerHTML = isMuted ? '🔊 Размутить' : '🔇 Замутить...';
+            muteBtn.onclick = () => {
+                closeMemberActions();
+                if (isMuted) unmuteGroupMember();
+                else openGroupDurationModal('mute');
+            };
+            content.appendChild(muteBtn);
+
+            // Kick
+            const kickBtn = document.createElement('button');
+            kickBtn.style.cssText = 'padding:12px;background:none;border:none;color:var(--text-primary);text-align:left;cursor:pointer;font-size:14px;';
+            kickBtn.innerHTML = '🚪 Исключить из группы';
+            kickBtn.onclick = () => {
+                closeMemberActions();
+                kickGroupMember();
+            };
+            content.appendChild(kickBtn);
+
+            // Ban
+            const banBtn = document.createElement('button');
+            banBtn.style.cssText = 'padding:12px;background:none;border:none;color:#FF4B62;text-align:left;cursor:pointer;font-size:14px;';
+            banBtn.innerHTML = '🚫 Забанить...';
+            banBtn.onclick = () => {
+                closeMemberActions();
+                openGroupDurationModal('ban');
+            };
+            content.appendChild(banBtn);
+
+            // Promotion/Permissions (Owner only)
+            if (isOwner) {
+                const divider = document.createElement('div');
+                divider.style.cssText = 'height:1px;background:var(--border-color);margin:6px 0;';
+                content.appendChild(divider);
+
+                const adminBtn = document.createElement('button');
+                adminBtn.style.cssText = 'padding:12px;background:none;border:none;color:var(--accent-color);text-align:left;cursor:pointer;font-size:14px;font-weight:600;';
+                adminBtn.innerHTML = member.role === 'admin' ? '⚙️ Настройки прав' : '⭐ Сделать администратором';
+                adminBtn.onclick = () => {
+                    closeMemberActions();
+                    openAdminPermissions();
+                };
+                content.appendChild(adminBtn);
+
+                if (member.role === 'admin') {
+                    const demoteBtn = document.createElement('button');
+                    demoteBtn.style.cssText = 'padding:12px;background:none;border:none;color:#FF4B62;text-align:left;cursor:pointer;font-size:14px;';
+                    demoteBtn.innerHTML = '🔻 Разжаловать';
+                    demoteBtn.onclick = () => {
+                        closeMemberActions();
+                        demoteAdmin();
+                    };
+                    content.appendChild(demoteBtn);
+                }
+            }
+
+            document.getElementById('memberActionsModal').classList.add('active');
+        }
+
+        function closeMemberActions() {
+            document.getElementById('memberActionsModal').classList.remove('active');
+        }
+
+        async function kickGroupMember() {
+            if (!selectedGroupMember || !activeChat) return;
+            try {
+                const res = await fetch(`/api/v1/chats/${activeChat.id}/members/${selectedGroupMember.id}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (res.ok) {
+                    showToast('success', 'Участник исключен', '🚪');
+                    openGroupMembers();
+                } else {
+                    const err = await res.json();
+                    showToast('error', err.error || 'Ошибка', '❌');
+                }
+            } catch (e) {
+                showToast('error', 'Ошибка сети', '❌');
+            }
+        }
+
+        async function unmuteGroupMember() {
+            if (!selectedGroupMember || !activeChat) return;
+            try {
+                const res = await fetch(`/api/v1/chats/${activeChat.id}/members/${selectedGroupMember.id}/unmute`, {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (res.ok) {
+                    showToast('success', 'Участник размучен', '🔊');
+                    openGroupMembers();
+                } else {
+                    const err = await res.json();
+                    showToast('error', err.error || 'Ошибка', '❌');
+                }
+            } catch (e) {
+                showToast('error', 'Ошибка сети', '❌');
+            }
+        }
+
+        function openGroupDurationModal(action) {
+            groupDurationAction = action;
+            document.getElementById('groupDurationTitle').textContent = action === 'mute' ? '🔇 Время мута' : '🚫 Время бана';
+            document.getElementById('groupDurationReason').value = '';
+            document.getElementById('groupDurationModal').classList.add('active');
+        }
+
+        function closeGroupDurationModal() {
+            document.getElementById('groupDurationModal').classList.remove('active');
+            groupDurationAction = null;
+        }
+
+        async function applyGroupDuration(duration) {
+            if (!selectedGroupMember || !activeChat || !groupDurationAction) return;
+            const reason = document.getElementById('groupDurationReason').value.trim();
+            closeGroupDurationModal();
+
+            try {
+                const res = await fetch(`/api/v1/chats/${activeChat.id}/members/${selectedGroupMember.id}/${groupDurationAction}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    body: JSON.stringify({ duration, reason })
+                });
+                if (res.ok) {
+                    showToast('success', groupDurationAction === 'mute' ? 'Участник замучен' : 'Участник забанен', '✓');
+                    openGroupMembers();
+                } else {
+                    const err = await res.json();
+                    showToast('error', err.error || 'Ошибка', '❌');
+                }
+            } catch (e) {
+                showToast('error', 'Ошибка сети', '❌');
+            }
+        }
+
+        function openAdminPermissions() {
+            const member = selectedGroupMember;
+            if (!member) return;
+            
+            const perms = member.permissions || {};
+            document.getElementById('permChangeInfo').checked = perms.can_change_info === true;
+            document.getElementById('permDeleteMessages').checked = perms.can_delete_messages === true;
+            document.getElementById('permBanUsers').checked = perms.can_ban_users === true;
+            document.getElementById('permInviteUsers').checked = perms.can_invite_users === true;
+            document.getElementById('permPinMessages').checked = perms.can_pin_messages === true;
+            document.getElementById('permAddAdmins').checked = perms.can_add_admins === true;
+
+            document.getElementById('adminPermissionsModal').classList.add('active');
+        }
+
+        function closeAdminPermissions() {
+            document.getElementById('adminPermissionsModal').classList.remove('active');
+        }
+
+        async function saveAdminPermissions() {
+            if (!selectedGroupMember || !activeChat) return;
+            closeAdminPermissions();
+
+            const permissions = {
+                can_change_info: document.getElementById('permChangeInfo').checked,
+                can_delete_messages: document.getElementById('permDeleteMessages').checked,
+                can_ban_users: document.getElementById('permBanUsers').checked,
+                can_invite_users: document.getElementById('permInviteUsers').checked,
+                can_pin_messages: document.getElementById('permPinMessages').checked,
+                can_add_admins: document.getElementById('permAddAdmins').checked,
+            };
+
+            try {
+                const res = await fetch(`/api/v1/chats/${activeChat.id}/members/${selectedGroupMember.id}/role`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    body: JSON.stringify({ role: 'admin', permissions })
+                });
+                if (res.ok) {
+                    showToast('success', 'Права обновлены', '⭐');
+                    openGroupMembers();
+                } else {
+                    const err = await res.json();
+                    showToast('error', err.error || 'Ошибка', '❌');
+                }
+            } catch (e) {
+                showToast('error', 'Ошибка сети', '❌');
+            }
+        }
+
+        async function demoteAdmin() {
+            if (!selectedGroupMember || !activeChat) return;
+            try {
+                const res = await fetch(`/api/v1/chats/${activeChat.id}/members/${selectedGroupMember.id}/role`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    body: JSON.stringify({ role: 'member', permissions: {} })
+                });
+                if (res.ok) {
+                    showToast('success', 'Администратор разжалован', '🔻');
+                    openGroupMembers();
+                } else {
+                    const err = await res.json();
+                    showToast('error', err.error || 'Ошибка', '❌');
+                }
+            } catch (e) {
+                showToast('error', 'Ошибка сети', '❌');
+            }
+        }
+
+        async function openBannedUsersModal() {
+            if (!activeChat) return;
+            document.getElementById('bannedUsersModal').classList.add('active');
+            const list = document.getElementById('bannedUsersList');
+            list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);">Загрузка...</div>';
+
+            try {
+                const res = await fetch(`/api/v1/chats/${activeChat.id}/bans`, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) throw new Error();
+                const data = await res.json();
+                
+                list.innerHTML = (data.bans || []).map(b => {
+                    const name = (b.first_name || '') + (b.last_name ? ' ' + b.last_name : '') || b.username;
+                    const av = b.avatar_url
+                        ? `<img src="${b.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
+                        : name[0].toUpperCase();
+
+                    const reasonStr = b.reason ? `<div style="font-size:12px;color:#FF4B62;margin-top:2px;">Причина: ${b.reason}</div>` : '';
+
+                    return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border-color);">
+                        <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#FF007F,#9D00FF);display:flex;align-items:center;justify-content:center;font-size:16px;color:#fff;flex-shrink:0;overflow:hidden;">${av}</div>
+                        <div style="flex:1;">
+                            <div style="font-size:15px;font-weight:500;">${name}</div>
+                            <div style="font-size:12px;color:var(--text-muted);">@${b.username}</div>
+                            ${reasonStr}
+                        </div>
+                        <button onclick="unbanGroupMember('${b.user_id}')" style="background:#00C864;border:none;color:#fff;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">Разбанить</button>
+                    </div>`;
+                }).join('') || '<div style="padding:20px;text-align:center;color:var(--text-muted);">Нет забаненных участников</div>';
+            } catch (e) {
+                list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);">Ошибка загрузки</div>';
+            }
+        }
+
+        function closeBannedUsersModal() {
+            document.getElementById('bannedUsersModal').classList.remove('active');
+        }
+
+        async function unbanGroupMember(userId) {
+            if (!activeChat) return;
+            try {
+                const res = await fetch(`/api/v1/chats/${activeChat.id}/members/${userId}/unban`, {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (res.ok) {
+                    showToast('success', 'Пользователь разбанен', '✅');
+                    openBannedUsersModal();
+                } else {
+                    const err = await res.json();
+                    showToast('error', err.error || 'Ошибка', '❌');
+                }
+            } catch (e) {
+                showToast('error', 'Ошибка сети', '❌');
+            }
+        }
+
+        function openGroupInviteModal() {
+            document.getElementById('groupInviteSearch').value = '';
+            document.getElementById('groupInviteList').innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px;">Начните вводить имя или @username</div>';
+            document.getElementById('groupInviteModal').classList.add('active');
+        }
+
+        function closeGroupInviteModal() {
+            document.getElementById('groupInviteModal').classList.remove('active');
+        }
+
+        let inviteSearchTimeout = null;
+        function searchGroupInviteMembers(query) {
+            clearTimeout(inviteSearchTimeout);
+            const list = document.getElementById('groupInviteList');
+            if (!query || query.length < 2) {
+                list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px;">Начните вводить имя или @username</div>';
+                return;
+            }
+            list.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:13px;">Поиск...</div>';
+            inviteSearchTimeout = setTimeout(async () => {
+                try {
+                    const res = await fetch('/api/v1/users/search?q=' + encodeURIComponent(query.replace('@','')), {
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+                    if (!res.ok) { list.innerHTML = ''; return; }
+                    const data = await res.json();
+                    
+                    const nonMembers = (data.users || []).filter(u => !activeGroupMembers.some(m => m.id === u.id));
+                    if (!nonMembers.length) {
+                        list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px;">Пользователи не найдены или уже состоят в группе</div>';
+                        return;
+                    }
+                    list.innerHTML = nonMembers.map(u => {
+                        const name = ((u.firstName||'') + (u.lastName ? ' '+u.lastName : '')).trim() || u.username;
+                        const av = u.avatarUrl ? `<img src="${u.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : name[0].toUpperCase();
+                        return `<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--border-color);">
+                            <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#FF007F,#9D00FF);display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;flex-shrink:0;overflow:hidden;">${av}</div>
+                            <div style="flex:1;"><div style="font-size:14px;font-weight:500;">${name}</div><div style="font-size:12px;color:var(--text-muted);">@${u.username}</div></div>
+                            <button onclick="inviteUserToGroup('${u.id}')" style="background:var(--accent-color);border:none;color:#fff;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">Добавить</button>
+                        </div>`;
+                    }).join('');
+                } catch (e) {
+                    list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px;">Ошибка поиска</div>';
+                }
+            }, 400);
+        }
+
+        async function inviteUserToGroup(userId) {
+            if (!activeChat) return;
+            try {
+                const res = await fetch(`/api/v1/chats/${activeChat.id}/members`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    body: JSON.stringify({ userId })
+                });
+                if (res.ok) {
+                    showToast('success', 'Пользователь добавлен', '✓');
+                    closeGroupInviteModal();
+                    openGroupMembers();
+                } else {
+                    const err = await res.json();
+                    showToast('error', err.error || 'Ошибка', '❌');
+                }
+            } catch (e) {
+                showToast('error', 'Ошибка сети', '❌');
+            }
+        }
+
+        document.getElementById('memberActionsModal').addEventListener('click', e => { if (e.target.id === 'memberActionsModal') closeMemberActions(); });
+        document.getElementById('adminPermissionsModal').addEventListener('click', e => { if (e.target.id === 'adminPermissionsModal') closeAdminPermissions(); });
+        document.getElementById('groupDurationModal').addEventListener('click', e => { if (e.target.id === 'groupDurationModal') closeGroupDurationModal(); });
+        document.getElementById('bannedUsersModal').addEventListener('click', e => { if (e.target.id === 'bannedUsersModal') closeBannedUsersModal(); });
+        document.getElementById('groupInviteModal').addEventListener('click', e => { if (e.target.id === 'groupInviteModal') closeGroupInviteModal(); });

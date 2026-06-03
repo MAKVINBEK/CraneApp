@@ -388,30 +388,67 @@
         });
 
         // ── Group Members ──────────────────────────────────────────────
+        let activeGroupMembers = [];
+        let selectedGroupMember = null;
+        let groupDurationAction = null;
+
         async function openGroupMembers() {            if (!activeChat) return;
             document.getElementById('groupMembersTitle').textContent = activeChat.name + ' — участники';
             document.getElementById('groupMembersModal').classList.add('active');
             const list = document.getElementById('groupMembersList');
             list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);">Загрузка...</div>';
+            
+            document.getElementById('groupBansBtn').style.display = 'none';
+            document.getElementById('groupInviteBtn').style.display = 'none';
+
             try {
                 const res = await fetch('/api/v1/chats/' + activeChat.id + '/members-online', {
                     headers: { 'Authorization': 'Bearer ' + token }
                 });
                 if (!res.ok) throw new Error();
                 const data = await res.json();
-                list.innerHTML = data.members.map(m => {
+                activeGroupMembers = data.members || [];
+                
+                const myMember = activeGroupMembers.find(m => m.id === user.id);
+                const myRole = myMember ? myMember.role : 'member';
+                const myPerms = myMember ? (myMember.permissions || {}) : {};
+                const isOwner = myRole === 'owner';
+                const canBan = isOwner || myPerms.can_ban_users === true;
+                const canInvite = isOwner || myPerms.can_invite_users === true;
+
+                if (canBan) document.getElementById('groupBansBtn').style.display = 'block';
+                if (canInvite) document.getElementById('groupInviteBtn').style.display = 'block';
+
+                list.innerHTML = activeGroupMembers.map((m, idx) => {
                     const name = (m.firstName || '') + (m.lastName ? ' ' + m.lastName : '') || m.username;
                     const av = m.avatarUrl
                         ? `<img src="${m.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
                         : name[0].toUpperCase();
-                    const roleLabel = m.role === 'owner' ? '<span style="font-size:11px;color:var(--accent-color);margin-left:6px;">Создатель</span>' : '';
+                    
+                    let roleLabel = '';
+                    if (m.role === 'owner') roleLabel = '<span style="font-size:11px;color:var(--accent-color);margin-left:6px;">Создатель</span>';
+                    else if (m.role === 'admin') roleLabel = '<span style="font-size:11px;color:#00C864;margin-left:6px;">Админ</span>';
+
+                    let muteLabel = '';
+                    if (m.mutedUntil && new Date(m.mutedUntil) > new Date()) {
+                        muteLabel = ' <span style="font-size:11px;color:#FF8C00;margin-left:4px;">(мут)</span>';
+                    }
+
                     const onlineDot = m.isOnline ? '<span style="width:8px;height:8px;border-radius:50%;background:#00E676;display:inline-block;margin-left:6px;"></span>' : '';
+                    
+                    let actionBtn = '';
+                    const canModerate = m.id !== user.id && m.role !== 'owner' && (isOwner || (canBan && m.role === 'member'));
+                    if (canModerate) {
+                        actionBtn = `<button onclick="event.stopPropagation(); showMemberActionsMenu(${idx})" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;padding:8px;font-size:16px;">⚙️</button>`;
+                    }
+
                     return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border-color);">
                         <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#FF007F,#9D00FF);display:flex;align-items:center;justify-content:center;font-size:16px;color:#fff;flex-shrink:0;overflow:hidden;">${av}</div>
                         <div style="flex:1;">
-                            <div style="font-size:15px;font-weight:500;">${name}${roleLabel}${onlineDot}</div>
+                            <div style="font-size:15px;font-weight:500;">${name}${roleLabel}${muteLabel}${onlineDot}</div>
                             <div style="font-size:12px;color:var(--text-muted);">@${m.username}</div>
                         </div>
+                        ${actionBtn}
                     </div>`;
                 }).join('') || '<div style="padding:20px;text-align:center;color:var(--text-muted);">Нет участников</div>';
             } catch (e) {

@@ -43,6 +43,7 @@ const createUserPasscodeRoutes = require('./routes/userPasscodeRoutes');
 const createUserExportRoutes = require('./routes/userExportRoutes');
 const createReportRoutes = require('./routes/reportRoutes');
 const createModerationRoutes = require('./routes/moderationRoutes');
+const createChatModerationRoutes = require('./routes/chatModerationRoutes');
 const createLoginNotificationService = require('./services/loginNotificationService');
 const createGatewayStartupMigrations = require('./services/gatewayStartupMigrations');
 const createRealtimeGateway = require('./services/realtimeGateway');
@@ -494,6 +495,14 @@ app.use('/api/v1/chats', createChatWriteRoutes({
     handleFileUpload,
     logger,
     pool,
+    query,
+    uuidv4,
+}));
+
+app.use('/api/v1/chats', createChatModerationRoutes({
+    authMiddleware,
+    broadcastToChat,
+    logger,
     query,
     uuidv4,
 }));

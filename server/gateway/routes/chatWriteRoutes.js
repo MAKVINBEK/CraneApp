@@ -79,6 +79,68 @@ function createChatWriteRoutes({ authMiddleware, broadcastToChat, handleFileUplo
         }
     });
 
+    router.patch('/:chatId', async (req, res) => {
+        try {
+            const { chatId } = req.params;
+            const { title, description, avatar } = req.body;
+
+            const chatRes = await query('SELECT type, owner_id FROM chats WHERE id = $1', [chatId]);
+            if (chatRes.rows.length === 0) return res.status(404).json({ error: 'Chat not found' });
+            const chat = chatRes.rows[0];
+
+            if (chat.type !== 'group' && chat.type !== 'channel') {
+                return res.status(400).json({ error: 'Cannot update non-group chat info' });
+            }
+
+            const modRes = await query('SELECT role, permissions FROM chat_members WHERE chat_id = $1 AND user_id = $2', [chatId, req.user.id]);
+            if (modRes.rows.length === 0) return res.status(403).json({ error: req.t('accessDenied') });
+            const member = modRes.rows[0];
+
+            const perms = typeof member.permissions === 'string' ? JSON.parse(member.permissions) : (member.permissions || {});
+            if (member.role !== 'owner' && perms.can_change_info !== true) {
+                return res.status(403).json({ error: 'Missing permission: can_change_info' });
+            }
+
+            const updates = [];
+            const params = [];
+            let paramIdx = 1;
+
+            if (title !== undefined && title.trim()) {
+                updates.push(`title = $${paramIdx++}`);
+                params.push(title.trim());
+                updates.push(`name = $${paramIdx++}`);
+                params.push(title.trim());
+            }
+            if (description !== undefined) {
+                updates.push(`description = $${paramIdx++}`);
+                params.push(description);
+            }
+            if (avatar !== undefined) {
+                const avatarUrl = avatar ? tryUploadAvatar(handleFileUpload, avatar) : null;
+                updates.push(`avatar_url = $${paramIdx++}`);
+                params.push(avatarUrl);
+            }
+
+            if (updates.length > 0) {
+                params.push(chatId);
+                await query(`UPDATE chats SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $${paramIdx}`, params);
+                
+                broadcastToChat(chatId, {
+                    type: 'chat_info_updated',
+                    chatId,
+                    title: title ? title.trim() : undefined,
+                    description,
+                    avatarUrl: avatar !== undefined ? params[paramIdx - 2] : undefined
+                });
+            }
+
+            res.json({ success: true });
+        } catch (error) {
+            logger.error('Update chat info error:', error);
+            res.status(500).json({ error: error.message });
+        }
+    });
+
     router.post('/:chatId/pin', async (req, res) => updateChatFlag(req, res, {
         query,
         logger,
@@ -182,9 +244,9 @@ function tryUploadAvatar(handleFileUpload, avatar) {
 
 function insertGroupMembers(query, chatId, members, ownerId) {
     const values = members.map((userId, index) =>
-        `($1, $${index + 2}, '${userId === ownerId ? 'owner' : 'member'}', NOW())`
+        `($1, $${index + 2}, '${userId === ownerId ? 'owner' : 'member'}', '{}'::jsonb, NOW())`
     ).join(', ');
-    return query(`INSERT INTO chat_members (chat_id, user_id, role, joined_at) VALUES ${values}`, [chatId, ...members]);
+    return query(`INSERT INTO chat_members (chat_id, user_id, role, permissions, joined_at) VALUES ${values}`, [chatId, ...members]);
 }
 
 async function insertGroupSystemMessage({ chatId, query, req, title, uuidv4 }) {
