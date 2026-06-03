@@ -723,6 +723,15 @@ body {
 /* ============================================
    Messages
    ============================================ */
+.messages-area {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
 .messages-container {
     flex: 1;
     overflow-y: auto;
@@ -731,7 +740,6 @@ body {
     background: var(--bg-primary);
     background-image: radial-gradient(var(--border-color) 1px, transparent 1px);
     background-size: 20px 20px;
-    position: relative;
     -webkit-overflow-scrolling: touch;
     min-height: 0;
 }
@@ -833,27 +841,71 @@ body {
     cursor: pointer;
 }
 
-.scroll-bottom-btn {
+.messages-area > .scroll-bottom-btn {
     position: absolute;
-    bottom: 16px;
-    right: 16px;
-    width: 40px;
-    height: 40px;
+    bottom: max(14px, env(safe-area-inset-bottom, 0px));
+    right: max(14px, env(safe-area-inset-right, 0px));
+    width: 42px;
+    height: 42px;
     border-radius: 50%;
-    background: var(--accent-gradient);
-    border: none;
-    color: #FFFFFF;
-    font-size: 18px;
+    background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border-color);
+    color: var(--accent-color);
     cursor: pointer;
-    display: none;
+    display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);
     z-index: 100;
+    opacity: 0;
+    transform: translateY(10px) scale(0.9);
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease, background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
-.scroll-bottom-btn:active { transform: scale(0.95); }
-.scroll-bottom-btn.visible { display: flex; }
+[data-theme="light"] .messages-area > .scroll-bottom-btn {
+    background: color-mix(in srgb, var(--bg-secondary) 94%, transparent);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.messages-area > .scroll-bottom-btn.enabled.visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+
+.messages-area > .scroll-bottom-btn:not(.enabled) {
+    display: none !important;
+}
+
+.messages-area > .scroll-bottom-btn:active { transform: translateY(0) scale(0.92); }
+.messages-area > .scroll-bottom-btn.enabled.visible:active { transform: translateY(0) scale(0.92); }
+
+.scroll-mention-btn {
+    bottom: calc(max(14px, env(safe-area-inset-bottom, 0px)) + 52px);
+}
+
+.scroll-mention-at {
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1;
+    font-family: inherit;
+}
+
+@media (min-width: 768px) {
+    .messages-area > .scroll-bottom-btn {
+        width: 44px;
+        height: 44px;
+        bottom: 18px;
+        right: 18px;
+    }
+
+    .scroll-mention-btn {
+        bottom: calc(18px + 54px);
+    }
+}
 
 /* ============================================
    Reply Bar
@@ -1010,6 +1062,96 @@ body {
     display: inline;
     pointer-events: none;
     user-select: none;
+}
+
+.msg-input-wrap {
+    flex: 1;
+    position: relative;
+    min-width: 0;
+}
+
+.mention-suggestions {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    max-height: 220px;
+    overflow-y: auto;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.35);
+    z-index: 120;
+    padding: 4px 0;
+}
+
+.mention-suggestion-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--text-primary);
+    transition: background 0.15s;
+}
+
+.mention-suggestion-item:hover,
+.mention-suggestion-item.active {
+    background: var(--bg-tertiary);
+}
+
+.mention-suggestion-item .mention-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 600;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+.mention-suggestion-item .mention-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.mention-suggestion-item .mention-meta {
+    flex: 1;
+    min-width: 0;
+}
+
+.mention-suggestion-item .mention-name {
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mention-suggestion-item .mention-username {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.mention-suggestion-item.mention-special .mention-username {
+    color: var(--accent-color);
+}
+
+.message-text .message-mention {
+    color: var(--accent-color);
+    font-weight: 600;
+    cursor: default;
+}
+
+.message-text .message-mention-me {
+    background: rgba(255, 0, 127, 0.18);
+    border-radius: 4px;
+    padding: 0 2px;
 }
 
 .send-btn {

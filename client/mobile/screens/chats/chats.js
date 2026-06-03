@@ -449,6 +449,9 @@
         }
 
         let activeChat = null;
+        let groupMembersForMentions = [];
+        let mentionSuggestionsList = [];
+        let mentionSuggestionIndex = 0;
         let allChats = [];
         let chatUsers = {};
         let searchTimeout = null;
@@ -3106,8 +3109,37 @@
             input.focus();
         }
 
-        // Обработка горячих клавиш Ctrl+B, Ctrl+I
+        // Горячие клавиши, Enter и навигация по подсказкам @
         document.getElementById('msgInput').addEventListener('keydown', function(e) {
+            if (mentionSuggestionsList.length) {
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    mentionSuggestionIndex = (mentionSuggestionIndex + 1) % mentionSuggestionsList.length;
+                    highlightMentionSuggestion(mentionSuggestionIndex);
+                    return;
+                }
+                if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    mentionSuggestionIndex = (mentionSuggestionIndex - 1 + mentionSuggestionsList.length) % mentionSuggestionsList.length;
+                    highlightMentionSuggestion(mentionSuggestionIndex);
+                    return;
+                }
+                if (e.key === 'Enter' || e.key === 'Tab') {
+                    e.preventDefault();
+                    selectActiveMentionSuggestion();
+                    return;
+                }
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    hideMentionSuggestions();
+                    return;
+                }
+            }
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                send();
+                return;
+            }
             if (e.ctrlKey || e.metaKey) {
                 if (e.key === 'b') {
                     e.preventDefault();
@@ -3153,6 +3185,14 @@
             if (picker.classList.contains('active')) {
                 if (!picker.contains(e.target) && !btn.contains(e.target)) {
                     closeEmojiPicker();
+                }
+            }
+
+            const mentionEl = document.getElementById('mentionSuggestions');
+            const msgInputEl = document.getElementById('msgInput');
+            if (mentionEl && mentionEl.style.display !== 'none') {
+                if (!mentionEl.contains(e.target) && !msgInputEl.contains(e.target)) {
+                    hideMentionSuggestions();
                 }
             }
         });
@@ -3515,11 +3555,14 @@
                             return msg;
                         };
                         decryptMsg(data.message).then(msg => {
+                            notifyIfMentioned(msg, data.chatId, data.chatTitle);
                             addMessage(msg);
                             markChatAsRead(data.chatId, { silent: true }).catch(function(err) {
                                 console.error('Mark chat as read error:', err);
                             });
                         });
+                    } else if (data.message && data.message.mentionedUserIds && data.message.mentionedUserIds.includes(user.id)) {
+                        notifyIfMentioned(data.message, data.chatId, data.chatTitle);
                     }
                     // Если чат новый (нас нет в chatUsers) — добавляем его сразу
                     if (data.chatId && !allChats.find(c => c.id === data.chatId)) {
@@ -3846,7 +3889,15 @@
             const messagesEl = document.getElementById('messages');
             const div = createMessageElement(msg);
             messagesEl.appendChild(div);
-            scrollToBottom();
+            const senderId = msg.senderId || msg.sender_id || (msg.sender && msg.sender.id);
+            if (isMessagesNearBottom()) {
+                scrollToBottom(false);
+            } else if (senderId === user.id) {
+                scrollToBottom(true);
+            } else {
+                updateScrollButton();
+            }
+            updateMentionJumpButton();
         }
         
         function updateMessage(messageId, content) {
@@ -3936,30 +3987,286 @@
         // ============================================
         // SCROLL TO BOTTOM
         // ============================================
+        const SCROLL_BOTTOM_THRESHOLD = 48;
+        let scrollBottomLastMsgObserver = null;
+
+        function isMessagesNearBottom(threshold) {
+            const container = document.getElementById('messagesContainer');
+            if (!container) return true;
+            const t = threshold == null ? SCROLL_BOTTOM_THRESHOLD : threshold;
+            return container.scrollHeight - container.scrollTop - container.clientHeight < t;
+        }
+
+        function getLastMessageElement() {
+            const messagesEl = document.getElementById('messages');
+            if (!messagesEl) return null;
+            const items = messagesEl.querySelectorAll('.message[data-message-id]');
+            return items.length ? items[items.length - 1] : null;
+        }
+
+        function disconnectScrollBottomObserver() {
+            if (scrollBottomLastMsgObserver) {
+                scrollBottomLastMsgObserver.disconnect();
+                scrollBottomLastMsgObserver = null;
+            }
+        }
+
+        function syncScrollBottomButtonVisible(isLastVisible) {
+            const btn = document.getElementById('scrollBottomBtn');
+            if (!btn || !btn.classList.contains('enabled')) return;
+            btn.classList.toggle('visible', !isLastVisible);
+        }
+
+        function updateScrollButtonFallback() {
+            const container = document.getElementById('messagesContainer');
+            const btn = document.getElementById('scrollBottomBtn');
+            if (!container || !btn || !btn.classList.contains('enabled')) return;
+            const lastEl = getLastMessageElement();
+            if (!lastEl) {
+                btn.classList.remove('visible');
+                return;
+            }
+            const cRect = container.getBoundingClientRect();
+            const rect = lastEl.getBoundingClientRect();
+            const visibleHeight = Math.min(rect.bottom, cRect.bottom) - Math.max(rect.top, cRect.top);
+            const fullyVisible = visibleHeight >= rect.height * 0.98 && rect.height > 0;
+            syncScrollBottomButtonVisible(fullyVisible);
+        }
+
+        function refreshScrollBottomObserver() {
+            disconnectScrollBottomObserver();
+            const container = document.getElementById('messagesContainer');
+            const btn = document.getElementById('scrollBottomBtn');
+            if (!container || !btn || !btn.classList.contains('enabled')) {
+                if (btn) btn.classList.remove('visible');
+                return;
+            }
+            const lastEl = getLastMessageElement();
+            if (!lastEl) {
+                btn.classList.remove('visible');
+                return;
+            }
+            if (typeof IntersectionObserver === 'undefined') {
+                updateScrollButtonFallback();
+                return;
+            }
+            scrollBottomLastMsgObserver = new IntersectionObserver(function(entries) {
+                const entry = entries[0];
+                if (!entry) return;
+                syncScrollBottomButtonVisible(entry.intersectionRatio >= 0.98);
+            }, {
+                root: container,
+                threshold: [0, 0.25, 0.5, 0.75, 0.98, 1],
+                rootMargin: '0px'
+            });
+            scrollBottomLastMsgObserver.observe(lastEl);
+        }
+
+        function setScrollBottomButtonEnabled(enabled) {
+            const btn = document.getElementById('scrollBottomBtn');
+            if (!btn) return;
+            btn.classList.toggle('enabled', !!enabled);
+            if (!enabled) {
+                btn.classList.remove('visible');
+                disconnectScrollBottomObserver();
+            } else {
+                refreshScrollBottomObserver();
+            }
+        }
+
         function scrollToBottom(smooth) {
             const container = document.getElementById('messagesContainer');
+            if (!container) return;
             if (smooth) {
                 container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
             } else {
                 container.scrollTop = container.scrollHeight;
             }
+            requestAnimationFrame(refreshScrollBottomObserver);
         }
-        
+
+        function onScrollBottomClick() {
+            scrollToBottom(true);
+        }
+
         function updateScrollButton() {
+            refreshScrollBottomObserver();
+        }
+
+        (function initScrollBottomButton() {
             const container = document.getElementById('messagesContainer');
-            const btn = document.getElementById('scrollBottomBtn');
-            if (!container || !btn) return;
-            
-            const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
-            
-            if (isNearBottom) {
-                btn.classList.remove('visible');
-            } else {
-                btn.classList.add('visible');
+            if (!container) return;
+            container.addEventListener('scroll', function() {
+                if (!mentionJumpMsgObserver) updateMentionJumpButton();
+            }, { passive: true });
+            if (typeof ResizeObserver !== 'undefined') {
+                const messagesEl = document.getElementById('messages');
+                if (messagesEl) {
+                    new ResizeObserver(function() {
+                        refreshScrollBottomObserver();
+                        updateMentionJumpButton();
+                    }).observe(messagesEl);
+                }
+            }
+        })();
+
+        // ============================================
+        // JUMP TO UNREAD MENTION (@)
+        // ============================================
+        function getMentionWaterlineKey(chatId) {
+            return 'crane_mention_seen_' + user.id + '_' + chatId;
+        }
+
+        function getMentionWaterline(chatId) {
+            return localStorage.getItem(getMentionWaterlineKey(chatId)) || '';
+        }
+
+        function setMentionWaterline(chatId, createdAt) {
+            if (!chatId || !createdAt) return;
+            localStorage.setItem(getMentionWaterlineKey(chatId), createdAt);
+        }
+
+        function getMessageCreatedTime(m) {
+            const raw = m.createdAt || m.created_at;
+            return raw ? new Date(raw).getTime() : 0;
+        }
+
+        function messageMentionsMe(msg) {
+            if (!msg || !activeChat || activeChat.type !== 'group') return false;
+            const senderId = msg.senderId || msg.sender_id || (msg.sender && msg.sender.id);
+            if (senderId === user.id) return false;
+
+            if (Array.isArray(msg.mentionedUserIds) && msg.mentionedUserIds.includes(user.id)) {
+                return true;
+            }
+
+            const text = msg.content || msg.text || msg.contentPlain || '';
+            if (!text.includes('@')) return false;
+
+            const regex = /@([a-zA-Z0-9_]+)/g;
+            let match;
+            while ((match = regex.exec(text)) !== null) {
+                if (isMentionRelevantToMe(match[1].toLowerCase())) return true;
+            }
+            return false;
+        }
+
+        function getUnreadMentionMessages() {
+            if (!activeChat || activeChat.type !== 'group') return [];
+            const waterline = getMentionWaterline(activeChat.id);
+            const wlTime = waterline ? new Date(waterline).getTime() : 0;
+            const unread = [];
+
+            Object.keys(messagesData).forEach(function(id) {
+                const m = messagesData[id];
+                if (!m || String(m.id).startsWith('temp-')) return;
+                if (!messageMentionsMe(m)) return;
+                if (getMessageCreatedTime(m) <= wlTime) return;
+                unread.push(m);
+            });
+
+            unread.sort(function(a, b) {
+                return getMessageCreatedTime(a) - getMessageCreatedTime(b);
+            });
+            return unread;
+        }
+
+        function getLatestUnreadMentionMessage() {
+            const list = getUnreadMentionMessages();
+            return list.length ? list[list.length - 1] : null;
+        }
+
+        let mentionJumpMsgObserver = null;
+
+        function disconnectMentionJumpObserver() {
+            if (mentionJumpMsgObserver) {
+                mentionJumpMsgObserver.disconnect();
+                mentionJumpMsgObserver = null;
             }
         }
-            
-        document.getElementById('messagesContainer').addEventListener('scroll', updateScrollButton);
+
+        function syncMentionJumpButtonVisible(isTargetFullyVisible) {
+            const btn = document.getElementById('scrollMentionBtn');
+            if (!btn || !btn.classList.contains('enabled')) return;
+            const hasUnread = !!getLatestUnreadMentionMessage();
+            btn.classList.toggle('visible', hasUnread && !isTargetFullyVisible);
+        }
+
+        function refreshMentionJumpObserver() {
+            disconnectMentionJumpObserver();
+            const container = document.getElementById('messagesContainer');
+            const btn = document.getElementById('scrollMentionBtn');
+            if (!container || !btn || !btn.classList.contains('enabled')) {
+                if (btn) btn.classList.remove('visible');
+                return;
+            }
+            const msg = getLatestUnreadMentionMessage();
+            if (!msg) {
+                btn.classList.remove('visible');
+                return;
+            }
+            const el = document.querySelector('[data-message-id="' + msg.id + '"]');
+            if (!el) {
+                btn.classList.add('visible');
+                return;
+            }
+            if (typeof IntersectionObserver === 'undefined') {
+                const cRect = container.getBoundingClientRect();
+                const rect = el.getBoundingClientRect();
+                const visibleHeight = Math.min(rect.bottom, cRect.bottom) - Math.max(rect.top, cRect.top);
+                const fullyVisible = visibleHeight >= rect.height * 0.98 && rect.height > 0;
+                syncMentionJumpButtonVisible(fullyVisible);
+                return;
+            }
+            mentionJumpMsgObserver = new IntersectionObserver(function(entries) {
+                const entry = entries[0];
+                if (!entry) return;
+                syncMentionJumpButtonVisible(entry.intersectionRatio >= 0.98);
+            }, {
+                root: container,
+                threshold: [0, 0.25, 0.5, 0.75, 0.98, 1],
+                rootMargin: '0px'
+            });
+            mentionJumpMsgObserver.observe(el);
+        }
+
+        function setMentionJumpButtonEnabled(enabled) {
+            const btn = document.getElementById('scrollMentionBtn');
+            if (!btn) return;
+            const show = !!(enabled && activeChat && activeChat.type === 'group');
+            btn.classList.toggle('enabled', show);
+            if (!show) {
+                btn.classList.remove('visible');
+                disconnectMentionJumpObserver();
+            } else {
+                refreshMentionJumpObserver();
+            }
+        }
+
+        function updateMentionJumpButton() {
+            refreshMentionJumpObserver();
+        }
+
+        function scrollToMentionMessage(messageId, smooth) {
+            const el = document.querySelector('[data-message-id="' + messageId + '"]');
+            if (!el) return false;
+            el.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'center' });
+            el.classList.add('highlight');
+            setTimeout(function() { el.classList.remove('highlight'); }, 1500);
+            updateScrollButton();
+            requestAnimationFrame(refreshMentionJumpObserver);
+            return true;
+        }
+
+        function onMentionJumpClick() {
+            const msg = getLatestUnreadMentionMessage();
+            if (!msg || !activeChat) return;
+            scrollToMentionMessage(msg.id, true);
+            setMentionWaterline(activeChat.id, msg.createdAt || msg.created_at || new Date().toISOString());
+            updateMentionJumpButton();
+        }
+
+        window.onMentionJumpClick = onMentionJumpClick;
 
         // ============================================
         // AVATAR
@@ -4723,6 +5030,7 @@
         // OPEN/CLOSE CHAT
         // ============================================
         async function openChat(id, name) {
+            hideMentionSuggestions();
             // Сохраняем черновик предыдущего чата
             const advSettings = JSON.parse(localStorage.getItem('craneapp_advanced_settings') || '{}');
             const saveDrafts = advSettings.saveDrafts !== false;
@@ -4741,9 +5049,17 @@
                 role: chatInfo?.role
             };
 
+            if (activeChat.type === 'group') {
+                loadGroupMembersForMentions(id);
+            } else {
+                groupMembersForMentions = [];
+            }
+
             // Показываем кнопку участников только для групп
             const membersBtn = document.getElementById('membersBtn');
             if (membersBtn) membersBtn.style.display = activeChat.type === 'group' ? 'flex' : 'none';
+            setScrollBottomButtonEnabled(true);
+            setMentionJumpButtonEnabled(activeChat.type === 'group');
 
             messagesData = {};
             renderChatList();
@@ -4907,6 +5223,8 @@
 
         function closeChat() {
             activeChat = null;
+            setScrollBottomButtonEnabled(false);
+            setMentionJumpButtonEnabled(false);
             renderChatList();
 
             document.getElementById('sidebar').classList.remove('hidden');
@@ -4960,6 +5278,8 @@
                     messagesEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px;font-size:14px;">' + tr('noMessages', 'Нет сообщений') + '</div>';
                 }
                 scrollToBottom();
+                refreshScrollBottomObserver();
+                updateMentionJumpButton();
                 markChatAsRead(chatId, { silent: true }).catch(function(err) {
                     console.error('Mark chat as read error:', err);
                 });
@@ -5543,8 +5863,36 @@
             
             // Скрытый текст: ||текст||
             escaped = escaped.replace(/\|\|(.+?)\|\|/g, '<span class="spoiler" onclick="this.classList.toggle(\'revealed\')">$1</span>');
+
+            if (escaped.includes('@')) {
+                escaped = renderMentionsInText(escaped);
+            }
             
             return escaped;
+        }
+
+        function isMentionRelevantToMe(tagLower) {
+            if (tagLower === 'everyone') return true;
+            if (tagLower === 'here') {
+                const me = groupMembersForMentions.find(m => m.id === user.id);
+                return !!(me && me.isOnline);
+            }
+            const myUsername = (user.username || '').toLowerCase();
+            return tagLower === myUsername;
+        }
+
+        function renderMentionsInText(escaped) {
+            const isGroup = activeChat && activeChat.type === 'group';
+            return escaped.replace(/@([a-zA-Z0-9_]+)/g, function(full, name) {
+                const lower = name.toLowerCase();
+                if (!isGroup && lower !== 'here' && lower !== 'everyone') {
+                    const myUsername = (user.username || '').toLowerCase();
+                    if (lower !== myUsername) return full;
+                }
+                const isMe = isMentionRelevantToMe(lower);
+                const cls = 'message-mention' + (isMe ? ' message-mention-me' : '');
+                return '<span class="' + cls + '">' + full + '</span>';
+            });
         }
 
         // ============================================
@@ -5738,6 +6086,221 @@
         }
 
         // ============================================
+        // GROUP MENTIONS (@username, @here, @everyone)
+        // ============================================
+        async function loadGroupMembersForMentions(chatId) {
+            groupMembersForMentions = [];
+            if (!chatId) return;
+            try {
+                const res = await fetch('/api/v1/chats/' + chatId + '/members-online', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) return;
+                const data = await res.json();
+                groupMembersForMentions = (data.members || [])
+                    .filter(m => m.id !== user.id && !m.isBot)
+                    .map(m => ({
+                        id: m.id,
+                        username: m.username || '',
+                        firstName: m.firstName || m.first_name || '',
+                        lastName: m.lastName || m.last_name || '',
+                        avatarUrl: m.avatarUrl || m.avatar_url || '',
+                        isOnline: !!(m.isOnline || m.is_online)
+                    }));
+            } catch (_) {
+                groupMembersForMentions = [];
+            }
+        }
+
+        function hideMentionSuggestions() {
+            const el = document.getElementById('mentionSuggestions');
+            if (!el) return;
+            el.style.display = 'none';
+            el.innerHTML = '';
+            el.setAttribute('aria-hidden', 'true');
+            mentionSuggestionsList = [];
+            mentionSuggestionIndex = 0;
+        }
+
+        function getMentionContext() {
+            const input = document.getElementById('msgInput');
+            const sel = window.getSelection();
+            if (!input || !sel || !sel.rangeCount) return null;
+            const range = sel.getRangeAt(0);
+            if (!input.contains(range.endContainer)) return null;
+
+            const preRange = range.cloneRange();
+            preRange.selectNodeContents(input);
+            preRange.setEnd(range.endContainer, range.endOffset);
+            const textBefore = preRange.toString();
+            const match = textBefore.match(/@([a-zA-Z0-9_]*)$/);
+            if (!match) return null;
+            return { query: match[1], fullLen: match[0].length };
+        }
+
+        function getCaretCharacterOffset() {
+            const input = document.getElementById('msgInput');
+            const sel = window.getSelection();
+            if (!input || !sel || !sel.rangeCount) return 0;
+            const range = sel.getRangeAt(0);
+            const pre = range.cloneRange();
+            pre.selectNodeContents(input);
+            pre.setEnd(range.endContainer, range.endOffset);
+            return pre.toString().length;
+        }
+
+        function setRangeAtCharacterOffset(range, chars, collapseToStart) {
+            const input = document.getElementById('msgInput');
+            let remaining = chars;
+            const walker = document.createTreeWalker(input, NodeFilter.SHOW_TEXT, null);
+            let node;
+            while ((node = walker.nextNode())) {
+                const len = node.textContent.length;
+                if (remaining <= len) {
+                    if (collapseToStart) {
+                        range.setStart(node, remaining);
+                        range.collapse(true);
+                    } else {
+                        range.setEnd(node, remaining);
+                    }
+                    return true;
+                }
+                remaining -= len;
+            }
+            return false;
+        }
+
+        function replaceMentionWithToken(token) {
+            const ctx = getMentionContext();
+            if (!ctx) return;
+            const sel = window.getSelection();
+            if (!sel.rangeCount) return;
+
+            const endRange = sel.getRangeAt(0);
+            const startPos = getCaretCharacterOffset() - ctx.fullLen;
+            const startRange = document.createRange();
+            if (!setRangeAtCharacterOffset(startRange, startPos, true)) return;
+            startRange.setEnd(endRange.endContainer, endRange.endOffset);
+
+            sel.removeAllRanges();
+            sel.addRange(startRange);
+            document.execCommand('insertText', false, '@' + token + ' ');
+            hideMentionSuggestions();
+            document.getElementById('msgInput').focus();
+        }
+
+        function buildMentionSuggestions(query) {
+            const q = (query || '').toLowerCase();
+            const items = [];
+            const hereLabel = tr('mentionHere', 'все онлайн');
+            const everyoneLabel = tr('mentionEveryone', 'все участники');
+
+            if (!q || 'here'.startsWith(q)) {
+                items.push({ type: 'special', token: 'here', name: '@here', subtitle: hereLabel, icon: '🟢' });
+            }
+            if (!q || 'everyone'.startsWith(q)) {
+                items.push({ type: 'special', token: 'everyone', name: '@everyone', subtitle: everyoneLabel, icon: '📢' });
+            }
+
+            groupMembersForMentions.forEach(function(m) {
+                const username = (m.username || '').toLowerCase();
+                const first = (m.firstName || '').toLowerCase();
+                const last = (m.lastName || '').toLowerCase();
+                const display = (m.firstName + ' ' + (m.lastName || '')).trim().toLowerCase();
+                if (!username) return;
+                if (q && !username.startsWith(q) && !first.startsWith(q) && !last.startsWith(q) && !display.includes(q)) return;
+                items.push({
+                    type: 'user',
+                    token: m.username,
+                    name: m.firstName || m.username,
+                    subtitle: '@' + m.username,
+                    avatarUrl: m.avatarUrl,
+                    initial: (m.firstName || m.username || '?')[0].toUpperCase()
+                });
+            });
+
+            return items.slice(0, 12);
+        }
+
+        function renderMentionSuggestions(items) {
+            const el = document.getElementById('mentionSuggestions');
+            if (!el) return;
+            if (!items.length) {
+                hideMentionSuggestions();
+                return;
+            }
+            mentionSuggestionsList = items;
+            mentionSuggestionIndex = 0;
+            function escMention(s) {
+                return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            }
+            el.innerHTML = items.map(function(item, idx) {
+                const active = idx === 0 ? ' active' : '';
+                const special = item.type === 'special' ? ' mention-special' : '';
+                let avatarHtml = '<span>' + (item.icon || item.initial || '?') + '</span>';
+                if (item.avatarUrl) {
+                    avatarHtml = '<img src="' + escMention(item.avatarUrl) + '" alt="">';
+                }
+                return '<div class="mention-suggestion-item' + active + special + '" data-idx="' + idx + '" role="option">'
+                    + '<div class="mention-avatar">' + avatarHtml + '</div>'
+                    + '<div class="mention-meta"><div class="mention-name">' + escMention(item.name) + '</div>'
+                    + '<div class="mention-username">' + escMention(item.subtitle) + '</div></div></div>';
+            }).join('');
+            el.style.display = 'block';
+            el.setAttribute('aria-hidden', 'false');
+            el.querySelectorAll('.mention-suggestion-item').forEach(function(row) {
+                row.addEventListener('mousedown', function(e) {
+                    e.preventDefault();
+                    const idx = parseInt(row.dataset.idx, 10);
+                    const picked = mentionSuggestionsList[idx];
+                    if (picked) replaceMentionWithToken(picked.token);
+                });
+            });
+        }
+
+        function highlightMentionSuggestion(idx) {
+            const el = document.getElementById('mentionSuggestions');
+            if (!el) return;
+            el.querySelectorAll('.mention-suggestion-item').forEach(function(row, i) {
+                row.classList.toggle('active', i === idx);
+            });
+        }
+
+        function handleMentionInput() {
+            if (!activeChat || activeChat.type !== 'group') {
+                hideMentionSuggestions();
+                return;
+            }
+            const ctx = getMentionContext();
+            if (!ctx) {
+                hideMentionSuggestions();
+                return;
+            }
+            const items = buildMentionSuggestions(ctx.query);
+            renderMentionSuggestions(items);
+        }
+
+        function selectActiveMentionSuggestion() {
+            const picked = mentionSuggestionsList[mentionSuggestionIndex];
+            if (picked) replaceMentionWithToken(picked.token);
+            return !!picked;
+        }
+
+        function notifyIfMentioned(msg, chatId, chatTitle) {
+            if (!msg || !Array.isArray(msg.mentionedUserIds)) return;
+            if (!msg.mentionedUserIds.includes(user.id)) return;
+            if (msg.senderId === user.id) return;
+            const cid = chatId || msg.chatId;
+            const fromList = allChats.find(c => c.id === cid);
+            const chatName = (activeChat && activeChat.id === cid ? activeChat.name : null)
+                || chatTitle
+                || (fromList && fromList.name)
+                || tr('groupChat', 'Группа');
+            const sender = msg.senderFirstName || msg.sender?.firstName || msg.senderName || tr('user', 'Пользователь');
+            showToast('info', sender + ' ' + tr('mentionedYouIn', 'упомянул вас в') + ' ' + chatName, '@');
+        }
+
+        // ============================================
         // SEND MESSAGE
         // ============================================
         async function send() {
@@ -5745,6 +6308,7 @@
             const text = getInputText();
             if (!text || !activeChat) return;
             
+            hideMentionSuggestions();
             closeEmojiPicker();
             
             const tempId = 'temp-' + Date.now();
@@ -5848,7 +6412,10 @@
         // ============================================
         // INPUT TYPING
         // ============================================
-        document.getElementById('msgInput').addEventListener('input', sendTyping);
+        document.getElementById('msgInput').addEventListener('input', function() {
+            sendTyping();
+            handleMentionInput();
+        });
 
         // Вставка фото из буфера обмена
         document.getElementById('msgInput').addEventListener('paste', function(e) {
