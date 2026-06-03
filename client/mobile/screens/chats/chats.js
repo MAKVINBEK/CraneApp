@@ -5287,6 +5287,54 @@
                 console.error('Load messages error:', err);
             }
         }
+            
+            if (!barEl) {
+                createPinnedMessageBar();
+            }
+            
+            const pinnedBar = document.getElementById('pinnedMessageBar');
+            const pinnedText = document.getElementById('pinnedMessageBarText');
+            
+            if (pinnedBar) pinnedBar.style.display = ''; // Убираем inline none
+            
+            // Форматируем текст
+            let contentText = msg.content || '';
+            if (msg.type === 'image' || msg.type === 'photo') contentText = '📷 Фото';
+            if (msg.type === 'video') contentText = '🎥 Видео';
+            if (msg.type === 'audio' || msg.type === 'voice') contentText = '🎤 Голосовое сообщение';
+            if (msg.type === 'document' || msg.type === 'file') contentText = '📄 Файл';
+            
+            // Если есть несколько сообщений, добавляем счетчик
+            let prefix = '<span>📌</span> ';
+            if (pinnedMessages && pinnedMessages.length > 1) {
+                const total = pinnedMessages.length;
+                const current = currentPinnedIndex + 1;
+                prefix = `<span>📌</span> <span class="pinned-counter">(${current}/${total})</span> `;
+            }
+            
+            pinnedText.innerHTML = prefix + contentText;
+            
+            if (pinnedBar) pinnedBar.classList.add('active');
+            
+            // Настраиваем кнопку закрытия
+            if (pinnedBar) {
+                const closeBtn = pinnedBar.querySelector('.pinned-message-bar-close');
+                if (closeBtn) {
+                    closeBtn.onclick = hidePinnedMessageBar;
+                }
+            }
+
+            // Также обновляем старый контейнер, если он используется
+            createPinnedMessageContainer();
+            const container = document.getElementById('pinnedMessageContainer');
+            if (container) {
+                container.style.display = ''; // Убираем inline none
+                const contentEl = document.getElementById('pinnedMessageContent');
+                if (contentEl) {
+                    contentEl.innerHTML = pinnedText.innerHTML;
+                }
+                container.classList.add('active');
+            }
 
                 // ============================================
         // CONTEXT MENU
@@ -5377,11 +5425,17 @@
             if (left < 8) left = 8;
 
             // Не выходим за нижний край — показываем выше курсора
-            if (top + menuH > window.innerHeight - 8) top = y - menuH;
-            if (top < 8) top = 8;
+            if (top + menuH > window.innerHeight - 8) {
+                top = y - menuH;
+            }
+            if (top < 8) {
+                top = 8;
+            }
 
             menu.style.left = left + 'px';
             menu.style.top = top + 'px';
+            menu.style.maxHeight = (window.innerHeight - 16) + 'px';
+            menu.style.overflowY = 'auto';
             menu.classList.add('active');
             
             const isSender = element.classList.contains('outgoing');
@@ -5702,19 +5756,21 @@
             const barEl = document.getElementById('pinnedMessageBar');
             if (barEl) {
                 barEl.classList.remove('active');
+                barEl.style.display = 'none';
             }
             
             // Также скрываем старую панель (если есть)
             const container = document.getElementById('pinnedMessageContainer');
             if (container) {
                 container.classList.remove('active');
+                container.style.display = 'none';
             }
         }
 
         async function hidePinnedMessageBar(e) {
-            if (e && e.stopPropagation) {
+            if (e && typeof e.stopPropagation === 'function') {
                 e.stopPropagation();
-            } else if (window.event) {
+            } else if (window.event && typeof window.event.stopPropagation === 'function') {
                 window.event.stopPropagation();
             }
             if (!currentPinnedMessage) return;
@@ -5754,9 +5810,11 @@
                         showToast('success', 'Сообщение откреплено', '📌');
                     } else {
                         showToast('error', data.error || 'Ошибка', '❌');
+                        hidePinnedMessage(); // Force hide locally even on error if it fails
                     }
                 } catch (err) {
                     console.error('Failed to unpin message:', err);
+                    hidePinnedMessage(); // Force hide locally
                 }
             }
         }
