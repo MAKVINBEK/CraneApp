@@ -4180,6 +4180,17 @@
             }
         }
 
+        /** Сбрасывает @ в списке чатов после открытия группы (просмотр чата). */
+        function acknowledgeChatMentionsOnOpen(chatId) {
+            if (!chatId) return;
+            const entry = allChats.find(function(c) { return c.id === chatId; });
+            if (!isGroupChatEntry(entry)) return;
+            const pending = localStorage.getItem(getMentionPendingKey(chatId));
+            const seenAt = pending || new Date().toISOString();
+            localStorage.setItem(getMentionWaterlineKey(chatId), seenAt);
+            localStorage.removeItem(getMentionPendingKey(chatId));
+        }
+
         function isGroupChatEntry(chat) {
             return !!(chat && (chat.type === 'group' || chat.isGroup));
         }
@@ -4853,8 +4864,16 @@
             const unreadHtml = renderUnreadBadge(chat);
             if (!showMention && !unreadHtml) return '';
             return '<div class="chat-unread-indicators">'
-                + (showMention ? '<div class="mention-badge" aria-label="' + tr('jumpToMention', 'К непрочитанному упоминанию') + '">@</div>' : '')
+                + (showMention ? '<div class="mention-badge" aria-label="' + tr('jumpToMention', 'К непрочитанному упоминанию') + '"><span class="mention-badge-at">@</span></div>' : '')
                 + unreadHtml
+                + '</div>';
+        }
+
+        function renderChatMeta(chat) {
+            const indicators = renderChatUnreadIndicators(chat);
+            return '<div class="chat-meta">'
+                + '<div class="chat-time">' + (chat.time || '') + '</div>'
+                + (indicators || '')
                 + '</div>';
         }
 
@@ -4875,6 +4894,7 @@
                 const chat = list.find(c => c.id === chatId);
                 if (chat) chat.unreadCount = 0;
             });
+            acknowledgeChatMentionsOnOpen(chatId);
             renderChatList();
 
             if (!options.silent) {
@@ -4937,8 +4957,7 @@
                         renderAvatar(ph, name[0], 'avatar') +
                         '<div class="chat-info"><div class="chat-name">' + name + '</div>' +
                         '<div class="chat-last">' + (c.lastMessage || tr('noMessages', 'Нет сообщений')) + '</div></div>' +
-                        '<div class="chat-time">' + (c.time || '') + '</div>' +
-                        renderChatUnreadIndicators(c) +
+                        renderChatMeta(c) +
                         '<div class="chat-actions"><button class="chat-action-icon" onclick="event.stopPropagation(); unarchiveChat(\'' + c.id + '\')" title="' + tr('restore', 'Восстановить') + '">📥</button></div>' +
                         '</div>';
                 }).join('');
@@ -4963,8 +4982,7 @@
                         '<div class="chat-name" style="color: var(--accent-color);"><span class="pin-icon">📌</span> ' + c.name + '</div>' +
                         '<div class="chat-last">' + (c.lastMessage || tr('noMessages', 'Нет сообщений')) + '</div>' +
                         '</div>' +
-                        '<div class="chat-time">' + (c.time || '') + '</div>' +
-                        renderChatUnreadIndicators(c) +
+                        renderChatMeta(c) +
                         '<div class="chat-actions">' +
                         '<button class="chat-action-icon pinned" onclick="event.stopPropagation(); unpinChat(\'' + c.id + '\')" title="' + tr('unpin', 'Открепить') + '" style="color: var(--accent-color);">📌</button>' +
                         '<button class="chat-action-icon archived" onclick="event.stopPropagation(); archiveChat(\'' + c.id + '\')" title="' + tr('archiveChat', 'Архивировать') + '">📁</button>' +
@@ -5003,8 +5021,7 @@
                         '<div class="chat-name">' + displayName + (c.badge || c.isBot ? renderBadge(c.badge, c.isBot) : '') + '</div>' +
                         '<div class="chat-last">' + (c.lastMessage || tr('noMessages', 'Нет сообщений')) + '</div>' +
                         '</div>' +
-                        '<div class="chat-time">' + (c.time || '') + '</div>' +
-                        renderChatUnreadIndicators(c) +
+                        renderChatMeta(c) +
                         '<div class="chat-actions">' +
                         '<button class="chat-action-icon" onclick="event.stopPropagation(); pinChat(\'' + c.id + '\')" title="' + tr('pin', 'Закрепить') + '">📌</button>' +
                         '<button class="chat-action-icon archived" onclick="event.stopPropagation(); archiveChat(\'' + c.id + '\')" title="' + tr('archiveChat', 'Архивировать') + '">📁</button>' +
@@ -5171,6 +5188,7 @@
 
             if (activeChat.type === 'group') {
                 loadGroupMembersForMentions(id);
+                acknowledgeChatMentionsOnOpen(id);
             } else {
                 groupMembersForMentions = [];
                 currentUserGroupOnline = false;
@@ -5401,8 +5419,6 @@
                 scrollToBottom();
                 refreshScrollBottomObserver();
                 updateMentionJumpButton();
-                refreshMentionPendingFromLoadedMessages(chatId);
-                renderChatList();
                 markChatAsRead(chatId, { silent: true }).catch(function(err) {
                     console.error('Mark chat as read error:', err);
                 });
