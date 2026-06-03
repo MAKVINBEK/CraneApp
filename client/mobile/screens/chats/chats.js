@@ -5366,8 +5366,12 @@
             }
         }
 
-        async function hidePinnedMessageBar() {
-            event.stopPropagation();
+        async function hidePinnedMessageBar(e) {
+            if (e && e.stopPropagation) {
+                e.stopPropagation();
+            } else if (window.event) {
+                window.event.stopPropagation();
+            }
             if (!currentPinnedMessage) return;
             
             // В группах откреплять может только создатель (владелец) чата
@@ -5378,12 +5382,30 @@
             
             if (confirm('Открепить это сообщение для всех участников?')) {
                 try {
-                    const res = await fetch('/api/v1/messages/' + currentPinnedMessage.id + '/pin', {
+                    const unpinId = currentPinnedMessage.id;
+                    const res = await fetch('/api/v1/messages/' + unpinId + '/pin', {
                         method: 'DELETE',
                         headers: { 'Authorization': 'Bearer ' + token }
                     });
                     const data = await res.json();
                     if (res.ok && data.success) {
+                        // Убираем визуальный класс с сообщения
+                        const msgEl = document.querySelector('[data-message-id="' + unpinId + '"]');
+                        if (msgEl) msgEl.classList.remove('pinned');
+                        if (messagesData[unpinId]) {
+                            messagesData[unpinId].isPinned = false;
+                        }
+                        
+                        // Убираем из массива закрепленных
+                        pinnedMessages = pinnedMessages.filter(m => m.id !== unpinId);
+                        if (pinnedMessages.length === 0) {
+                            currentPinnedIndex = 0;
+                            hidePinnedMessage();
+                        } else {
+                            if (currentPinnedIndex >= pinnedMessages.length) currentPinnedIndex = 0;
+                            showPinnedMessage(pinnedMessages[currentPinnedIndex]);
+                        }
+                        
                         showToast('success', 'Сообщение откреплено', '📌');
                     } else {
                         showToast('error', data.error || 'Ошибка', '❌');
@@ -5411,7 +5433,7 @@
             bar.innerHTML = 
                 '<div class="pinned-message-bar-icon">📌</div>' +
                 '<div class="pinned-message-bar-text" id="pinnedMessageBarText">Закрепленное сообщение</div>' +
-                '<button class="pinned-message-bar-close" onclick="hidePinnedMessageBar()">×</button>';
+                '<button class="pinned-message-bar-close" onclick="hidePinnedMessageBar(event)">×</button>';
             
             chatHeader.parentNode.insertBefore(bar, chatHeader.nextSibling);
         }
