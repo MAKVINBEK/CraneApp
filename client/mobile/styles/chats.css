@@ -765,6 +765,7 @@ body {
 /* Premium styling for text messages to keep them as pills, not cramped ovals */
 .message.text-msg {
     display: flow-root;
+    min-width: 110px;
 }
 
 .message.text-msg .message-text {
