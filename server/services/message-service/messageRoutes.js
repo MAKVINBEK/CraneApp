@@ -7,8 +7,7 @@ router.post('/:chatId', authMiddleware, async (req, res) => {
     try {
         const { chatId } = req.params;
         const { content, type = 'text' } = req.body;
-        const userId = req.user.id || req.user.userId;
-        const message = await messageService.sendMessage(chatId, userId, content, type);
+        const message = await messageService.sendMessage(chatId, req.user.id, content, type);
         
         // WebSocket рассылка
         global.wss?.clients.forEach(client => {

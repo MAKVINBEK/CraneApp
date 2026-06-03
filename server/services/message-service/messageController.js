@@ -22,13 +22,10 @@ const getMessages = async (req, res) => {
 
 const sendMessage = async (req, res) => {
   try {
-    const userId = req.user?.id || req.user?.userId;
+    const userId = req.user?.userId || 'temp-user';
     const { chatId, content, type } = req.body;
-    if (!userId) {
-      return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
 
-    const message = await messageService.sendMessage(chatId, userId, content, type);
+    const message = await messageService.sendMessage(userId, chatId, content, type);
 
     res.status(200).json({
       success: true,
@@ -86,11 +83,8 @@ const deleteMessage = async (req, res) => {
 
 const markAsRead = async (req, res) => {
   try {
-    const userId = req.user?.id || req.user?.userId;
+    const userId = req.user?.userId;
     const { messageIds } = req.body;
-    if (!userId) {
-      return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
 
     await messageService.markAsRead(messageIds, userId);
 
@@ -111,13 +105,9 @@ const markAsRead = async (req, res) => {
 const forwardMessage = async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.user?.id || req.user?.userId;
     const { chatId } = req.body;
-    if (!userId) {
-      return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
 
-    const message = await messageService.forwardMessage(id, chatId, userId);
+    const message = await messageService.forwardMessage(id, chatId);
 
     res.status(200).json({
       success: true,
@@ -155,11 +145,8 @@ const pinMessage = async (req, res) => {
 const reactToMessage = async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.user?.id || req.user?.userId;
+    const userId = req.user?.userId;
     const { emoji } = req.body;
-    if (!userId) {
-      return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
 
     await messageService.reactToMessage(id, userId, emoji);
 
