@@ -1,0 +1,650 @@
+            list.innerHTML = '';
+            
+            // Ищем группы где есть оба пользователя
+            const commonGroups = allChats.filter(c => {
+                if (c.type !== 'group') return false;
+                const members = c.members || [];
+                return members.includes(userId) && members.includes(user?.id);
+            });
+            
+            if (commonGroups.length === 0) {
+                list.innerHTML = '<div class="profile-empty">' + tr('noCommonGroups', 'Нет общих групп') + '</div>';
+                return;
+            }
+            
+            commonGroups.forEach(g => {
+                const div = document.createElement('div');
+                div.className = 'profile-group-item';
+                div.innerHTML = `
+                    <div class="group-avatar">👥</div>
+                    <div class="group-info">
+                        <div class="group-name">${g.name}</div>
+                        <div class="group-members">${g.members?.length || 0} участников</div>
+                    </div>
+                `;
+                div.onclick = () => {
+                    closeUserProfileModal();
+                    openChat(g.id, g.name);
+                };
+                list.appendChild(div);
+            });
+        }
+        
+        function openUserProfileModal(userData) {
+            const avatarEl = document.getElementById('profileAvatar');
+            const nameEl = document.getElementById('profileName');
+            const usernameEl = document.getElementById('profileUsername');
+            const statusEl = document.getElementById('profileStatus');
+            const bioLine = document.getElementById('profileBioLine');
+            const chatBtn = document.getElementById('profileChatBtn');
+
+            // Убираем старое описание и используем новое
+            const bioEl = document.getElementById('profileBio');
+
+            // Проверяем заблокирован ли пользователь
+            const isBlocked = userData.isBlocked || false;
+
+            // Аватарка пользователя
+            if (isBlocked) {
+                // SVG иконка призрака для заблокированных
+                avatarEl.innerHTML = '<svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18v-6a3 3 0 0 1 6 0v6"/><path d="M6 18a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3v-6a3 3 0 0 0-3-3H9a3 3 0 0 0-3 3v6z"/><path d="M12 2a5 5 0 0 0-5 5v2h10V7a5 5 0 0 0-5-5z"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="16" r="1"/></svg>';
+            } else if (userData.username === 'craneapp_bot') {
+                // Журавль для бота CraneApp
+                avatarEl.innerHTML = '<img src="/logo.png" alt="">';
+            } else if (userData.avatarUrl && (userData.avatarUrl.startsWith('data:image') || userData.avatarUrl.startsWith('http') || userData.avatarUrl.startsWith('/'))) {
+                avatarEl.innerHTML = '<img src="' + userData.avatarUrl + '" alt="">';
+            } else if (userData.isBot) {
+                avatarEl.innerHTML = '<span style="font-size: 60px;">🤖</span>';
+            } else {
+                avatarEl.innerHTML = '<span>' + (userData.name || userData.username || '👤')[0].toUpperCase() + '</span>';
+            }
+
+            nameEl.textContent = isBlocked ? (window.i18n?.t('blockedAccount') || 'Заблокированный аккаунт') : (userData.name || window.i18n?.t('user') || 'Пользователь');
+            usernameEl.textContent = isBlocked ? '' : ('@' + (userData.username || 'unknown'));
+            statusEl.textContent = isBlocked ? (window.i18n?.t('accountBlocked') || 'Аккаунт заблокирован') : (userData.online ? (window.i18n?.t('online') || 'онлайн') : (userData.isBot ? (window.i18n?.t('bot') || 'бот') : (window.i18n?.t('lastSeenRecently') || 'был(а) недавно')));
+            statusEl.style.color = isBlocked ? '#FF4B4B' : (userData.isBot ? 'var(--accent-color)' : (userData.online ? 'var(--success-color)' : 'var(--text-muted)'));
+            
+            // Описание (только если есть)
+            if (bioLine) {
+                bioLine.textContent = userData.bio || '';
+                bioLine.style.display = userData.bio ? 'block' : 'none';
+            }
+            // Совместимость со старым кодом
+            if (bioEl) {
+                if (userData.bio) {
+                    bioEl.innerHTML = userData.bio;
+                    bioEl.style.display = 'block';
+                } else {
+                    bioEl.style.display = 'none';
+                }
+            }
+
+            // Кнопка чата — только для других пользователей (не себя, не ботов, не заблокированных)
+            if (chatBtn && userData.id && userData.id !== user.id && !userData.isBot && !isBlocked) {
+                chatBtn.style.display = 'flex';
+                // Проверяем есть ли уже чат с этим пользователем
+                const existingChat = allChats.find(c => {
+                    const cu = chatUsers[c.id];
+                    return cu && cu.id === userData.id;
+                });
+            chatBtn.querySelector('span').textContent = existingChat ? (window.i18n?.t('goToChat') || 'Перейти в чат') : (window.i18n?.t('startChat') || 'Начать переписку');
+                chatBtn.onclick = () => profileStartChat(userData.id, userData.name || userData.username, existingChat);
+            } else if (chatBtn) {
+                chatBtn.style.display = 'none';
+            }
+
+            // Кнопка копирования юзернейма — скрываем для заблокированных
+            const copyBtn = document.querySelector('.profile-copy-btn');
+            if (copyBtn) {
+                copyBtn.style.display = isBlocked ? 'none' : 'flex';
+            }
+
+            // Кнопки действий для разработчиков — при просмотре активных жалоб или если пользователь замучен/забанен
+            const adminActions = document.getElementById('profileAdminActions');
+            const isDevUser = ['adm1','admin','admin1','qzlfee'].includes((user.username||'').toLowerCase());
+            const isFromActiveReport = userData.fromReport && userData.reportStatus !== 'resolved';
+            const isMuted = userData.isMuted || false;
+
+            if (adminActions && isDevUser && userData.id && userData.id !== user.id && (isFromActiveReport || isMuted || isBlocked)) {
+                adminActions.style.display = 'flex';
+
+                // Показываем/скрываем кнопки в зависимости от статуса
+                const muteBtn = document.getElementById('muteBtn');
+                const unmuteBtn = document.getElementById('unmuteBtn');
+                const blockBtn = document.getElementById('blockBtn');
+                const unblockBtn = document.getElementById('unblockBtn');
+
+                if (muteBtn && unmuteBtn) {
+                    muteBtn.style.display = isMuted ? 'none' : 'flex';
+                    unmuteBtn.style.display = isMuted ? 'flex' : 'none';
+                }
+                if (blockBtn && unblockBtn) {
+                    blockBtn.style.display = isBlocked ? 'none' : 'flex';
+                    unblockBtn.style.display = isBlocked ? 'flex' : 'none';
+                }
+            } else if (adminActions) {
+                adminActions.style.display = 'none';
+            }
+            
+            // Закрываем меню если открыто
+            const menu = document.getElementById('profileMenu');
+            if (menu) menu.classList.remove('active');
+            
+            // Сохраняем текущего пользователя профиля
+            currentProfileUser = userData;
+            
+            // Загружаем настройку уведомлений
+            const notifications = JSON.parse(localStorage.getItem('chatNotifications') || '{}');
+            document.getElementById('profileNotifications').checked = notifications[userData.id] !== false;
+            
+            // Загружаем данные для табов
+            loadProfileMedia(userData.id);
+            loadProfileFiles(userData.id);
+            loadProfileLinks(userData.id);
+            loadProfileGroups(userData.id);
+            
+            // Показываем первый таб
+            switchProfileTab('media');
+            
+            document.getElementById('userProfileModal').classList.add('active');
+        }
+
+        async function profileStartChat(userId, name, existingChat) {
+            closeUserProfileModal();
+            if (existingChat) {
+                openChat(existingChat.id, existingChat.name);
+                return;
+            }
+            try {
+                const res = await fetch('/api/v1/chats/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    body: JSON.stringify({ type: 'private', participants: [userId] })
+                });
+                const data = await res.json();
+                if (data.chatId) {
+                    await loadChats();
+                    openChat(data.chatId, name);
+                }
+            } catch (e) {
+                showToast('error', 'Ошибка', '❌');
+            }
+        }
+
+        function closeUserProfileModal() {
+            document.getElementById('userProfileModal').classList.remove('active');
+        }
+
+        function openChatUserProfile() {
+            if (!activeChat) return;
+            
+            if (activeChat.type === 'group' || activeChat.type === 'channel') {
+                openGroupInfoModal(activeChat.id);
+                return;
+            }
+
+            const chatUser = chatUsers[activeChat.id];
+            if (chatUser) {
+                openUserProfileModal({
+                    id: chatUser.id,
+                    name: chatUser.name,
+                    username: chatUser.username,
+                    avatarUrl: chatUser.av,
+                    bio: chatUser.bio || '',
+                    online: chatUser.isOnline,
+                    isBot: chatUser.isBot || false,
+                    isBlocked: chatUser.isBlocked || false,
+                    isMuted: chatUser.isMuted || false
+                });
+            } else {
+                showToast('info', tr('userDataUnavailable', 'Данные пользователя недоступны'), '⚠️');
+            }
+        }
+
+        async function openGroupInfoModal(chatId) {
+            const chat = allChats.find(c => c.id === chatId);
+            if (!chat) return;
+
+            let members = [];
+            try {
+                const res = await fetch('/api/v1/chats/' + chatId + '/members', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    members = data.members || [];
+                }
+            } catch (_) {}
+
+            const av = chat.avatarUrl && isImage(chat.avatarUrl)
+                ? '<img src="' + chat.avatarUrl + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">'
+                : '<span style="font-size:32px;">' + (chat.name[0] || '💬') + '</span>';
+
+            const membersHtml = members.map(m => {
+                const mName = m.first_name || m.username || tr('user', 'Пользователь');
+                const mAv = m.avatar_url && isImage(m.avatar_url)
+                    ? '<img src="' + m.avatar_url + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">'
+                    : '<span style="font-size:16px;font-weight:600;">' + mName[0].toUpperCase() + '</span>';
+                const onlineDot = m.is_online && !m.is_bot ? '<span style="width:8px;height:8px;border-radius:50%;background:#00E676;display:inline-block;margin-left:6px;flex-shrink:0;"></span>' : '';
+                const roleLabel = m.role === 'owner' ? '<span style="font-size:11px;color:var(--accent-color);margin-left:4px;">' + (window.i18n?.t('creator') || 'Создатель') + '</span>' : '';
+                const isMe = m.id === user.id;
+                const isBot = m.is_bot;
+                const clickable = !isMe && !isBot;
+                const clickAttr = clickable
+                    ? `onclick="closeGroupInfoAndOpenProfile('${m.id}','${mName}','${m.username || ''}','${m.avatar_url || ''}',${!!m.is_online})"`
+                    : '';
+                return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border-color);cursor:${clickable ? 'pointer' : 'default'};" ${clickAttr}>
+                    <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#FF007F,#9D00FF);display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;overflow:hidden;">${mAv}</div>
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:15px;font-weight:600;display:flex;align-items:center;flex-wrap:wrap;gap:2px;">${mName}${roleLabel}${onlineDot}</div>
+                        <div style="font-size:13px;color:var(--text-muted);">@${m.username || ''}</div>
+                    </div>
+                </div>`;
+            }).join('');
+
+            let modal = document.getElementById('groupInfoModal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'groupInfoModal';
+                modal.style.cssText = 'position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px);';
+                modal.onclick = e => { if (e.target === modal) modal.remove(); };
+                document.body.appendChild(modal);
+            }
+
+            modal.innerHTML = `
+                <div style="background:var(--bg-secondary,#111);border-radius:24px 24px 0 0;width:100%;max-width:480px;max-height:85vh;overflow-y:auto;animation:slideUp 0.25s cubic-bezier(0.34,1.56,0.64,1);">
+                    <div style="display:flex;align-items:center;justify-content:flex-end;padding:16px 20px 0;">
+                        <button onclick="document.getElementById('groupInfoModal').remove()" style="background:rgba(255,255,255,0.08);border:none;color:var(--text-primary);width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;">×</button>
+                    </div>
+                    <div style="display:flex;flex-direction:column;align-items:center;padding:8px 20px 20px;text-align:center;">
+                        <div style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#FF007F,#9D00FF);display:flex;align-items:center;justify-content:center;color:#fff;font-size:32px;overflow:hidden;margin-bottom:12px;">${av}</div>
+                        <div style="font-size:22px;font-weight:700;letter-spacing:-0.02em;">${chat.name}</div>
+                        <div style="font-size:14px;color:var(--text-muted);margin-top:4px;">${members.length} ${pluralMembers(members.length)}</div>
+                    </div>
+                    <div style="margin:0 12px 20px;background:rgba(255,255,255,0.04);border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,0.06);">
+                        <div style="padding:10px 16px;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-muted);">${tr('members', 'Участники')}</div>
+                        ${membersHtml || '<div style="padding:16px;color:var(--text-muted);text-align:center;">' + tr('noMembers', 'Нет участников') + '</div>'}
+                    </div>
+                </div>`;
+            modal.style.display = 'flex';
+        }
+
+        function closeGroupInfoAndOpenProfile(id, name, username, avatarUrl, isOnline) {
+            const modal = document.getElementById('groupInfoModal');
+            if (modal) modal.remove();
+            openUserProfileModal({ id, name, username, avatarUrl, online: isOnline });
+        }
+
+        document.getElementById('userProfileModal').addEventListener('click', function(e) { 
+            if (e.target.id === 'userProfileModal') closeUserProfileModal(); 
+        });
+
+        // ============================================
+        // MEDIA PREVIEW
+        // ============================================
+        function openMediaPreview(url, type) {
+            currentPreviewMediaUrl = url;
+            const contentEl = document.getElementById('mediaPreviewContent');
+            
+            if (type === 'video') {
+                contentEl.innerHTML = '<video src="' + url + '" controls autoplay style="max-width:100%;max-height:100%;border-radius:4px;"></video>';
+            } else {
+                contentEl.innerHTML = '<img src="' + url + '" alt="" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;user-select:none;" draggable="false">';
+            }
+            
+            document.getElementById('mediaPreviewOverlay').classList.add('active');
+        }
+
+        function closeMediaPreview(event) {
+            if (event && event.target !== document.getElementById('mediaPreviewOverlay')) return;
+            const contentEl = document.getElementById('mediaPreviewContent');
+            const video = contentEl.querySelector('video');
+            if (video) video.pause();
+            contentEl.innerHTML = '';
+            document.getElementById('mediaPreviewOverlay').classList.remove('active');
+            currentPreviewMediaUrl = null;
+        }
+
+        function downloadMedia() {
+            if (!currentPreviewMediaUrl) return;
+            const a = document.createElement('a');
+            a.href = currentPreviewMediaUrl;
+            a.download = 'media_' + Date.now();
+            a.click();
+            showToast('success', 'Загрузка началась', '📥');
+        }
+
+        function downloadCurrentMedia() {
+            document.getElementById('messageContextMenu').classList.remove('active');
+            const msg = messagesData[currentMessageId];
+            if (!msg || !msg.mediaUrl) return;
+            const a = document.createElement('a');
+            a.href = msg.mediaUrl;
+            a.download = 'photo_' + Date.now();
+            a.click();
+            showToast('success', tr('downloadStarted', 'Загрузка началась'), '📥');
+        }
+
+        async function copyMessagePhoto() {
+            document.getElementById('messageContextMenu').classList.remove('active');
+            const msg = messagesData[currentMessageId];
+            if (!msg || !msg.mediaUrl) return;
+            try {
+                // Пробуем скопировать в буфер обмена как изображение
+                const res = await fetch(msg.mediaUrl);
+                const blob = await res.blob();
+                await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+                showToast('success', tr('photoCopied', 'Фото скопировано'), '📋');
+            } catch (_) {
+                // Fallback — копируем URL
+                navigator.clipboard.writeText(msg.mediaUrl).catch(() => {});
+                showToast('success', tr('linkCopied', 'Ссылка скопирована'), '📋');
+            }
+        }
+
+        function copyMediaLink() {
+            if (!currentPreviewMediaUrl) return;
+            
+            if (currentPreviewMediaUrl.startsWith('data:')) {
+                showToast('success', tr('mediaCopiedBuffer', 'Медиа сохранено в буфер'), '📋');
+            } else {
+                navigator.clipboard.writeText(currentPreviewMediaUrl);
+                showToast('success', tr('linkCopied', 'Ссылка скопирована'), '📋');
+            }
+        }
+
+        const mediaAttachmentController = window.CraneMediaAttachmentController.create({
+            addStickerToCurrentPack: (stickerData) => addStickerToCurrentPack(stickerData),
+            closeEmojiPicker: () => closeEmojiPicker(),
+            createMessageElement: (message) => createMessageElement(message),
+            getActiveChat: () => activeChat,
+            getMessagesData: () => messagesData,
+            getToken: () => token,
+            getUser: () => user,
+            loadStickerPacks: () => loadStickerPacks(),
+            saveGif: (gifUrl, name) => saveGif(gifUrl, name),
+            scrollToBottom: () => scrollToBottom(),
+            sendMessage: (text) => sendMessage(text),
+            setNewPackIconData: (value) => { newPackIconData = value; },
+            showContactPicker: () => showContactPicker(),
+            showToast: (...args) => showToast(...args),
+            tr,
+        });
+        function toggleAttachmentPanel() { return mediaAttachmentController.toggleAttachmentPanel(); }
+        function closeAttachmentPanel() { return mediaAttachmentController.closeAttachmentPanel(); }
+        function openFilePicker() { return mediaAttachmentController.openFilePicker(); }
+        function shareLocation() { return mediaAttachmentController.shareLocation(); }
+        function shareContact() { return mediaAttachmentController.shareContact(); }
+        function toggleMediaPanel() { return mediaAttachmentController.toggleMediaPanel(); }
+        function closeMediaPanel() { return mediaAttachmentController.closeMediaPanel(); }
+        function openCamera() { return mediaAttachmentController.openCamera(); }
+        function openGallery() { return mediaAttachmentController.openGallery(); }
+        function openStickerPicker() { return mediaAttachmentController.openStickerPicker(); }
+        function closeStickerModal() { return mediaAttachmentController.closeStickerModal(); }
+        function openCreatePackModal() { return mediaAttachmentController.openCreatePackModal(); }
+        function closeCreatePackModal() { return mediaAttachmentController.closeCreatePackModal(); }
+        function handleFileSelect(input) { return mediaAttachmentController.handleFileSelect(input); }
+        function handleGifSelect(input) { return mediaAttachmentController.handleGifSelect(input); }
+        function showMediaSendPreview(dataUrl, type) { return mediaAttachmentController.showMediaSendPreview(dataUrl, type); }
+        function openEditorFromPreview() { return mediaAttachmentController.openEditorFromPreview(); }
+        window.closePhotoEditor = function() { return mediaAttachmentController.closePhotoEditor(); };
+        window.onPhotoEditorComplete = function(dataUrl) { return mediaAttachmentController.onPhotoEditorComplete(dataUrl); };
+        function cancelMediaSend() { return mediaAttachmentController.cancelMediaSend(); }
+        function confirmMediaSend() { return mediaAttachmentController.confirmMediaSend(); }
+        function handlePackIconSelect(input) { return mediaAttachmentController.handlePackIconSelect(input); }
+        function handleStickerSelect(input) { return mediaAttachmentController.handleStickerSelect(input); }
+        function sendMediaMessage(dataUrl, type, caption) { return mediaAttachmentController.sendMediaMessage(dataUrl, type, caption); }
+        function sendGifMessage(dataUrl, caption) { return mediaAttachmentController.sendGifMessage(dataUrl, caption); }
+        function sendStickerMessage(stickerUrl) { return mediaAttachmentController.sendStickerMessage(stickerUrl); }
+        async function uploadFile(dataUrl, type) { return mediaAttachmentController.uploadFile(dataUrl, type); }
+        function _confirmMessage(tempId, serverMessage) { return mediaAttachmentController.confirmMessage(tempId, serverMessage); }
+
+        function createMessageElement(m) {
+            const div = document.createElement('div');
+            const isOutgoing = m.senderId === user.id || m.outgoing;
+            const isBotMessage = isCraneAppBotMessage(m);
+            const isGroup = activeChat && activeChat.type === 'group';
+
+            div.className = 'message ' + (isOutgoing ? 'outgoing' : 'incoming');
+            if (m.pending) div.classList.add('pending');
+            if (isBotMessage) div.classList.add('bot-message');
+            div.dataset.messageId = m.id;
+
+            div.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+                // Читаем актуальный ID из dataset (он обновляется после отправки)
+                const actualId = div.dataset.messageId || m.id;
+                showMessageContextMenu(e, actualId, div, m.content || '', m.senderName || tr('user', 'Пользователь'));
+            });
+
+            let pressTimer;
+            div.addEventListener('touchstart', function(e) {
+                pressTimer = setTimeout(function() {
+                    const actualId = div.dataset.messageId || m.id;
+                    showMessageContextMenu(e.touches[0], actualId, div, m.content || '', m.senderName || tr('user', 'Пользователь'));
+                }, 500);
+            });
+            div.addEventListener('touchend', function() { clearTimeout(pressTimer); });
+            div.addEventListener('touchmove', function() { clearTimeout(pressTimer); });
+
+            // ── Аватарка и имя отправителя в группах ──────────────────
+            if (isGroup && !isOutgoing) {
+                const senderName = m.senderFirstName || m.sender?.firstName || m.senderName || '';
+                const senderIsBot = m.senderUsername === 'craneapp_bot' || m.isBot || m.sender?.isBot;
+                const senderBadgeHtml = renderBadges(
+                    m.senderBadges || (m.senderBadge ? [m.senderBadge] : []) || m.sender?.badges || [],
+                    senderIsBot,
+                    m.senderIsPremium || m.sender?.isPremium,
+                    false, false
+                );
+                // Source avatar if provided, otherwise fallback to camera indicator if available
+                const senderAv = m.senderAvatar
+                    || m.sender?.avatarUrl
+                    || m.sender?.avatar
+                    || m.senderAvatarUrl
+                    || m.avatarUrl
+                    || '';
+                const initial = senderName ? senderName[0].toUpperCase() : '';
+                const camAvailable = typeof window.__CAMERA_HAS__ !== 'undefined' ? window.__CAMERA_HAS__ : false;
+                // Для бота показываем 🤖, для остальных - аватарку или камеру/инициал
+                const avatarContent = senderIsBot
+                    ? '<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:28px;">🤖</span>'
+                    : senderAv
+                        ? `<img src="${senderAv}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
+                        : camAvailable
+                            ? '<span class="camera-icon" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;border-radius:50%">📷</span>'
+                            : (initial || '?');
+
+                const wrapper = document.createElement('div');
+                wrapper.className = 'msg-group-wrapper';
+                wrapper.innerHTML = `
+                    <div class="msg-sender-avatar">${avatarContent}</div>
+                    <div class="msg-group-content">
+                        <div class="msg-sender-name">${senderName}${senderBadgeHtml}</div>
+                    </div>
+                `;
+                // Сообщение будет добавлено внутрь msg-group-content
+                const contentDiv = wrapper.querySelector('.msg-group-content');
+                // Переносим div внутрь wrapper
+                div.classList.add('group-msg');
+                contentDiv.appendChild(div);
+
+                // Reply preview
+                const replyData = m.replyToData || (m.replyToMessageId ? {
+                    senderName: m.replyToSenderName || (messagesData[m.replyToMessageId] ? (messagesData[m.replyToMessageId].senderFirstName || messagesData[m.replyToMessageId].senderName || messagesData[m.replyToMessageId].sender?.firstName) : null) || tr('user', 'Пользователь'),
+                    content: m.replyToContent || (messagesData[m.replyToMessageId] ? messagesData[m.replyToMessageId].content : '') || ''
+                } : null);
+                if (replyData) {
+                    const rp = document.createElement('div');
+                    rp.className = 'msg-reply-preview';
+                    rp.innerHTML = `
+                    <div class="msg-reply-header">
+                        <svg class="msg-reply-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="9 14 4 9 9 4"/>
+                            <path d="M20 20v-7a4 4 0 0 0-4-4H4"/>
+                        </svg>
+                        <span class="msg-reply-label">Ответ</span>
+                        <span class="msg-reply-sender">${replyData.senderName}</span>
+                    </div>
+                    <div class="msg-reply-text">${(replyData.content||'').substring(0,80)}</div>
+                `;
+                    rp.onclick = function(e) {
+                        e.stopPropagation();
+                        const rid = m.replyToMessageId || m.replyToData?.messageId;
+                        if (rid) {
+                            const t = document.querySelector('[data-message-id="'+rid+'"]');
+                            if (t) { t.scrollIntoView({behavior:'smooth',block:'center'}); t.classList.add('highlight'); setTimeout(()=>t.classList.remove('highlight'),1500); }
+                        }
+                    };
+                    div.insertBefore(rp, div.firstChild);
+                }
+
+                addMessageContent(div, m);
+                return wrapper;
+            }
+
+            // ── Reply preview (не группа) ──────────────────────────────
+            const replyData = m.replyToData || (m.replyToMessageId ? {
+                senderName: m.replyToSenderName || (messagesData[m.replyToMessageId] ? (messagesData[m.replyToMessageId].senderFirstName || messagesData[m.replyToMessageId].senderName || messagesData[m.replyToMessageId].sender?.firstName) : null) || tr('user', 'Пользователь'),
+                content: m.replyToContent || (messagesData[m.replyToMessageId] ? messagesData[m.replyToMessageId].content : '') || ''
+            } : null);
+            if (replyData) {
+                const rp = document.createElement('div');
+                rp.className = 'msg-reply-preview';
+                rp.innerHTML = `
+                    <div class="msg-reply-header">
+                        <svg class="msg-reply-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="9 14 4 9 9 4"/>
+                            <path d="M20 20v-7a4 4 0 0 0-4-4H4"/>
+                        </svg>
+                        <span class="msg-reply-label">Ответ</span>
+                        <span class="msg-reply-sender">${replyData.senderName}</span>
+                    </div>
+                    <div class="msg-reply-text">${(replyData.content||'').substring(0,80)}</div>
+                `;
+                rp.onclick = function(e) {
+                    e.stopPropagation();
+                    const rid = m.replyToMessageId || m.replyToData?.messageId;
+                    if (rid) {
+                        const t = document.querySelector('[data-message-id="'+rid+'"]');
+                        if (t) { t.scrollIntoView({behavior:'smooth',block:'center'}); t.classList.add('highlight'); setTimeout(()=>t.classList.remove('highlight'),1500); }
+                    }
+                };
+                div.appendChild(rp);
+            }
+
+            addMessageContent(div, m);
+            return div;
+        }
+
+        function addMessageContent(div, m) {
+            // Метка "Переслано от ..." — стиль как в Telegram
+            if (m.forwardFrom) {
+                const fwd = document.createElement('div');
+                fwd.style.cssText = 'border-left:3px solid var(--accent-color);padding:4px 8px;margin-bottom:6px;border-radius:0 4px 4px 0;background:rgba(255,0,127,0.06);';
+                fwd.innerHTML = '<div style="font-size:11px;color:var(--text-muted);margin-bottom:1px;">Переслано от</div>'
+                    + '<div style="font-size:13px;color:var(--accent-color);font-weight:600;">' + m.forwardFrom + '</div>';
+                div.appendChild(fwd);
+            }
+            if (m.type === 'image' || m.type === 'photo') {
+                div.classList.add('media-only');
+                const img = document.createElement('img');
+                img.className = 'message-media';
+                img.src = m.mediaUrl;
+                img.onclick = function() { openMediaPreview(m.mediaUrl, 'image'); };
+                div.appendChild(img);
+                if (m.content) {
+                    div.classList.remove('media-only');
+                    const cap = document.createElement('div');
+                    cap.className = 'message-caption';
+                    cap.textContent = isCraneAppBotMessage(m) ? localizeBotMessageText(m.content) : m.content;
+                    div.appendChild(cap);
+                }
+            } else if (m.type === 'video') {
+                const video = document.createElement('video');
+                video.className = 'message-media';
+                video.src = m.mediaUrl;
+                video.controls = true;
+                video.onclick = function() { openMediaPreview(m.mediaUrl, 'video'); };
+                div.appendChild(video);
+                if (m.content) {
+                    const cap = document.createElement('div');
+                    cap.className = 'message-caption';
+                    cap.textContent = isCraneAppBotMessage(m) ? localizeBotMessageText(m.content) : m.content;
+                    div.appendChild(cap);
+                }
+            } else if (m.type === 'gif') {
+                div.classList.add('media-only');
+                const img = document.createElement('img');
+                img.className = 'message-gif';
+                img.src = m.mediaUrl;
+                img.onclick = function() { openMediaPreview(m.mediaUrl, 'gif'); };
+                div.appendChild(img);
+                if (m.content) {
+                    div.classList.remove('media-only');
+                    const cap = document.createElement('div');
+                    cap.className = 'message-caption';
+                    cap.textContent = isCraneAppBotMessage(m) ? localizeBotMessageText(m.content) : m.content;
+                    div.appendChild(cap);
+                }
+            } else if (m.type === 'sticker') {
+                div.classList.add('sticker-only');
+                const img = document.createElement('img');
+                img.className = 'message-sticker';
+                img.src = m.mediaUrl;
+                img.onclick = function() { openMediaPreview(m.mediaUrl, 'image'); };
+                div.appendChild(img);
+            } else if (m.type === 'video_note') {
+                const noteEl = createVideoNoteElement(m.mediaUrl, m.voiceDuration || 0);
+                div.appendChild(noteEl);
+            } else if (m.type === 'call') {
+                let callData = {};
+                try { callData = JSON.parse(m.content || '{}'); } catch(_) {}
+                const isOutgoingCall = (m.sender_id || m.senderId) === user.id;
+                const isVideo = callData.callKind !== 'audio';
+                const isMissed = callData.status === 'missed';
+                const dur = callData.duration || 0;
+                const durStr = dur > 0
+                    ? (Math.floor(dur/60) + ':' + String(dur%60).padStart(2,'0'))
+                    : '';
+                const label = isMissed
+                    ? (isOutgoingCall ? tr('unansweredCall', 'Звонок без ответа') : tr('incomingMissedCall', 'Пропущенный звонок'))
+                    : (isVideo ? tr('videoCall', 'Видеозвонок') : tr('audioCall', 'Аудиозвонок'));
+                const callIcon = isVideo
+                    ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>'
+                    : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.38 2 2 0 0 1 3.6 1.22h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.84a16 16 0 0 0 6 6l.94-.94a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21.63 16l.36.95z"/></svg>';
+                const callEl = document.createElement('div');
+                callEl.style.cssText = 'display:flex;align-items:center;gap:9px;padding:2px 0;';
+                const iconWrap = document.createElement('span');
+                iconWrap.style.cssText = 'display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;flex-shrink:0;'
+                    + (isMissed ? 'background:rgba(255,75,98,0.15);color:#ff4b62;' : 'background:rgba(155,130,255,0.15);color:#9b82ff;');
+                iconWrap.innerHTML = callIcon;
+                const textWrap = document.createElement('span');
+                textWrap.style.cssText = 'display:flex;flex-direction:column;gap:1px;';
+                const labelEl = document.createElement('span');
+                labelEl.style.cssText = 'font-size:13.5px;font-weight:600;' + (isMissed ? 'color:#ff4b62;' : '');
+                labelEl.textContent = label;
+                textWrap.appendChild(labelEl);
+                if (durStr) {
+                    const durEl = document.createElement('span');
+                    durEl.style.cssText = 'font-size:11px;opacity:.6;';
+                    durEl.textContent = durStr;
+                    textWrap.appendChild(durEl);
+                }
+                callEl.appendChild(iconWrap);
+                callEl.appendChild(textWrap);
+                div.appendChild(callEl);
+            } else {
+                const textSpan = document.createElement('span');
+                textSpan.className = 'message-text';
+                // Убираем префикс "↪️ Переслано от X:\n" если есть forwardFrom
+                let displayContent = m.content || m.text || '';
+                if (m.forwardFrom && displayContent.startsWith('↪️ Переслано от ')) {
+                    const nlIdx = displayContent.indexOf('\n');
+                    if (nlIdx !== -1) displayContent = displayContent.substring(nlIdx + 1);
+                }
+                if (isCraneAppBotMessage(m)) {
+                    displayContent = localizeBotMessageText(displayContent);
+                }
+                textSpan.innerHTML = renderFormattedText(displayContent);
+                div.appendChild(textSpan);

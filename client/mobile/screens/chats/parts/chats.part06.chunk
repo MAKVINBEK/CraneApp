@@ -1,0 +1,650 @@
+        // ============================================
+        // OPEN/CLOSE CHAT
+        // ============================================
+        async function openChat(id, name) {
+            // Сохраняем черновик предыдущего чата
+            const advSettings = JSON.parse(localStorage.getItem('craneapp_advanced_settings') || '{}');
+            const saveDrafts = advSettings.saveDrafts !== false;
+            if (saveDrafts && activeChat) {
+                const draft = document.getElementById('msgInput').innerText;
+                if (draft) localStorage.setItem('crane_draft_' + activeChat.id, draft);
+                else localStorage.removeItem('crane_draft_' + activeChat.id);
+            }
+
+            activeChat = { id: id, name: name, type: allChats.find(c => c.id === id)?.type || 'private' };
+
+            // Показываем кнопку участников только для групп
+            const membersBtn = document.getElementById('membersBtn');
+            if (membersBtn) membersBtn.style.display = activeChat.type === 'group' ? 'flex' : 'none';
+
+            messagesData = {};
+            renderChatList();
+
+            // Проверяем статус мута
+            checkMuteStatus();
+            
+            if (window.innerWidth < 768) {
+                document.getElementById('sidebar').classList.add('hidden');
+                document.body.classList.add('chat-open');
+            }
+
+            document.getElementById('noChat').style.display = 'none';
+            document.getElementById('chatView').classList.add('active');
+
+            // Имя + бейджи в хедере
+            const chatUserForBadge = chatUsers[id];
+            const isBlocked = chatUserForBadge && chatUserForBadge.isBlocked;
+            const displayName = isBlocked ? 'Заблокированный аккаунт' : (chatUserForBadge?.name || name);
+            const chatBadgesHtml = chatUserForBadge && !isBlocked
+                ? renderBadges(chatUserForBadge.badges || [], chatUserForBadge.isBot, chatUserForBadge.isPremium, false, false)
+                : '';
+            const chatNameEl = document.getElementById('chatName');
+            if (chatBadgesHtml) {
+                chatNameEl.innerHTML = displayName + chatBadgesHtml;
+            } else {
+                chatNameEl.textContent = displayName;
+            }
+
+            // Кнопка support requests — только разработчикам в чате с ботом
+            const supportBtn = document.getElementById('supportRequestsBtn');
+            const reportsBtn = document.getElementById('reportsBtn');
+            const isBotChat = chatUserForBadge && chatUserForBadge.isBot;
+            const isDevUser = ['adm1','admin','admin1','qzlfee'].includes((user.username||'').toLowerCase());
+            if (isBotChat && isDevUser) {
+                supportBtn.style.display = 'flex';
+                reportsBtn.style.display = 'flex';
+            } else {
+                supportBtn.style.display = 'none';
+                reportsBtn.style.display = 'none';
+            }
+            // Скрываем панель support и reports при смене чата
+            document.getElementById('supportPanel').style.display = 'none';
+            document.getElementById('reportsPanel').style.display = 'none';
+            document.getElementById('messages').style.display = 'flex';
+
+            // Показываем баннер если есть активный support request
+            const activeSupportRaw = localStorage.getItem('craneapp_active_support_request');
+            const existingBanner = document.getElementById('supportReplyBanner');
+            if (existingBanner) existingBanner.remove();
+            if (isBotChat && isDevUser && activeSupportRaw) {
+                try {
+                    const activeSupport = JSON.parse(activeSupportRaw);
+                    const banner = document.createElement('div');
+                    banner.id = 'supportReplyBanner';
+                    banner.style.cssText = 'background:linear-gradient(135deg,rgba(255,0,127,.15),rgba(157,0,255,.15));border-bottom:1px solid rgba(255,0,127,.3);padding:8px 16px;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:8px';
+                    banner.innerHTML = '<span>📨 Режим ответа на запрос поддержки. Ваш ответ будет анонимно переслан пользователю.</span>'
+                        + '<button onclick="localStorage.removeItem(\'craneapp_active_support_request\');this.parentNode.remove()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:16px;flex-shrink:0">✕</button>';
+                    const msgContainer = document.getElementById('messagesContainer');
+                    msgContainer.parentNode.insertBefore(banner, msgContainer);
+                } catch (_) {}
+            }
+            
+            const chatUser = chatUsers[id];
+            const avatarEl = document.getElementById('chatAvatar');
+            const statusEl = document.getElementById('chatStatus');
+
+            // Для групп — берём аватарку из allChats
+            const chatInfo = allChats.find(c => c.id === id);
+            const groupAvatarUrl = chatInfo?.avatarUrl || chatInfo?.av;
+
+            if (activeChat && activeChat.type === 'group') {
+                if (groupAvatarUrl && isImage(groupAvatarUrl)) {
+                    avatarEl.innerHTML = '<img class="avatar-img" src="' + groupAvatarUrl + '" alt="">';
+                } else {
+                    avatarEl.innerHTML = '<span>' + (name[0] || '💬') + '</span>';
+                }
+            } else if (chatUser && chatUser.isBlocked) {
+                // Призрак для заблокированных
+                avatarEl.innerHTML = '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18v-6a3 3 0 0 1 6 0v6"/><path d="M6 18a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3v-6a3 3 0 0 0-3-3H9a3 3 0 0 0-3 3v6z"/><path d="M12 2a5 5 0 0 0-5 5v2h10V7a5 5 0 0 0-5-5z"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="16" r="1"/></svg>';
+            } else if (chatUser && chatUser.username === 'craneapp_bot') {
+                // Журавль для бота CraneApp
+                avatarEl.innerHTML = '<img class="avatar-img" src="/logo.png" alt="">';
+            } else if (chatUser && isImage(chatUser.av)) {
+                avatarEl.innerHTML = '<img class="avatar-img" src="' + chatUser.av + '" alt="">';
+            } else {
+                const ph = chatUser?.av || (name[0] || '?');
+                avatarEl.innerHTML = '<span>' + ph + '</span>';
+            }
+            
+            // Обновляем статус онлайн
+            if (chatUser) {
+                if (chatUser.isBlocked) {
+                    statusEl.textContent = tr('accountBlocked', 'Account blocked');
+                    statusEl.style.color = '#FF4B4B';
+                } else {
+                    updateChatUserStatus(chatUser.id);
+                }
+            } else if (activeChat && activeChat.type === 'group') {
+                statusEl.style.color = 'var(--text-muted)';
+                fetch('/api/v1/chats/' + id + '/members-online', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                }).then(r => r.ok ? r.json() : null).then(data => {
+                    if (data && data.total > 0) {
+        statusEl.textContent = (window.i18n?.tc ? window.i18n.tc('membersCount', data.total) : (data.total + ' ' + pluralMembers(data.total))) + (data.online > 0 ? ', ' + data.online + ' ' + (window.i18n?.t('online') || 'онлайн') : '');
+                        statusEl.style.color = 'var(--text-muted)';
+                    }
+                }).catch(() => { statusEl.textContent = ''; });
+            } else {
+                statusEl.textContent = '';
+            }
+            
+            loadMessages();
+            loadPinnedMessage(id);
+
+            // E2E: инициализируем ключ для чата и показываем индикатор
+            if (window.E2E) {
+                window.E2E.getSessionKey(id, token).then(key => {
+                    const ind = document.getElementById('e2eIndicator');
+                    if (ind) ind.style.display = key ? 'flex' : 'none';
+                }).catch(() => {});
+            }
+
+            // Восстанавливаем черновик
+            if (saveDrafts) {
+                const draft = localStorage.getItem('crane_draft_' + id) || '';
+                document.getElementById('msgInput').innerText = draft;
+            }
+
+            // Применяем autoplay GIF
+            const autoplayGifs = advSettings.autoplayGifs !== false;
+            document.querySelectorAll('img[src$=".gif"]').forEach(img => {
+                img.style.animationPlayState = autoplayGifs ? 'running' : 'paused';
+            });
+        }
+
+        async function updateChatUserStatus(userId) {
+            if (!userId) return;
+
+            const statusEl = document.getElementById('chatStatus');
+
+            // Если это бот — показываем "бот" вместо статуса
+            const chatUser = chatUsers[activeChat && activeChat.id];
+            if (chatUser && chatUser.isBot) {
+                statusEl.textContent = tr('bot', 'bot');
+                statusEl.style.color = 'var(--accent-color)';
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/v1/users/' + userId + '/status', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const data = await res.json();
+                
+                statusEl.textContent = chatStatusText({ isOnline: data.isOnline, lastSeen: data.lastSeen });
+                statusEl.style.color = data.isOnline ? 'var(--success-color)' : 'var(--text-muted)';
+            } catch (e) {
+                statusEl.textContent = '';
+            }
+        }
+
+        function closeChat() {
+            activeChat = null;
+            renderChatList();
+
+            document.getElementById('sidebar').classList.remove('hidden');
+            document.body.classList.remove('chat-open');
+
+            document.getElementById('noChat').style.display = 'flex';
+            document.getElementById('chatView').classList.remove('active');
+            cancelReply();
+        }
+
+        // ============================================
+        // MESSAGES
+        // ============================================
+        async function loadMessages() {
+            if (!activeChat) return;
+            const chatId = activeChat.id;
+            
+            const messagesEl = document.getElementById('messages');
+            messagesEl.innerHTML = '';
+            
+            try {
+                const res = await fetch('/api/v1/messages/' + chatId, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const data = await res.json();
+                if (!activeChat || activeChat.id !== chatId) return;
+                
+                if (data.messages && data.messages.length > 0) {
+                    // Расшифровываем сообщения если E2E включён
+                    const decrypted = await Promise.all(data.messages.map(async m => {
+                        if (m.isEncrypted && m.encryptionIv && window.E2E) {
+                            try {
+                                m.content = await window.E2E.decrypt(m.content, m.encryptionIv, activeChat.id, token);
+                            } catch (_) {}
+                        }
+                        // Расшифровываем replyToContent
+                        if (m.replyToEncrypted && m.replyToIv && window.E2E) {
+                            try {
+                                m.replyToContent = await window.E2E.decrypt(m.replyToContent, m.replyToIv, activeChat.id, token);
+                            } catch (_) {}
+                        }
+                        return m;
+                    }));
+                    decrypted.forEach(function(m) {
+                        messagesData[m.id] = m;
+                    });
+                    decrypted.forEach(function(m) {
+                        messagesEl.appendChild(createMessageElement(m));
+                    });
+                } else {
+                    messagesEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px;font-size:14px;">' + tr('noMessages', 'Нет сообщений') + '</div>';
+                }
+                scrollToBottom();
+                markChatAsRead(chatId, { silent: true }).catch(function(err) {
+                    console.error('Mark chat as read error:', err);
+                });
+            } catch (err) {
+                console.error('Load messages error:', err);
+            }
+        }
+
+                // ============================================
+        // CONTEXT MENU
+        // ============================================
+        // Проверка, является ли ID валидным UUID (а не временным ID)
+        function isValidUUID(id) {
+            if (!id || typeof id !== 'string') return false;
+            // UUID имеет формат xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+            // или не начинается с "temp-"
+            return !id.startsWith('temp-') && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+        }
+
+        function showMessageContextMenu(e, messageId, element, text, senderName) {
+            // Для pending сообщений показываем только копирование
+            if (!isValidUUID(messageId)) {
+                currentMessageId = messageId;
+                currentMessageElement = element;
+                // Показываем упрощённое меню только с копированием
+                const menu = document.getElementById('messageContextMenu');
+                const x = e.pageX || (e.touches && e.touches[0].pageX) || e.clientX || 0;
+                const y = e.pageY || (e.touches && e.touches[0].pageY) || e.clientY || 0;
+                menu.style.left = Math.min(x, window.innerWidth - 200) + 'px';
+                menu.style.top = Math.min(y, window.innerHeight - 250) + 'px';
+                // Скрываем все кроме копирования
+                menu.querySelectorAll('.context-menu-item').forEach(item => {
+                    item.style.display = item.onclick && item.onclick.toString().includes('copyMessageText') ? 'flex' : 'none';
+                });
+                menu.classList.add('active');
+                return;
+            }
+
+            // Восстанавливаем все пункты меню
+            document.getElementById('messageContextMenu').querySelectorAll('.context-menu-item').forEach(item => {
+                item.style.display = '';
+            });
+            
+            currentMessageId = messageId;
+            currentMessageElement = element;
+
+            // Показываем кнопку скачать только для фото/гифок
+            const msg = messagesData[messageId];
+            const downloadItem = document.getElementById('downloadMediaItem');
+            const copyItem = document.getElementById('copyTextItem');
+            const copyLabel = document.getElementById('copyItemLabel');
+            const isMedia = msg && (msg.type === 'image' || msg.type === 'photo' || msg.type === 'gif');
+            if (downloadItem) downloadItem.style.display = isMedia ? 'flex' : 'none';
+        if (copyLabel) copyLabel.textContent = isMedia ? (window.i18n?.t('copyPhoto') || 'Скопировать фото') : (window.i18n?.t('copyText') || 'Копировать текст');
+            if (copyItem) copyItem.onclick = isMedia ? copyMessagePhoto : copyMessageText;
+            
+            const menu = document.getElementById('messageContextMenu');
+            const x = e.pageX || (e.touches && e.touches[0].pageX) || e.clientX || 0;
+            const y = e.pageY || (e.touches && e.touches[0].pageY) || e.clientY || 0;
+            
+            // Сначала показываем меню чтобы получить его размеры
+            menu.style.visibility = 'hidden';
+            menu.style.display = 'block';
+            const menuW = menu.offsetWidth || 220;
+            const menuH = menu.offsetHeight || 300;
+            menu.style.display = '';
+            menu.style.visibility = '';
+
+            // Позиционируем с учётом границ экрана
+            let left = x;
+            let top = y;
+
+            // Не выходим за правый край
+            if (left + menuW > window.innerWidth - 8) left = window.innerWidth - menuW - 8;
+            if (left < 8) left = 8;
+
+            // Не выходим за нижний край — показываем выше курсора
+            if (top + menuH > window.innerHeight - 8) top = y - menuH;
+            if (top < 8) top = 8;
+
+            menu.style.left = left + 'px';
+            menu.style.top = top + 'px';
+            menu.classList.add('active');
+            
+            const isSender = element.classList.contains('outgoing');
+            const deleteForAll = menu.querySelector('.context-menu-item.danger');
+            if (deleteForAll) {
+                deleteForAll.style.display = isSender ? 'flex' : 'none';
+            }
+            // Редактировать можно только свои сообщения (не бота)
+            const editItem = menu.querySelector('.context-menu-item[onclick="editMessage()"]');
+            const msgData = messagesData[currentMessageId];
+            const isBotMessage = msgData && (msgData.senderUsername === 'craneapp_bot' || msgData.isBot === true);
+            const isOwnMessage = msgData && (msgData.senderId === user.id || msgData.outgoing) && !isBotMessage;
+            if (editItem) editItem.style.display = isOwnMessage ? 'flex' : 'none';
+
+            // Подсвечиваем уже поставленные реакции
+            updateContextMenuReactions(messageId);
+        }
+
+        document.addEventListener('click', function(e) {
+            const menu = document.getElementById('messageContextMenu');
+            // Не закрываем если клик внутри меню
+            if (menu.contains(e.target)) return;
+            menu.classList.remove('active');
+            // Сбрасываем расширенные реакции
+            const reactionsRow = document.getElementById('contextReactions');
+            if (reactionsRow) {
+                reactionsRow.classList.remove('expanded');
+                reactionsRow.querySelectorAll('.context-reaction-extra').forEach(el => el.remove());
+                const moreBtn = reactionsRow.querySelector('.context-reaction-more');
+                if (moreBtn) moreBtn.textContent = '＋';
+            }
+        });
+
+        function replyToMessage() {
+            // Проверка что messageId валиден
+            if (!isValidUUID(currentMessageId)) {
+                showToast('info', 'Сообщение ещё отправляется...', '⏳');
+                return;
+            }
+            document.getElementById('messageContextMenu').classList.remove('active');
+            const msg = messagesData[currentMessageId];
+            const name = msg && (msg.senderName || msg.senderFirstName) || tr('user', 'Пользователь');
+            const text = msg && (msg.content || msg.text) || '';
+            setReplyTo(currentMessageId, name, text);
+        }
+
+        function editMessage() {
+            // Проверка что messageId валиден
+            if (!isValidUUID(currentMessageId)) {
+                showToast('info', 'Сообщение ещё отправляется...', '⏳');
+                return;
+            }
+            document.getElementById('messageContextMenu').classList.remove('active');
+            document.getElementById('editMessageText').value = currentMessageElement.querySelector('.message-text').textContent;
+            document.getElementById('editMessageModal').classList.add('active');
+            setTimeout(function() {
+                document.getElementById('editMessageText').focus();
+            }, 100);
+        }
+
+        function closeEditMessageModal() {
+            document.getElementById('editMessageModal').classList.remove('active');
+        }
+
+        function saveEditedMessage() {
+            const newText = document.getElementById('editMessageText').value.trim();
+            if (!newText) {
+                showToast('error', 'Введите текст', '⚠️');
+                return;
+            }
+            
+            // Проверка что messageId валиден
+            if (!isValidUUID(currentMessageId)) {
+                showToast('error', 'Сообщение ещё отправляется', '⚠️');
+                return;
+            }
+            
+            fetch('/api/v1/messages/' + currentMessageId, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token
+                },
+                body: JSON.stringify({ content: newText })
+            }).then(function(r) { return r.json(); }).then(function(d) {
+                if (d.success) {
+                    currentMessageElement.querySelector('.message-text').innerHTML = renderFormattedText(newText);
+                    closeEditMessageModal();
+                    showToast('success', 'Сохранено', '✓');
+                } else {
+                    showToast('error', d.error || 'Ошибка', '❌');
+                }
+            }).catch(function(err) {
+                showToast('error', 'Ошибка сохранения', '❌');
+            });
+        }
+                
+        function deleteMessage(forEveryone) {
+            // Проверка что messageId валиден
+            if (!isValidUUID(currentMessageId)) {
+                showToast('info', 'Сообщение ещё отправляется...', '⏳');
+                return;
+            }
+            document.getElementById('messageContextMenu').classList.remove('active');
+            
+            document.getElementById('confirmTitle').textContent = forEveryone ? (window.i18n?.t('deleteForEveryoneQuestion') || 'Удалить для всех?') : (window.i18n?.t('deleteQuestion') || 'Удалить?');
+            document.getElementById('confirmText').textContent = 'Это действие нельзя отменить.';
+            
+            document.getElementById('confirmBtn').onclick = function() {
+                performDelete(forEveryone);
+                closeConfirmModal();
+            };
+            
+            document.getElementById('confirmModal').classList.add('active');
+        }
+
+        async function performDelete(forEveryone) {
+            // Проверка что messageId валиден
+            if (!isValidUUID(currentMessageId)) {
+                showToast('error', 'Сообщение ещё отправляется', '⚠️');
+                return;
+            }
+            try {
+                const res = await fetch('/api/v1/messages/' + currentMessageId + '?forEveryone=' + forEveryone, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (res.ok) {
+                    currentMessageElement.remove();
+                    delete messagesData[currentMessageId];
+                    showToast('success', 'Удалено', '✓');
+                }
+            } catch (err) {
+                showToast('error', 'Ошибка', '❌');
+            }
+        }
+
+        // ============================================
+        // PIN MESSAGE
+        // ============================================
+        // Обновляем handleWsMessage для обработки событий закрепления
+        function copyMessageText() {
+            // Проверка что messageId валиден
+            if (!isValidUUID(currentMessageId)) {
+                showToast('info', 'Сообщение ещё отправляется...', '⏳');
+                return;
+            }
+            document.getElementById('messageContextMenu').classList.remove('active');
+            const text = currentMessageElement.querySelector('.message-text').textContent;
+            navigator.clipboard.writeText(text);
+            showToast('success', 'Скопировано', '📋');
+        }
+
+        // ============================================
+        // PIN MESSAGE
+        // ============================================
+        async function pinMessage() {
+            document.getElementById('messageContextMenu').classList.remove('active');
+            
+            if (!currentMessageId || !currentMessageElement) return;
+            
+            try {
+                const res = await fetch('/api/v1/messages/' + currentMessageId + '/pin', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                
+                const data = await res.json();
+                
+                if (res.ok && data.success) {
+                    // Добавляем визуальный индикатор
+                    currentMessageElement.classList.add('pinned');
+                    
+                    // Обновляем UI - показываем закрепленное сообщение
+                    showPinnedMessage(data.message);
+                    
+                    showToast('success', 'Сообщение закреплено', '📌');
+                } else {
+                    showToast('error', data.error || 'Ошибка', '❌');
+                }
+            } catch (err) {
+                console.error('Pin error:', err);
+                showToast('error', 'Ошибка закрепления', '❌');
+            }
+        }
+
+        async function unpinMessage() {
+            if (!currentMessageId) return;
+            
+            try {
+                const res = await fetch('/api/v1/messages/' + currentMessageId + '/pin', {
+                    method: 'DELETE',
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                
+                if (res.ok) {
+                    // Убираем визуальный индикатор
+                    if (currentMessageElement) {
+                        currentMessageElement.classList.remove('pinned');
+                    }
+                    
+                    // Скрываем закрепленное сообщение
+                    hidePinnedMessage();
+                    
+                    showToast('success', 'Сообщение откреплено', '📌');
+                }
+            } catch (err) {
+                showToast('error', 'Ошибка', '❌');
+            }
+        }
+
+        function showPinnedMessage(msg) {
+            // Используем новую панельку в header
+            const barEl = document.getElementById('pinnedMessageBar');
+            const textEl = document.getElementById('pinnedMessageBarText');
+            
+            if (!barEl || !textEl) {
+                // Если панельки нет, создаем её
+                createPinnedMessageBar();
+            }
+            
+            const pinnedBar = document.getElementById('pinnedMessageBar');
+            const pinnedText = document.getElementById('pinnedMessageBarText');
+            
+            if (msg.type === 'image' || msg.type === 'photo') {
+                pinnedText.innerHTML = '<span>📷</span> Фото';
+            } else if (msg.type === 'video') {
+                pinnedText.innerHTML = '<span>🎬</span> Видео';
+            } else if (msg.type === 'gif') {
+                pinnedText.innerHTML = '<span>🎞</span> GIF';
+            } else if (msg.type === 'sticker') {
+                pinnedText.innerHTML = '<span>🎨</span> Стикер';
+            } else {
+                const text = msg.content || '';
+            pinnedText.innerHTML = '<span>📌</span> <strong>' + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ':</strong> ' + (text.length > 60 ? text.substring(0, 60) + '...' : text);
+            }
+            
+            pinnedBar.classList.add('active');
+            
+            // Также обновляем старую панель (если есть)
+            const container = document.getElementById('pinnedMessageContainer');
+            if (container) {
+                const contentEl = document.getElementById('pinnedMessageContent');
+                if (contentEl) {
+                    contentEl.innerHTML = pinnedText.innerHTML;
+                }
+                container.classList.add('active');
+            }
+        }
+
+        function hidePinnedMessage() {
+            // Скрываем новую панельку в header
+            const barEl = document.getElementById('pinnedMessageBar');
+            if (barEl) {
+                barEl.classList.remove('active');
+            }
+            
+            // Также скрываем старую панель (если есть)
+            const container = document.getElementById('pinnedMessageContainer');
+            if (container) {
+                container.classList.remove('active');
+            }
+        }
+
+        function hidePinnedMessageBar() {
+            hidePinnedMessage();
+            event.stopPropagation();
+        }
+
+        function createPinnedMessageBar() {
+            const chatView = document.getElementById('chatView');
+            if (!chatView) return;
+            
+            // Проверяем, существует ли уже панель
+            if (document.getElementById('pinnedMessageBar')) return;
+            
+            const chatHeader = document.getElementById('chatHeader');
+            if (!chatHeader) return;
+            
+            const bar = document.createElement('div');
+            bar.id = 'pinnedMessageBar';
+            bar.className = 'pinned-message-bar';
+            bar.setAttribute('onclick', 'openPinnedMessage()');
+            bar.innerHTML = 
+                '<div class="pinned-message-bar-icon">📌</div>' +
+                '<div class="pinned-message-bar-text" id="pinnedMessageBarText">Закрепленное сообщение</div>' +
+                '<button class="pinned-message-bar-close" onclick="hidePinnedMessageBar()">×</button>';
+            
+            chatHeader.parentNode.insertBefore(bar, chatHeader.nextSibling);
+        }
+
+        function createPinnedMessageContainer() {
+            const chatHeader = document.getElementById('chatHeader');
+            if (!chatHeader) return;
+            
+            const pinnedEl = document.createElement('div');
+            pinnedEl.id = 'pinnedMessageContainer';
+            pinnedEl.className = 'pinned-message-container';
+            pinnedEl.innerHTML = 
+                '<div id="pinnedMessageContent" onclick="openPinnedMessage()"></div>' +
+                '<button class="pinned-close-btn" onclick="hidePinnedMessage()">✕</button>';
+            
+            chatHeader.parentNode.insertBefore(pinnedEl, chatHeader.nextSibling);
+        }
+
+        function openPinnedMessage() {
+            // Прокрутка к закрепленному сообщению
+            const pinnedMsgEl = document.querySelector('.message.pinned');
+            if (pinnedMsgEl) {
+                pinnedMsgEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                pinnedMsgEl.classList.add('highlight');
+                setTimeout(function() {
+                    pinnedMsgEl.classList.remove('highlight');
+                }, 2000);
+            }
+        }
+
+        // Загрузить закрепленное сообщение при открытии чата
+        async function loadPinnedMessage(chatId) {
+            try {
+                const res = await fetch('/api/v1/chats/' + chatId + '/pinned', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                
+                const data = await res.json();
+                
+                if (data.message) {
+                    showPinnedMessage(data.message);
+                    
+                    // Добавляем класс pinned соответствующему сообщению
+                    const msgEl = document.querySelector('[data-message-id="' + data.message.id + '"]');
+                    if (msgEl) {
+                        msgEl.classList.add('pinned');

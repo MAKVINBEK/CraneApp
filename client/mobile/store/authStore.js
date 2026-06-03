@@ -1,10 +1,7 @@
-/**
- * Authentication Store
- * Manages auth state in localStorage
- */
+import { apiClient } from '../infrastructure/api/apiFactory.js';
+import { STORAGE_KEYS } from '../shared/constants/config.js';
 
-const TOKEN_KEY = 'craneapp_auth_token';
-const USER_KEY = 'craneapp_user_data';
+const { TOKEN: TOKEN_KEY, USER: USER_KEY } = STORAGE_KEYS;
 
 export const authStore = {
     getToken() {
@@ -21,7 +18,15 @@ export const authStore = {
 
     getUser() {
         const data = localStorage.getItem(USER_KEY);
-        return data ? JSON.parse(data) : null;
+        if (!data) return null;
+
+        try {
+            return JSON.parse(data);
+        } catch (error) {
+            console.error('Failed to parse auth user:', error);
+            this.removeUser();
+            return null;
+        }
     },
 
     setUser(user) {
@@ -46,20 +51,12 @@ export const authStore = {
         if (!token) return false;
 
         try {
-            const response = await fetch('/api/v1/auth/validate', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                this.setUser(data.user);
-                return true;
-            } else {
-                this.logout();
-                return false;
-            }
+            const response = await apiClient.get('/auth/validate');
+            this.setUser(response.data.user);
+            return true;
         } catch (error) {
             console.error('Session validation error:', error);
+            this.logout();
             return false;
         }
     }

@@ -1,0 +1,650 @@
+                    archiveText.setAttribute('data-i18n', 'unarchiveChat');
+                    archiveText.textContent = tr('unarchiveChat', 'Unarchive');
+                }
+                if (archiveItem) archiveItem.onclick = function() { unarchiveChatFromMenu(); };
+            } else {
+                if (archiveText) {
+                    archiveText.setAttribute('data-i18n', 'archiveChat');
+                    archiveText.textContent = tr('archiveChat', 'Archive');
+                }
+                if (archiveItem) archiveItem.onclick = function() { archiveChatFromMenu(); };
+            }
+        }
+
+        function pinChatFromMenu() {
+            document.getElementById('chatContextMenu').classList.remove('active');
+            const isPinned = pinnedChatIds.has(currentContextChatId);
+            if (isPinned) {
+                unpinChat(currentContextChatId);
+            } else {
+                pinChat(currentContextChatId);
+            }
+        }
+
+        function archiveChatFromMenu() {
+            document.getElementById('chatContextMenu').classList.remove('active');
+            archiveChat(currentContextChatId);
+        }
+
+        function unarchiveChatFromMenu() {
+            document.getElementById('chatContextMenu').classList.remove('active');
+            unarchiveChat(currentContextChatId);
+        }
+
+        async function addContextChatToFolder() {
+            const chatId = currentContextChatId;
+            document.getElementById('chatContextMenu').classList.remove('active');
+            if (!chatId) return;
+            folderSelectChatId = chatId;
+            await openFolderSelectModal();
+        }
+
+        async function markChatReadFromMenu() {
+            const chatId = currentContextChatId;
+            document.getElementById('chatContextMenu').classList.remove('active');
+            if (!chatId) return;
+
+            try {
+                await markChatAsRead(chatId);
+            } catch (err) {
+                showToast('error', tr('saveError', 'Ошибка сохранения'), '❌');
+            }
+        }
+
+        function deleteChatFromMenu() {
+            document.getElementById('chatContextMenu').classList.remove('active');
+            const chat = allChats.find(c => c.id === currentContextChatId);
+            activeChat = { id: currentContextChatId, name: chat?.name || chat?.title || 'Чат' };
+            deleteCurrentChat();
+        }
+
+        // Закрыть контекстное меню при клике
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.chat-context-menu')) {
+                document.getElementById('chatContextMenu').classList.remove('active');
+            }
+        });
+
+        // ============================================
+        // VIDEO NOTES (кружки)
+        // ============================================
+        let videoNoteMode = false; // false = голосовое, true = кружок
+        let videoNoteRecorder = null;
+        let videoNoteChunks = [];
+        let videoNoteTimer = null;
+        let videoNoteSeconds = 0;
+        let videoNoteStream = null;
+        let videoNoteRecording = false;
+        const VIDEO_NOTE_MAX = 60; // 1 минута
+
+        function switchToVideoNote() {
+            if (!cameraAvailable) return; // нет камеры — не переключаем
+            videoNoteMode = true;
+            document.getElementById('videoNoteBtn').style.display = 'flex';
+        }
+
+        let videoNoteHoldTimer = null;
+        const VIDEO_NOTE_HOLD_DELAY = 300; // мс до начала записи
+
+        function videoNoteMouseDown(e) {
+            e.preventDefault();
+            videoNoteHoldTimer = setTimeout(() => {
+                videoNoteHoldTimer = null;
+                startVideoNoteHold(e);
+            }, VIDEO_NOTE_HOLD_DELAY);
+        }
+
+        function videoNoteMouseUp(e) {
+            if (videoNoteHoldTimer) {
+                // Короткий клик — скрываем кнопку видео
+                clearTimeout(videoNoteHoldTimer);
+                videoNoteHoldTimer = null;
+                document.getElementById('videoNoteBtn').style.display = 'none';
+            } else {
+                // Удержание — останавливаем запись
+                stopVideoNoteHold(e);
+            }
+        }
+
+        function videoNoteTouchStart(e) {
+            e.preventDefault();
+            videoNoteHoldTimer = setTimeout(() => {
+                videoNoteHoldTimer = null;
+                startVideoNoteHold(e);
+            }, VIDEO_NOTE_HOLD_DELAY);
+        }
+
+        function videoNoteTouchEnd(e) {
+            if (videoNoteHoldTimer) {
+                clearTimeout(videoNoteHoldTimer);
+                videoNoteHoldTimer = null;
+                document.getElementById('videoNoteBtn').style.display = 'none';
+            } else {
+                stopVideoNoteHold(e);
+            }
+        }
+
+        // Обновляем переключение кнопок при вводе текста
+        function getInputText() {
+            const input = document.getElementById('msgInput');
+            // Собираем текст: обычные текстовые узлы + alt у apple-emoji img
+            let text = '';
+            function walk(node) {
+                if (node.nodeType === Node.TEXT_NODE) {
+                    text += node.textContent;
+                } else if (node.nodeType === Node.ELEMENT_NODE) {
+                    if (node.tagName === 'IMG' && node.classList.contains('apple-emoji')) {
+                        text += node.alt || '';
+                    } else if (node.tagName === 'BR') {
+                        text += '\n';
+                    } else {
+                        node.childNodes.forEach(walk);
+                    }
+                }
+            }
+            input.childNodes.forEach(walk);
+            return text.trim();
+        }
+
+        function updateSendButton() {
+            const hasText = getInputText().length > 0;
+            document.getElementById('sendBtn').style.display = hasText ? 'flex' : 'none';
+            if (hasText) {
+                document.getElementById('videoNoteBtn').style.display = 'none';
+            } else {
+                if (videoNoteMode && cameraAvailable) {
+                    document.getElementById('videoNoteBtn').style.display = 'flex';
+                } else {
+                    document.getElementById('videoNoteBtn').style.display = 'none';
+                    if (!cameraAvailable) videoNoteMode = false;
+                }
+            }
+        }
+        const _origInputHandler = document.getElementById('msgInput').oninput;
+        document.getElementById('msgInput').addEventListener('input', updateSendButton);
+        window._updateSendButton = updateSendButton;
+
+        
+        async function startVideoNoteHold(e) {
+            if (videoNoteRecording) return;
+            if (!activeChat) { showToast('info', 'Выберите чат', '⚠️'); return; }
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                showToast('error', 'Браузер не поддерживает запись', '📹'); return;
+            }
+
+            try {
+                // Пробуем с фронтальной камерой, при ошибке — любую
+                try {
+                    videoNoteStream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: 'user', width: { ideal: 480 }, height: { ideal: 480 } },
+                        audio: true
+                    });
+                } catch (_) {
+                    videoNoteStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                }
+
+                // Показываем предпросмотр
+                const preview = document.getElementById('videoNotePreview');
+                preview.srcObject = videoNoteStream;
+                document.getElementById('videoNoteOverlay').classList.add('active');
+
+                videoNoteChunks = [];
+                videoNoteSeconds = 0;
+                videoNoteRecording = true;
+
+                const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
+                    ? 'video/webm;codecs=vp9,opus'
+                    : MediaRecorder.isTypeSupported('video/webm')
+                    ? 'video/webm' : 'video/mp4';
+
+                videoNoteRecorder = new MediaRecorder(videoNoteStream, { mimeType });
+                videoNoteRecorder.ondataavailable = e => { if (e.data.size > 0) videoNoteChunks.push(e.data); };
+                videoNoteRecorder.onstop = () => {
+                    videoNoteStream.getTracks().forEach(t => t.stop());
+                    if (videoNoteChunks.length > 0 && !videoNoteCancelled) {
+                        const blob = new Blob(videoNoteChunks, { type: mimeType });
+                        sendVideoNote(blob, videoNoteSeconds);
+                    }
+                    resetVideoNoteUI();
+                };
+                videoNoteRecorder.start(100);
+
+                // Прогресс-бар и таймер
+                const circumference = 2 * Math.PI * 54;
+                const bar = document.getElementById('videoNoteProgressBar');
+                bar.style.strokeDasharray = circumference;
+                bar.style.strokeDashoffset = circumference;
+
+                videoNoteTimer = setInterval(() => {
+                    videoNoteSeconds++;
+                    const m = Math.floor(videoNoteSeconds / 60);
+                    const s = videoNoteSeconds % 60;
+                    document.getElementById('videoNoteTimer').textContent = m + ':' + String(s).padStart(2, '0');
+                    // Прогресс
+                    const progress = videoNoteSeconds / VIDEO_NOTE_MAX;
+                    bar.style.strokeDashoffset = circumference * (1 - progress);
+                    if (videoNoteSeconds >= VIDEO_NOTE_MAX) stopVideoNoteHold();
+                }, 1000);
+
+            } catch (err) {
+                console.error('Video note error:', err.name, err.message);
+                // Освобождаем стрим если он был частично захвачен
+                if (videoNoteStream) {
+                    videoNoteStream.getTracks().forEach(t => t.stop());
+                    videoNoteStream = null;
+                }
+                videoNoteRecording = false;
+                document.getElementById('videoNoteOverlay').classList.remove('active');
+
+                if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                    showToast('error', 'Нет доступа к камере — нажмите на 🔒 в адресной строке и разрешите камеру', '📹');
+                } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+                    showToast('error', 'Камера не найдена', '📹');
+                    cameraAvailable = false;
+                } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+                    showToast('error', 'Камера занята другим приложением', '📹');
+                } else if (err.name === 'OverconstrainedError') {
+                    showToast('error', 'Камера не поддерживает нужный формат', '📹');
+                    cameraAvailable = false;
+                } else if (err.name === 'SecurityError') {
+                    showToast('error', 'Доступ к камере заблокирован (нужен HTTPS)', '📹');
+                } else {
+                    showToast('error', 'Ошибка камеры: ' + (err.message || err.name), '📹');
+                }
+            }
+        }
+
+        let videoNoteCancelled = false;
+
+        function stopVideoNoteHold(e) {
+            if (!videoNoteRecording) return;
+            videoNoteCancelled = false;
+            clearInterval(videoNoteTimer);
+            videoNoteTimer = null;
+            videoNoteRecording = false;
+            if (videoNoteRecorder && videoNoteRecorder.state !== 'inactive') {
+                videoNoteRecorder.stop();
+            }
+        }
+
+        function stopVideoNoteHoldIfRecording() {
+            if (videoNoteRecording) stopVideoNoteHold();
+        }
+
+        function cancelVideoNote() {
+            videoNoteCancelled = true;
+            videoNoteChunks = [];
+            clearInterval(videoNoteTimer);
+            videoNoteTimer = null;
+            videoNoteRecording = false;
+            if (videoNoteRecorder && videoNoteRecorder.state !== 'inactive') {
+                videoNoteRecorder.stop();
+            }
+            if (videoNoteStream) videoNoteStream.getTracks().forEach(t => t.stop());
+            resetVideoNoteUI();
+        }
+
+        function resetVideoNoteUI() {
+            document.getElementById('videoNoteOverlay').classList.remove('active');
+            const preview = document.getElementById('videoNotePreview');
+            preview.srcObject = null;
+            videoNoteSeconds = 0;
+            videoNoteRecording = false;
+            videoNoteCancelled = false;
+            videoNoteStream = null;
+            videoNoteRecorder = null;
+            videoNoteChunks = [];
+            clearInterval(videoNoteTimer);
+            videoNoteTimer = null;
+        }
+
+        async function sendVideoNote(blob, duration) {
+            if (!activeChat) return;
+            const tempId = 'temp-' + Date.now();
+            const localUrl = URL.createObjectURL(blob);
+            const msg = {
+                id: tempId, senderId: user.id, type: 'video_note',
+                mediaUrl: localUrl, voiceDuration: duration,
+                time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
+                senderName: user.firstName || 'Вы', pending: true
+            };
+            messagesData[tempId] = msg;
+            document.getElementById('messages').appendChild(createMessageElement(msg));
+            scrollToBottom();
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const base64 = e.target.result;
+                try {
+                    const uploadRes = await fetch('/api/v1/upload', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                        body: JSON.stringify({ file: base64, type: 'video_note' })
+                    });
+                    const uploadData = await uploadRes.json();
+                    const serverUrl = uploadData.url;
+                    if (!serverUrl) { showToast('error', tr('loadingError', 'Ошибка загрузки'), '❌'); return; }
+                    URL.revokeObjectURL(localUrl);
+                    const res = await fetch('/api/v1/messages/' + activeChat.id, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                        body: JSON.stringify({ content: '', type: 'video_note', mediaUrl: serverUrl, mediaType: 'video_note', voiceDuration: duration })
+                    });
+                    const data = await res.json();
+                    if (data.message) { _confirmMessage(tempId, data.message); }
+                } catch (err) { showToast('error', tr('sendError', 'Ошибка отправки'), '❌'); }
+            };
+            reader.readAsDataURL(blob);
+        }
+
+        // Создание элемента видеокружка
+        function createVideoNoteElement(mediaUrl, duration) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'video-note-msg';
+
+            const circle = document.createElement('div');
+            circle.className = 'video-note-msg-circle';
+
+            const video = document.createElement('video');
+            video.src = mediaUrl;
+            video.loop = false;
+            video.muted = false;
+            video.playsInline = true;
+            video.preload = 'metadata';
+
+            // SVG прогресс
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('viewBox', '0 0 120 120');
+            svg.classList.add('video-note-msg-progress');
+            const circumference = 2 * Math.PI * 54;
+            const bgCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            bgCircle.setAttribute('cx', '60'); bgCircle.setAttribute('cy', '60'); bgCircle.setAttribute('r', '54');
+            bgCircle.classList.add('video-note-progress-bg');
+            const barCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            barCircle.setAttribute('cx', '60'); barCircle.setAttribute('cy', '60'); barCircle.setAttribute('r', '54');
+            barCircle.classList.add('video-note-progress-bar');
+            barCircle.style.strokeDasharray = circumference;
+            barCircle.style.strokeDashoffset = circumference;
+            svg.appendChild(bgCircle); svg.appendChild(barCircle);
+
+            // Кнопка play
+            const playBtn = document.createElement('div');
+            playBtn.className = 'video-note-msg-play';
+            playBtn.innerHTML = '▶';
+
+            let playing = false;
+            let progressInterval = null;
+
+            circle.onclick = function() {
+                if (playing) {
+                    video.pause();
+                    playing = false;
+                    playBtn.style.display = 'flex';
+                    clearInterval(progressInterval);
+                } else {
+                    // Останавливаем другие видео
+                    document.querySelectorAll('.video-note-msg video').forEach(v => { if (v !== video) v.pause(); });
+                    video.play().then(() => {
+                        playing = true;
+                        playBtn.style.display = 'none';
+                        progressInterval = setInterval(() => {
+                            if (!video.duration) return;
+                            const p = video.currentTime / video.duration;
+                            barCircle.style.strokeDashoffset = circumference * (1 - p);
+                        }, 100);
+                    }).catch(() => {});
+                }
+            };
+
+            video.addEventListener('ended', () => {
+                playing = false;
+                playBtn.style.display = 'flex';
+                clearInterval(progressInterval);
+                barCircle.style.strokeDashoffset = circumference;
+                video.currentTime = 0;
+            });
+
+            circle.appendChild(video);
+            circle.appendChild(svg);
+            circle.appendChild(playBtn);
+            wrapper.appendChild(circle);
+
+            // Длительность
+            if (duration > 0) {
+                const dur = document.createElement('div');
+                dur.className = 'video-note-msg-dur';
+                const m = Math.floor(duration / 60), s = duration % 60;
+                dur.textContent = m + ':' + String(s).padStart(2, '0');
+                wrapper.appendChild(dur);
+            }
+
+            return wrapper;
+        }
+         connectWebSocket();
+// Инициализируем браузерные уведомления
+initNotifications();
+ loadChats().then(function() {
+     initFolderTabs();
+     // Открываем чат из параметра URL (например из папки)
+     const params = new URLSearchParams(window.location.search);
+     const openChatId = params.get('openChat') || params.get('chat') || params.get('id');
+     if (openChatId) {
+         const chat = allChats.find(function(c) { return c.id === openChatId; });
+         if (chat) {
+             openChat(chat.id, chat.name || chat.title);
+         }
+         // Убираем параметр из URL
+         history.replaceState({}, '', window.location.pathname);
+     }
+ });
+ syncUserData();
+ updateSideMenuProfile();
+ if (window.applyTheme) window.applyTheme();
+ if (window.initEmojis) window.initEmojis();
+ loadGifs();
+ loadStickerPacks();
+ // Применяем переводы
+ setTimeout(function() { if (window.i18n) window.i18n.translatePage(); }, 200);
+ window.addEventListener('craneapp:languagechange', function() {
+     if (window.i18n) {
+         ['activeCallBar', 'inputLeftBtns', 'attachmentPanel', 'emojiPicker'].forEach(function(id) {
+             const el = document.getElementById(id);
+             if (el) window.i18n.translatePage(el);
+         });
+     }
+     renderChatList();
+     if (activeChat) loadMessages();
+     if (activeChat && chatUsers[activeChat.id]) {
+         const statusEl = document.getElementById('chatStatus');
+         const chatUser = chatUsers[activeChat.id];
+         if (statusEl) {
+             if (chatUser.isBlocked) {
+                 statusEl.textContent = tr('accountBlocked', 'Account blocked');
+                 statusEl.style.color = '#FF4B4B';
+             } else {
+                 statusEl.textContent = chatStatusText(chatUser);
+                 statusEl.style.color = (chatUser.isOnline || chatUser.online) ? 'var(--success-color)' : 'var(--text-muted)';
+             }
+         }
+     }
+     if (currentContextChatId && document.getElementById('chatContextMenu')?.classList.contains('active')) {
+         const isPinned = pinnedChatIds.has(currentContextChatId);
+         const isArchived = archivedChats.some(c => c.id === currentContextChatId);
+         const pinText = document.getElementById('contextPinText');
+         const archiveText = document.getElementById('contextArchiveText');
+         if (pinText) {
+             const pinKey = isPinned ? 'unpin' : 'pin';
+             pinText.setAttribute('data-i18n', pinKey);
+             pinText.textContent = tr(pinKey, isPinned ? 'Unpin' : 'Pin');
+         }
+         if (archiveText) {
+             const archiveKey = isArchived ? 'unarchiveChat' : 'archiveChat';
+             archiveText.setAttribute('data-i18n', archiveKey);
+             archiveText.textContent = tr(archiveKey, isArchived ? 'Unarchive' : 'Archive');
+         }
+     }
+     _renderActiveCallBar();
+ });
+
+        // ============================================
+        // CREATE GROUP
+        // ============================================
+        let groupSelectedIds = new Set();
+        let groupAvatarBase64 = null;
+        let groupSearchTimeout = null;
+
+        function openCreateGroupModal() {
+            groupSelectedIds = new Set();
+            groupAvatarBase64 = null;
+            document.getElementById('groupTitleInput').value = '';
+            document.getElementById('groupDescInput').value = '';
+            document.getElementById('groupMemberSearch').value = '';
+            document.getElementById('groupSelectedMembers').innerHTML = '';
+            document.getElementById('groupMemberList').innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px;">Начните вводить имя или @username</div>';
+            document.getElementById('groupAvatarPreview').innerHTML = '👥';
+            document.getElementById('createGroupModal').classList.add('active');
+        }
+
+        function closeCreateGroupModal() {
+            document.getElementById('createGroupModal').classList.remove('active');
+        }
+
+        // ── Support Requests ──────────────────────────────────────────────
+        let supportPanelOpen = false;
+
+        async function openSupportRequests() {
+            supportPanelOpen = !supportPanelOpen;
+            const panel = document.getElementById('supportPanel');
+            const msgs = document.getElementById('messages');
+            if (supportPanelOpen) {
+                panel.style.display = 'block';
+                msgs.style.display = 'none';
+                await loadSupportRequests();
+            } else {
+                panel.style.display = 'none';
+                msgs.style.display = 'flex';
+            }
+        }
+
+        // ── Reports Panel ──────────────────────────────────────────────────
+        let reportsPanelOpen = false;
+
+        async function openReportsPanel() {
+            reportsPanelOpen = !reportsPanelOpen;
+            const panel = document.getElementById('reportsPanel');
+            const msgs = document.getElementById('messages');
+            if (reportsPanelOpen) {
+                panel.style.display = 'block';
+                msgs.style.display = 'none';
+                await loadReports();
+            } else {
+                panel.style.display = 'none';
+                msgs.style.display = 'flex';
+            }
+        }
+
+        async function loadReports() {
+            const list = document.getElementById('reportsList');
+            list.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px">Загрузка...</div>';
+            try {
+                const r = await fetch('/api/v1/reports', { headers: { Authorization: 'Bearer ' + token } });
+                if (!r.ok) { list.innerHTML = '<div style="color:#FF4B4B;padding:12px">Ошибка загрузки</div>'; return; }
+                const d = await r.json();
+                const reports = d.reports || [];
+                if (!reports.length) {
+                    list.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:40px">Нет жалоб</div>';
+                    return;
+                }
+                list.innerHTML = reports.map(rep => {
+                    const statusColors = {
+                        pending: '#FFA500',
+                        resolved: '#00FF88',
+                        rejected: '#FF4B4B'
+                    };
+                    const statusLabels = {
+                        pending: 'На рассмотрении',
+                        resolved: 'Решено',
+                        rejected: 'Отклонено'
+                    };
+                    return `
+                        <div class="report-item" onclick="openReportDetails('${rep.id}')" style="background:var(--bg-tertiary);border-radius:12px;padding:12px;margin-bottom:8px;cursor:pointer;transition:background 0.2s;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                                <span style="font-weight:600;font-size:14px;">${rep.reported_username || 'Пользователь'}</span>
+                                <span style="font-size:12px;padding:4px 8px;border-radius:8px;background:${statusColors[rep.status] || '#888'}20;color:${statusColors[rep.status] || '#888'};">${statusLabels[rep.status] || rep.status}</span>
+                            </div>
+                            <div style="font-size:13px;color:var(--text-muted);margin-bottom:4px;">${getReasonLabel(rep.reason)}</div>
+                            <div style="font-size:12px;color:var(--text-secondary);">${new Date(rep.created_at).toLocaleString('ru-RU')}</div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (err) {
+                list.innerHTML = '<div style="color:#FF4B4B;padding:12px">Ошибка сети</div>';
+            }
+        }
+
+        function getReasonLabel(reason) {
+            const labels = {
+                spam: '📢 Спам',
+                harassment: '⚠️ Оскорбления',
+                violence: '🔫 Угрозы насилием',
+                scam: '💰 Мошенничество',
+                fake: '🎭 Фейковый аккаунт',
+                other: '📝 Другое'
+            };
+            return labels[reason] || reason;
+        }
+
+        async function forgiveUser() {
+            if (!currentProfileUser) return;
+            try {
+                const res = await fetch('/api/v1/users/' + currentProfileUser.id + '/forgive', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
+                });
+                if (res.ok) {
+                    showToast('success', 'Пользователь прощён', '✓');
+                    closeUserProfileModal();
+                    loadReports();
+                } else {
+                    showToast('error', 'Ошибка', '❌');
+                }
+            } catch (err) {
+                showToast('error', 'Ошибка сети', '❌');
+            }
+        }
+
+        async function muteUser() {
+            if (!currentProfileUser) return;
+            try {
+                const res = await fetch('/api/v1/users/' + currentProfileUser.id + '/mute', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }
+                });
+                if (res.ok) {
+                    showToast('success', 'Пользователь замучен', '🔇');
+                } else {
+                    showToast('error', 'Ошибка', '❌');
+                }
+            } catch (err) {
+                showToast('error', 'Ошибка сети', '❌');
+            }
+        }
+
+        let currentDurationAction = null;
+
+        function openDurationModal(action) {
+            currentDurationAction = action;
+            const modal = document.getElementById('durationModal');
+            const title = document.getElementById('durationModalTitle');
+            title.textContent = action === 'mute' ? (window.i18n?.t('muteDurationTitle') || '🔇 Выберите время мута') : (window.i18n?.t('banDurationTitle') || '🚫 Выберите время бана');
+            modal.classList.add('active');
+        }
+
+        function closeDurationModal() {
+            document.getElementById('durationModal').classList.remove('active');
+            currentDurationAction = null;
+        }
+
+        async function applyDuration(duration) {
+            if (!currentProfileUser || !currentDurationAction || !currentProfileUser.id) {

@@ -1,154 +1,35 @@
-import { config } from '../../app/config.js';
-import { authStore } from '../../store/authStore.js';
+import { services } from '../../application/services/serviceContainer.js';
 
-/**
- * Chat API Service
- * Handles all chat-related HTTP requests
- */
 export const chatApi = {
-  baseUrl: `${config.apiBaseUrl}/chats`,
-
-  async getChats() {
-    const token = authStore.getToken();
-    const response = await fetch(this.baseUrl, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to fetch chats');
-    }
-
-    return response.json();
+  getChats() {
+    return services.chatService.getChats();
   },
 
-  async getChat(chatId) {
-    const token = authStore.getToken();
-    const response = await fetch(`${this.baseUrl}/${chatId}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to fetch chat');
-    }
-
-    return response.json();
+  getChat(chatId) {
+    return services.chatService.getChat(chatId);
   },
 
-  async createChat(type, participants, title = '') {
-    const token = authStore.getToken();
-    const response = await fetch(this.baseUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ type, participants, title })
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to create chat');
-    }
-
-    return response.json();
+  createChat(type, participants, title = '') {
+    return services.chatService.createChat(type, participants, title);
   },
 
-  async updateChat(chatId, data) {
-    const token = authStore.getToken();
-    const response = await fetch(`${this.baseUrl}/${chatId}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify(data)
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to update chat');
-    }
-
-    return response.json();
+  updateChat(chatId, data) {
+    return services.chatService.updateChat(chatId, data);
   },
 
-  async deleteChat(chatId) {
-    const token = authStore.getToken();
-    const response = await fetch(`${this.baseUrl}/${chatId}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to delete chat');
-    }
-
-    return response.json();
+  deleteChat(chatId) {
+    return services.chatService.deleteChat(chatId);
   },
 
-  async muteChat(chatId, duration) {
-    const token = authStore.getToken();
-    const response = await fetch(`${this.baseUrl}/${chatId}/mute`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ duration })
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to mute chat');
-    }
-
-    return response.json();
+  muteChat(chatId, duration) {
+    return services.chatService.muteChat(chatId, duration);
   },
 
-  async pinChat(chatId) {
-    const token = authStore.getToken();
-    const response = await fetch(`${this.baseUrl}/${chatId}/pin`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to pin chat');
-    }
-
-    return response.json();
+  pinChat(chatId) {
+    return services.chatService.pinChat(chatId);
   },
 
-  async archiveChat(chatId) {
-    const token = authStore.getToken();
-    const response = await fetch(`${this.baseUrl}/${chatId}/archive`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to archive chat');
-    }
-
-    return response.json();
-  }
+  archiveChat(chatId) {
+    return services.chatService.archiveChat(chatId);
+  },
 };

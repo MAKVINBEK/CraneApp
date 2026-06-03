@@ -10,7 +10,9 @@
   "scripts": {
     "setup": "node setup.js",
     "start": "node server/gateway/apiGateway.js",
-    "dev": "npx nodemon server/gateway/apiGateway.js"
+    "dev": "npx nodemon server/gateway/apiGateway.js",
+    "test": "node scripts/checkArchitecture.js",
+    "check:architecture": "node scripts/checkArchitecture.js"
   },
   "dependencies": {
     "applemojis": "^0.0.3",

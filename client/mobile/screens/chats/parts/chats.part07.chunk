@@ -1,0 +1,650 @@
+                    }
+                } else {
+                    hidePinnedMessage();
+                }
+            } catch (err) {
+                console.error('Load pinned error:', err);
+            }
+        }
+
+        // Обновляем handleWsMessage для обработки событий закрепления
+        function copyMessageText() {
+            document.getElementById('messageContextMenu').classList.remove('active');
+            const text = currentMessageElement.querySelector('.message-text').textContent;
+            navigator.clipboard.writeText(text);
+            showToast('success', 'Скопировано', '📋');
+        }
+
+        // ============================================
+        // TEXT FORMATTING
+        // ============================================
+        function formatSelectedText(format) {
+            document.getElementById('messageContextMenu').classList.remove('active');
+            
+            const input = document.getElementById('msgInput');
+            const selection = window.getSelection();
+            
+            if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+                showToast('info', 'Выделите текст для форматирования', '⚠️');
+                return;
+            }
+            
+            const selectedText = selection.toString();
+            let prefix = '', suffix = '';
+            
+            switch (format) {
+                case 'bold':   prefix = '**'; suffix = '**'; break;
+                case 'italic': prefix = '_';  suffix = '_';  break;
+                case 'spoiler':prefix = '||'; suffix = '||'; break;
+            }
+            
+            document.execCommand('insertText', false, prefix + selectedText + suffix);
+            input.focus();
+        }
+
+        // Функция для рендеринга форматированного текста в сообщениях
+        function renderFormattedText(text) {
+            if (!text) return '';
+            
+            // Экранируем HTML
+            let escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            
+            // Обрабатываем форматирование
+            // Жирный: **текст**
+            escaped = escaped.replace(/\*\*(.+?)\*\*/g, '<span class="bold">$1</span>');
+            
+            // Курсив: _текст_
+            escaped = escaped.replace(/_(.+?)_/g, '<span class="italic">$1</span>');
+            
+            // Скрытый текст: ||текст||
+            escaped = escaped.replace(/\|\|(.+?)\|\|/g, '<span class="spoiler" onclick="this.classList.toggle(\'revealed\')">$1</span>');
+            
+            return escaped;
+        }
+
+        // ============================================
+        // FORWARD MESSAGE
+        // ============================================
+        let forwardMessageData = null;
+
+        function openForwardModal() {
+            document.getElementById('messageContextMenu').classList.remove('active');
+            
+            const msg = messagesData[currentMessageId];
+            if (!msg) return;
+            
+            forwardMessageData = {
+                content: msg.content || msg.text || '',
+                type: msg.type,
+                mediaUrl: msg.mediaUrl,
+                senderName: msg.senderFirstName || msg.sender?.firstName || msg.senderName || 'Пользователь'
+            };
+            
+            // Показываем превью сообщения
+            const previewEl = document.getElementById('forwardPreview');
+            if (forwardMessageData.type === 'image' || forwardMessageData.type === 'photo') {
+                previewEl.innerHTML = '<img src="' + forwardMessageData.mediaUrl + '" style="max-width: 60px; max-height: 60px; border-radius: 8px; vertical-align: middle; margin-right: 8px;"> <span>Фото</span>';
+            } else if (forwardMessageData.type === 'video') {
+                previewEl.innerHTML = '<span>🎬</span> <span>Видео</span>';
+            } else if (forwardMessageData.type === 'gif') {
+                previewEl.innerHTML = '<span>🎞</span> <span>GIF</span>';
+            } else if (forwardMessageData.type === 'sticker') {
+                previewEl.innerHTML = '<span>🎨</span> <span>Стикер</span>';
+            } else {
+                previewEl.innerHTML = '<strong>' + forwardMessageData.senderName + ':</strong> ' + (forwardMessageData.content.substring(0, 100) || 'Текстовое сообщение');
+            }
+            
+            // Загружаем список чатов
+            renderForwardChatsList();
+            
+            document.getElementById('forwardModal').classList.add('active');
+            
+            // Добавляем обработчик поиска
+            setTimeout(function() {
+                document.getElementById('forwardSearchInput').focus();
+            }, 100);
+        }
+
+        function closeForwardModal() {
+            document.getElementById('forwardModal').classList.remove('active');
+            document.getElementById('forwardSearchInput').value = '';
+            document.getElementById('forwardChatsList').innerHTML = '';
+            forwardMessageData = null;
+        }
+
+        function renderForwardChatsList(filter) {
+            const listEl = document.getElementById('forwardChatsList');
+            filter = (filter || '').toLowerCase();
+            
+            // Объединяем обычные и архивные чаты
+            let allChatsForForward = [...allChats];
+            
+            // Добавляем архивные чаты, которых нет в обычном списке
+            archivedChats.forEach(function(ac) {
+                if (!allChatsForForward.some(function(c) { return c.id === ac.id; })) {
+                    allChatsForForward.push(ac);
+                }
+            });
+            
+            // Фильтруем
+            let filteredChats = allChatsForForward;
+            if (filter) {
+                filteredChats = allChatsForForward.filter(function(c) {
+                    return c.name && c.name.toLowerCase().indexOf(filter) >= 0;
+                });
+            }
+            
+            if (filteredChats.length === 0) {
+                listEl.innerHTML = '<div style="text-align: center; padding: 30px; color: var(--text-muted);">' + tr('noChats', 'Нет чатов') + '</div>';
+                return;
+            }
+            
+            listEl.innerHTML = filteredChats.map(function(c) {
+                const ph = typeof c.av === 'string' && c.av.length <= 2 ? c.av : (c.name ? c.name[0] : '?');
+                return '<div class="forward-chat-item" onclick="forwardToChat(\'' + c.id + '\', \'' + c.name + '\')">' +
+                    '<div class="avatar">' + (c.av && c.av.startsWith('http') ? '<img src="' + c.av + '" alt="">' : ph) + '</div>' +
+                    '<div class="forward-chat-info">' +
+                    '<div class="forward-chat-name">' + c.name + '</div>' +
+                    '<div class="forward-chat-last">' + (c.lastMessage || tr('noMessages', 'Нет сообщений')) + '</div>' +
+                    '</div>' +
+                    '</div>';
+            }).join('');
+        }
+
+        async function forwardToChat(chatId, chatName) {
+            if (!forwardMessageData) return;
+            
+            try {
+                let messageContent = '';
+                let messageType = 'text';
+                let mediaUrl = null;
+                
+                if (forwardMessageData.type === 'image' || forwardMessageData.type === 'photo') {
+                    messageType = 'image';
+                    mediaUrl = forwardMessageData.mediaUrl;
+                    messageContent = 'Фото';
+                } else if (forwardMessageData.type === 'video') {
+                    messageType = 'video';
+                    mediaUrl = forwardMessageData.mediaUrl;
+                    messageContent = 'Видео';
+                } else if (forwardMessageData.type === 'gif') {
+                    messageType = 'gif';
+                    mediaUrl = forwardMessageData.mediaUrl;
+                    messageContent = 'GIF';
+                } else if (forwardMessageData.type === 'sticker') {
+                    messageType = 'sticker';
+                    mediaUrl = forwardMessageData.mediaUrl;
+                    messageContent = 'Стикер';
+                } else {
+                    messageContent = forwardMessageData.content;
+                }
+                
+                const res = await fetch('/api/v1/messages/' + chatId, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify({
+                        content: messageContent,
+                        type: messageType,
+                        mediaUrl: mediaUrl,
+                        forwardFrom: forwardMessageData.senderName
+                    })
+                });
+                
+                const data = await res.json();
+                
+                if (data.message) {
+                    showToast('success', 'Переслано в ' + chatName, '📨');
+                    closeForwardModal();
+                    loadChats(); // обновляем список чатов
+                }
+            } catch (err) {
+                console.error('Forward error:', err);
+                showToast('error', 'Ошибка пересылки', '❌');
+            }
+        }
+
+        // Обработчик поиска в модале пересылки
+        document.getElementById('forwardSearchInput').addEventListener('input', function(e) {
+            renderForwardChatsList(e.target.value.trim());
+        });
+
+        // Закрытие модала при клике на оверлей
+        document.getElementById('forwardModal').addEventListener('click', function(e) {
+            if (e.target.id === 'forwardModal') closeForwardModal();
+        });
+
+        function closeConfirmModal() {
+            document.getElementById('confirmModal').classList.remove('active');
+        }
+
+        // ============================================
+        // DELETE CHAT
+        // ============================================
+        function deleteCurrentChat() {
+            if (!activeChat) return;
+            
+        document.getElementById('confirmTitle').textContent = window.i18n?.t('deleteChatQuestion') || 'Удалить чат?';
+            document.getElementById('confirmText').textContent = 'Чат "' + activeChat.name + '" будет удалён.';
+            
+            document.getElementById('confirmBtn').onclick = async function() {
+                try {
+                    const res = await fetch('/api/v1/chats/' + activeChat.id, {
+                        method: 'DELETE',
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                        closeConfirmModal();
+                        closeChat();
+                        loadChats();
+                        showToast('success', tr('chatDeleted', 'Чат удалён'), '✓');
+                    } else {
+                        showToast('error', data.error || tr('deleteError', 'Ошибка удаления'), '❌');
+                    }
+                } catch (err) {
+                    showToast('error', tr('networkError', 'Ошибка сети'), '❌');
+                }
+            };
+            
+            document.getElementById('confirmModal').classList.add('active');
+        }
+
+        // ============================================
+        // SEND MESSAGE
+        // ============================================
+        async function send() {
+            const input = document.getElementById('msgInput');
+            const text = getInputText();
+            if (!text || !activeChat) return;
+            
+            closeEmojiPicker();
+            
+            const tempId = 'temp-' + Date.now();
+            const tempMsg = {
+                id: tempId,
+                content: text,
+                senderId: user.id,
+                time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
+                senderName: user.firstName || user.username || tr('you', 'Вы'),
+                replyToMessageId: replyingTo ? replyingTo.messageId : null,
+                pending: true
+            };
+            
+            messagesData[tempId] = tempMsg;
+            document.getElementById('messages').appendChild(createMessageElement(tempMsg));
+            scrollToBottom();
+            
+            input.innerText = '';
+            updateSendButton();
+            const replyData = replyingTo;
+            cancelReply();
+            
+            try {
+                const body = { content: text, type: 'text' };
+                if (replyData) body.replyTo = replyData.messageId;
+
+                // Если разработчик отвечает на support request через бота
+                const isBotChatLocal = activeChat && (activeChat.isBot || (activeChat.name === 'CraneApp'));
+                const activeSupportRaw = localStorage.getItem('craneapp_active_support_request');
+                const devUsernames = ['adm1','admin','admin1','qzlfee'];
+                const isDevUser = devUsernames.includes((user.username||'').toLowerCase());
+
+                if (isBotChatLocal && isDevUser && activeSupportRaw) {
+                    const activeSupport = JSON.parse(activeSupportRaw);
+                    if (activeSupport.requestId && activeSupport.requestId !== 'null') {
+                        // Отправляем ответ через reply API
+                        const replyRes = await fetch('/api/v1/support/requests/' + activeSupport.requestId + '/reply', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                            body: JSON.stringify({ message: text })
+                        });
+                        if (replyRes.ok) {
+                            localStorage.removeItem('craneapp_active_support_request');
+                            // Показываем подтверждение в чате с ботом
+                            const tempDiv = document.createElement('div');
+                            tempDiv.className = 'message outgoing';
+                            tempDiv.innerHTML = text + '<div class="msg-time">' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) + '</div>';
+                            document.getElementById('messages').appendChild(tempDiv);
+                            document.getElementById('messages').scrollTop = 999999;
+                            showToast('success', tr('replySentToUser', 'Ответ отправлен пользователю'), '✓');
+                            return;
+                        }
+                    }
+                }
+                // E2E шифрование — не шифруем чат с ботом
+                if (window.E2E && !isBotChatLocal) {
+                    const enc = await window.E2E.encrypt(text, activeChat.id, token);
+                    if (enc.isEncrypted) {
+                        body.content = enc.content;
+                        body.iv = enc.iv;
+                        body.isEncrypted = true;
+                        body.contentPlain = text; // Сохраняем оригинальный текст для поиска
+                    }
+                } else {
+                    // Если не шифруем, тоже сохраняем contentPlain
+                    body.contentPlain = text;
+                }
+
+                const res = await fetch('/api/v1/messages/' + activeChat.id, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+
+                if (res.ok && data.message) {
+                    _confirmMessage(tempId, data.message);
+                    loadChats();
+                } else if (res.status === 403) {
+                    const el = document.querySelector('[data-message-id="' + tempId + '"]');
+                    if (el) el.remove();
+                    delete messagesData[tempId];
+                    showMuteInfoModal(data.error || tr('muted', 'Вы замучены'));
+                } else {
+                    const el = document.querySelector('[data-message-id="' + tempId + '"]');
+                    if (el) el.remove();
+                    delete messagesData[tempId];
+                    showToast('error', data.error || tr('notSent', 'Не отправлено'), '❌');
+                }
+            } catch (err) {
+                const el = document.querySelector('[data-message-id="' + tempId + '"]');
+                if (el) el.remove();
+                delete messagesData[tempId];
+                showToast('error', tr('notSent', 'Не отправлено'), '❌');
+            }
+        }
+
+        // ============================================
+        // INPUT TYPING
+        // ============================================
+        document.getElementById('msgInput').addEventListener('input', sendTyping);
+
+        // Вставка фото из буфера обмена
+        const PASTE_IMAGE_MAX_FILE_SIZE = 50 * 1024 * 1024;
+        document.getElementById('msgInput').addEventListener('paste', function(e) {
+            const items = e.clipboardData && e.clipboardData.items;
+            if (!items) return;
+            for (const item of items) {
+                if (item.type.startsWith('image/')) {
+                    e.preventDefault();
+                    const file = item.getAsFile();
+                    if (!file) return;
+                    if (file.size > PASTE_IMAGE_MAX_FILE_SIZE) {
+                        showToast('error', tr('fileTooLarge50', 'Файл слишком большой. Максимум 50 МБ'), '❌');
+                        return;
+                    }
+                    const reader = new FileReader();
+                    reader.onload = e2 => showMediaSendPreview(e2.target.result, 'image');
+                    reader.readAsDataURL(file);
+                    return;
+                }
+            }
+        });
+
+        // ============================================
+        // TAB BAR
+        // ============================================
+        const tabs = [
+            { icon: '👥', labelKey: 'contacts', page: '../contacts/contacts.html' },
+            { icon: '📞', labelKey: 'calls', page: '../calls/calls.html' },
+            { icon: '💬', labelKey: 'chats', page: './chats.html', active: true },
+            { icon: '⚙', labelKey: 'settings', page: '../settings/settings.html' }
+        ];
+        
+        const tabBar = document.getElementById('tabBar');
+        tabs.forEach(function(t) {
+            const div = document.createElement('div');
+            div.className = 'tab-item' + (t.active ? ' active' : '');
+            const label = (window.i18n && window.i18n.t(t.labelKey)) || t.labelKey;
+            div.innerHTML = '<span class="tab-icon">' + t.icon + '</span><span class="tab-label" data-i18n="' + t.labelKey + '">' + label + '</span>';
+            div.onclick = function() { if (!t.active) location.href = t.page; };
+            tabBar.appendChild(div);
+        });
+
+        // ============================================
+        // TOAST
+        // ============================================
+        function showToast(type, message, icon) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = 'toast ' + type;
+            if (window.i18n && typeof message === 'string') {
+                message = window.i18n.localizeText(message);
+            }
+            toast.innerHTML = '<span>' + icon + '</span><span>' + message + '</span>';
+            container.appendChild(toast);
+            setTimeout(function() {
+                toast.style.opacity = '0';
+                setTimeout(function() { toast.remove(); }, 300);
+            }, 3000);
+        }
+
+        // ============================================
+        // PIN & ARCHIVE CHATS
+        // ============================================
+
+        // Pin чат
+        async function pinChat(chatId) {
+            try {
+                const res = await fetch('/api/v1/chats/' + chatId + '/pin', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: '{}'
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    pinnedChatIds.add(chatId);
+                    showToast('success', tr('chatPinned', 'Чат закреплён'), '📌');
+                    loadChats();
+                } else {
+                    showToast('error', data.error || tr('error', 'Ошибка'), '❌');
+                }
+            } catch (err) {
+                showToast('error', tr('networkError', 'Ошибка сети'), '❌');
+            }
+        }
+
+        async function unpinChat(chatId) {
+            try {
+                const res = await fetch('/api/v1/chats/' + chatId + '/pin', {
+                    method: 'DELETE',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: '{}'
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    pinnedChatIds.delete(chatId);
+                    showToast('success', tr('chatUnpinned', 'Чат откреплён'), '📌');
+                    loadChats();
+                } else {
+                    showToast('error', data.error || tr('error', 'Ошибка'), '❌');
+                }
+            } catch (err) {
+                showToast('error', tr('networkError', 'Ошибка сети'), '❌');
+            }
+        }
+
+        async function archiveChat(chatId) {
+            try {
+                const res = await fetch('/api/v1/chats/' + chatId + '/archive', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: '{}'
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    showToast('success', tr('chatArchived', 'Чат архивирован'), '📁');
+                    loadChats();
+                } else {
+                    showToast('error', data.error || tr('error', 'Ошибка'), '❌');
+                }
+            } catch (err) {
+                showToast('error', tr('networkError', 'Ошибка сети'), '❌');
+            }
+        }
+
+        async function unarchiveChat(chatId) {
+            try {
+                const res = await fetch('/api/v1/chats/' + chatId + '/archive', {
+                    method: 'DELETE',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: '{}'
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    showToast('success', tr('chatRestored', 'Чат восстановлен'), '📁');
+                    loadChats();
+                } else {
+                    showToast('error', data.error || tr('error', 'Ошибка'), '❌');
+                }
+            } catch (err) {
+                showToast('error', tr('networkError', 'Ошибка сети'), '❌');
+            }
+        }
+
+        // Загрузить архивированные чаты
+        async function loadArchivedChats() {
+            try {
+                const res = await fetch('/api/v1/chats/archived', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const data = await res.json();
+                
+                archivedChats = [];
+                const seenArchivedIds = new Set(); // Защита от дубликатов
+                
+                if (data.chats && data.chats.length > 0) {
+                    // Сначала собираем все ID приватных чатов (только уникальные)
+                    const privateChatIds = [];
+                    const seenChatIds = new Set();
+                    
+                    for (const c of data.chats) {
+                        if (!seenChatIds.has(c.id)) {
+                            seenChatIds.add(c.id);
+                            if (c.type === 'private') {
+                                privateChatIds.push(c.id);
+                            }
+                        }
+                    }
+                    
+                    // Параллельно загружаем участников для всех приватных чатов
+                    const memberPromises = privateChatIds.map(async (chatId) => {
+                        try {
+                            const mRes = await fetch('/api/v1/chats/' + chatId + '/members', {
+                                headers: { 'Authorization': 'Bearer ' + token }
+                            });
+                            const mData = await mRes.json();
+                            const other = mData.members && mData.members.find(m => m.id !== user.id);
+                            
+                            if (other) {
+                                chatUsers[chatId] = {
+                                    id: other.id,
+                                    username: other.username,
+                                    name: other.first_name || other.username,
+                                    av: other.avatar_url,
+                                    bio: other.bio || '',
+                                    isOnline: other.is_online
+                                };
+                                return { chatId, name: other.first_name || other.username, avatar: other.avatar_url };
+                            }
+                        } catch (e) {
+                            console.error('Error loading archived chat members:', e);
+                        }
+                        return null;
+                    });
+                    
+                    const memberData = await Promise.all(memberPromises);
+                    const memberMap = {};
+                    memberData.forEach(m => {
+                        if (m) memberMap[m.chatId] = m;
+                    });
+                    
+                    // Теперь формируем массив архивированных чатов (с защитой от дубликатов)
+                    for (const c of data.chats) {
+                        // Пропускаем дубликаты по ID
+                        if (seenArchivedIds.has(c.id)) {
+                            continue;
+                        }
+                        seenArchivedIds.add(c.id);
+                        
+                        let chatName = c.title || 'Чат';
+                        let chatAv = '💬';
+                        
+                        if (c.type === 'private' && memberMap[c.id]) {
+                            chatName = memberMap[c.id].name;
+                            chatAv = memberMap[c.id].avatar || (chatName[0] || '?');
+                        }
+                        
+                        let lastMsgText = formatLastMessage(c);
+                        
+                        archivedChats.push({
+                            id: c.id,
+                            name: chatName,
+                            title: chatName,
+                            av: chatAv,
+                            avatarUrl: chatAv,
+                            lastMessage: lastMsgText,
+                            unreadCount: c.unreadCount || 0,
+                            time: c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''
+                        });
+                    }
+                }
+                
+                console.log('✅ Archived chats loaded:', archivedChats.length);
+            } catch (err) {
+                console.error('Load archived chats error:', err);
+                archivedChats = [];
+            }
+        }
+
+        function toggleArchivedChats() {
+            const list = document.getElementById('archivedChatsList');
+            if (list) {
+                list.style.display = list.style.display === 'none' ? 'block' : 'none';
+            }
+        }
+
+        function openArchivedChat(id, name) {
+            // Находим чат в архивированных для получения правильного имени
+            const chat = archivedChats.find(function(c) { return c.id === id; });
+            const chatName = chat ? (chat.name || chat.title) : name;
+            // Просто открываем чат - НЕ разархивируем его
+            openChat(id, chatName);
+        }
+
+        // Context Menu для чата
+        function showChatContextMenu(e, chatId) {
+            e.preventDefault();
+            currentContextChatId = chatId;
+            
+            const menu = document.getElementById('chatContextMenu');
+            const x = e.pageX || e.clientX || 0;
+            const y = e.pageY || e.clientY || 0;
+            
+            menu.style.left = Math.min(x, window.innerWidth - 200) + 'px';
+            menu.style.top = Math.min(y, window.innerHeight - 200) + 'px';
+            menu.classList.add('active');
+            
+            // Проверяем статус pinned
+            const isPinned = pinnedChatIds.has(chatId);
+            const isArchived = archivedChats.some(c => c.id === chatId);
+            
+            // Обновляем текст пункта "Закрепить/Открепить"
+            const pinText = document.getElementById('contextPinText');
+            if (pinText) {
+                const pinKey = isPinned ? 'unpin' : 'pin';
+                pinText.setAttribute('data-i18n', pinKey);
+                pinText.textContent = tr(pinKey, isPinned ? 'Unpin' : 'Pin');
+            }
+            
+            // Обновляем текст пункта "Архивировать/Разархивировать"
+            const archiveText = document.getElementById('contextArchiveText');
+            const archiveItem = document.getElementById('contextArchiveItem');
+            if (isArchived) {
+                if (archiveText) {
