@@ -4211,6 +4211,29 @@
             }
         }
 
+        /** Восстанавливает @ в списке чатов по последнему сообщению (если есть непрочитанные). */
+        function syncMentionPendingFromChatListEntry(chat) {
+            if (!chat || !isGroupChatEntry(chat)) return;
+            if (!(Number(chat.unreadCount) > 0)) return;
+            const at = chat.lastMessageAt;
+            if (!at) return;
+            const msgTime = new Date(at).getTime();
+            if (Number.isNaN(msgTime)) return;
+            const wlTime = getMentionWaterline(chat.id) ? new Date(getMentionWaterline(chat.id)).getTime() : 0;
+            if (msgTime <= wlTime) return;
+            const pseudoMsg = {
+                senderId: chat.lastMessageSenderId,
+                content: chat.lastMessage || '',
+                createdAt: at
+            };
+            if (!doesMessageMentionUser(pseudoMsg, chat)) return;
+            markMentionPending(chat.id, at);
+        }
+
+        function syncAllMentionPendingFromChatList() {
+            allChats.forEach(syncMentionPendingFromChatListEntry);
+        }
+
         function setMentionWaterline(chatId, createdAt) {
             if (!chatId || !createdAt) return;
             localStorage.setItem(getMentionWaterlineKey(chatId), createdAt);
@@ -4735,6 +4758,7 @@
                              type: c.type,
                              lastMessage: lastMsgText,
                              lastMessageAt: c.lastMessageAt || null,
+                             lastMessageSenderId: c.lastMessageSenderId,
                              time: c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '',
                              isPinned: c.isPinned || false,
                              unreadCount: c.unreadCount || 0,
@@ -4766,6 +4790,8 @@
                         }
                     }));
                 }
+
+                syncAllMentionPendingFromChatList();
 
                 // Рендерим после загрузки ВСЕХ данных включая архивированные
                 renderChatList();
@@ -5410,6 +5436,7 @@
                     refreshScrollBottomObserver();
                 }
                 updateMentionJumpButton();
+                renderChatList();
                 markChatAsRead(chatId, { silent: true }).catch(function(err) {
                     console.error('Mark chat as read error:', err);
                 });
@@ -6546,15 +6573,14 @@
             const fromList = allChats.find(function(c) { return c.id === cid; });
             const chat = fromList || (activeChat && activeChat.id === cid ? activeChat : { type: 'group' });
             if (!doesMessageMentionUser(msg, chat)) return;
+            markMentionPending(cid, msg.createdAt || msg.created_at);
             const chatName = (activeChat && activeChat.id === cid ? activeChat.name : null)
                 || chatTitle
                 || (fromList && fromList.name)
                 || tr('groupChat', 'Группа');
             const sender = msg.senderFirstName || msg.sender?.firstName || msg.senderName || tr('user', 'Пользователь');
             showToast('info', sender + ' ' + tr('mentionedYouIn', 'упомянул вас в') + ' ' + chatName, '@');
-            if (!activeChat || activeChat.id !== cid) {
-                renderChatList();
-            }
+            renderChatList();
         }
 
         // ============================================
