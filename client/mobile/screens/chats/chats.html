@@ -962,17 +962,27 @@
                     <button class="pinned-message-bar-close" onclick="event.stopPropagation(); hidePinnedMessageBar();">×</button>
                 </div>
                 
-                <div class="messages-container" id="messagesContainer">
-                    <!-- Support Requests Panel (только для разработчиков в чате с ботом) -->
-                    <div id="supportPanel" style="display:none;height:100%;overflow-y:auto;background:var(--bg-primary);padding:12px">
-                        <div style="font-size:17px;font-weight:700;margin-bottom:12px;padding:4px 0">📨 Запросы в поддержку</div>
-                        <div id="supportList"></div>
+                <div class="messages-area" id="messagesArea">
+                    <div class="messages-container" id="messagesContainer">
+                        <!-- Support Requests Panel (только для разработчиков в чате с ботом) -->
+                        <div id="supportPanel" style="display:none;height:100%;overflow-y:auto;background:var(--bg-primary);padding:12px">
+                            <div style="font-size:17px;font-weight:700;margin-bottom:12px;padding:4px 0">📨 Запросы в поддержку</div>
+                            <div id="supportList"></div>
+                        </div>
+                        <div id="reportsPanel" style="display:none;height:100%;overflow-y:auto;background:var(--bg-primary);padding:12px">
+                            <div style="font-size:17px;font-weight:700;margin-bottom:12px;padding:4px 0">⚠️ Жалобы</div>
+                            <div id="reportsList"></div>
+                        </div>
+                        <div class="messages" id="messages"></div>
                     </div>
-                    <div id="reportsPanel" style="display:none;height:100%;overflow-y:auto;background:var(--bg-primary);padding:12px">
-                        <div style="font-size:17px;font-weight:700;margin-bottom:12px;padding:4px 0">⚠️ Жалобы</div>
-                        <div id="reportsList"></div>
-                    </div>
-                    <div class="messages" id="messages"></div>
+                    <button type="button" class="scroll-bottom-btn scroll-mention-btn" id="scrollMentionBtn" onclick="onMentionJumpClick()" aria-label="К непрочитанному упоминанию" data-i18n-aria-label="jumpToMention" data-i18n-title="jumpToMention" title="К непрочитанному упоминанию">
+                        <span class="scroll-mention-at" aria-hidden="true">@</span>
+                    </button>
+                    <button type="button" class="scroll-bottom-btn" id="scrollBottomBtn" onclick="onScrollBottomClick()" aria-label="К последнему сообщению" data-i18n-aria-label="scrollToLatest" data-i18n-title="scrollToLatest" title="К последнему сообщению">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </button>
                 </div>
                 
                 <!-- Reply Bar -->
@@ -1035,12 +1045,14 @@
                             </button>
                         </div>
                     </div>
-                    <div id="msgInput" 
-                        class="msg-input-editable" 
-                        contenteditable="true"
-                        data-placeholder="Сообщение..."
-                        data-i18n-placeholder="messagePlaceholder"
-                        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();send();}"></div>
+                    <div class="msg-input-wrap" id="msgInputWrap">
+                        <div id="mentionSuggestions" class="mention-suggestions" style="display:none" role="listbox" aria-hidden="true"></div>
+                        <div id="msgInput" 
+                            class="msg-input-editable" 
+                            contenteditable="true"
+                            data-placeholder="Сообщение..."
+                            data-i18n-placeholder="messagePlaceholder"></div>
+                    </div>
                                         <button class="send-btn" id="sendBtn" onclick="send()" style="display:none;">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                     </button>

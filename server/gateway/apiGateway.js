@@ -4237,6 +4237,53 @@ app.get('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
     }
 });
 
+/** Разбор @username, @here, @everyone в групповых чатах */
+async function resolveGroupMentions(chatId, plainText, senderId) {
+    if (!plainText || typeof plainText !== 'string') return [];
+
+    const chatRow = await query('SELECT type FROM chats WHERE id = $1', [chatId]);
+    if (chatRow.rows[0]?.type !== 'group') return [];
+
+    const membersResult = await query(
+        `SELECT u.id, u.username, u.is_bot,
+                CASE WHEN u.is_bot = TRUE THEN FALSE
+                     WHEN u.last_seen > NOW() - INTERVAL '5 minutes' THEN TRUE
+                     ELSE FALSE END AS is_online
+         FROM chat_members cm JOIN users u ON cm.user_id = u.id
+         WHERE cm.chat_id = $1`,
+        [chatId]
+    );
+    const members = membersResult.rows;
+    const mentioned = new Set();
+
+    if (/@everyone\b/i.test(plainText)) {
+        for (const m of members) {
+            if (m.id !== senderId && !m.is_bot) mentioned.add(m.id);
+        }
+    }
+    if (/@here\b/i.test(plainText)) {
+        for (const m of members) {
+            if (m.id !== senderId && !m.is_bot && m.is_online) mentioned.add(m.id);
+        }
+    }
+
+    const byUsername = new Map();
+    for (const m of members) {
+        if (m.username) byUsername.set(m.username.toLowerCase(), m.id);
+    }
+
+    const mentionRegex = /@([a-zA-Z0-9_]+)/g;
+    let match;
+    while ((match = mentionRegex.exec(plainText)) !== null) {
+        const tag = match[1].toLowerCase();
+        if (tag === 'here' || tag === 'everyone') continue;
+        const uid = byUsername.get(tag);
+        if (uid && uid !== senderId) mentioned.add(uid);
+    }
+
+    return [...mentioned];
+}
+
 app.post('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
     try {
         const { chatId } = req.params;
@@ -4312,6 +4359,14 @@ app.post('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
             }
         }
 
+        const chatInfo = await query('SELECT type, title FROM chats WHERE id = $1', [chatId]);
+        const chatType = chatInfo.rows[0]?.type || 'private';
+        const chatTitle = chatInfo.rows[0]?.title || null;
+
+        const mentionedUserIds = chatType === 'group'
+            ? await resolveGroupMentions(chatId, plainText, req.user.id)
+            : [];
+
         const message = {
             id: messageId, 
             chatId, 
@@ -4334,13 +4389,9 @@ app.post('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
             forwardFrom: forwardFrom || null,
             isEncrypted: isEncrypted || false,
             encryptionIv: encryptionIv || null,
+            mentionedUserIds,
             createdAt: new Date()
         };
-
-        // Получаем тип чата для фильтрации уведомлений на клиенте
-        const chatInfo = await query('SELECT type, title FROM chats WHERE id = $1', [chatId]);
-        const chatType = chatInfo.rows[0]?.type || 'private';
-        const chatTitle = chatInfo.rows[0]?.title || null;
 
         broadcastToChat(chatId, { type: 'new_message', chatId, chatType, chatTitle, message }, req.user.id);
 
