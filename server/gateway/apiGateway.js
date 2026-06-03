@@ -4150,7 +4150,7 @@ app.get('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
 
         const result = await query(
             `SELECT 
-                m.id, m.chat_id, m.sender_id, m.content, m.type, m.reply_to_message_id,
+                m.id, m.chat_id, m.sender_id, m.content, m.content_plain, m.type, m.reply_to_message_id,
                 m.is_edited, m.edited_at, m.is_pinned, m.created_at,
                 m.media_url, m.media_type, m.voice_duration,
                 m.is_encrypted, m.encryption_iv,
@@ -4192,7 +4192,8 @@ app.get('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
             senderBadges: m.sender_badges || [],
             senderIsBot: m.sender_is_bot || false,
             senderIsPremium: m.sender_is_premium || false,
-            content: m.content, 
+            content: m.content,
+            contentPlain: m.content_plain || null,
             type: m.media_type || m.type || 'text', 
             mediaUrl: m.media_url,
             voiceDuration: m.voice_duration || 0,

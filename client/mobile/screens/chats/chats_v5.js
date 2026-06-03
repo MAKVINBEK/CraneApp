@@ -455,6 +455,7 @@
 
         let activeChat = null;
         let groupMembersForMentions = [];
+        let currentUserGroupOnline = false;
         let mentionSuggestionsList = [];
         let mentionSuggestionIndex = 0;
         let allChats = [];
@@ -2591,7 +2592,7 @@
                 const textSpan = document.createElement('span');
                 textSpan.className = 'message-text';
                 // Убираем префикс "↪️ Переслано от X:\n" если есть forwardFrom
-                let displayContent = m.content || m.text || '';
+                let displayContent = m.content || m.text || m.contentPlain || m.content_plain || '';
                 if (m.forwardFrom && displayContent.startsWith('↪️ Переслано от ')) {
                     const nlIdx = displayContent.indexOf('\n');
                     if (nlIdx !== -1) displayContent = displayContent.substring(nlIdx + 1);
@@ -3214,9 +3215,9 @@
             }
 
             const mentionEl = document.getElementById('mentionSuggestions');
-            const msgInputEl = document.getElementById('msgInput');
+            const msgInputWrap = document.getElementById('msgInputWrap');
             if (mentionEl && mentionEl.style.display !== 'none') {
-                if (!mentionEl.contains(e.target) && !msgInputEl.contains(e.target)) {
+                if (!mentionEl.contains(e.target) && !(msgInputWrap && msgInputWrap.contains(e.target))) {
                     hideMentionSuggestions();
                 }
             }
@@ -4146,9 +4147,93 @@
             return localStorage.getItem(getMentionWaterlineKey(chatId)) || '';
         }
 
+        function getMentionPendingKey(chatId) {
+            return 'crane_mention_pending_' + user.id + '_' + chatId;
+        }
+
+        function markMentionPending(chatId, createdAt) {
+            if (!chatId) return;
+            const ts = createdAt ? new Date(createdAt).getTime() : Date.now();
+            if (Number.isNaN(ts)) return;
+            const iso = new Date(ts).toISOString();
+            const key = getMentionPendingKey(chatId);
+            const prev = localStorage.getItem(key);
+            if (!prev || ts > new Date(prev).getTime()) {
+                localStorage.setItem(key, iso);
+            }
+        }
+
+        function chatHasUnreadMention(chatId) {
+            if (!chatId) return false;
+            const pending = localStorage.getItem(getMentionPendingKey(chatId));
+            if (!pending) return false;
+            const pendingTime = new Date(pending).getTime();
+            if (Number.isNaN(pendingTime)) return false;
+            const waterline = getMentionWaterline(chatId);
+            const wlTime = waterline ? new Date(waterline).getTime() : 0;
+            return pendingTime > wlTime;
+        }
+
+        function syncMentionPendingAfterWaterline(chatId) {
+            if (!chatHasUnreadMention(chatId)) {
+                localStorage.removeItem(getMentionPendingKey(chatId));
+            }
+        }
+
+        function isGroupChatEntry(chat) {
+            return !!(chat && (chat.type === 'group' || chat.isGroup));
+        }
+
+        function doesMessageMentionUser(msg, chat) {
+            if (!msg || !isGroupChatEntry(chat)) return false;
+            const senderId = msg.senderId || msg.sender_id || (msg.sender && msg.sender.id);
+            if (senderId === user.id) return false;
+            if (Array.isArray(msg.mentionedUserIds) && msg.mentionedUserIds.includes(user.id)) {
+                return true;
+            }
+            const text = msg.contentPlain || msg.content_plain || msg.content || msg.text || '';
+            if (!text.includes('@')) return false;
+            const myUsername = (user.username || '').toLowerCase();
+            const regex = /@([a-zA-Z0-9_]+)/g;
+            let match;
+            while ((match = regex.exec(text)) !== null) {
+                const tag = match[1].toLowerCase();
+                if (tag === 'everyone') return true;
+                if (tag === 'here' && currentUserGroupOnline) return true;
+                if (tag === myUsername) return true;
+            }
+            return false;
+        }
+
+        function refreshMentionPendingFromLoadedMessages(chatId) {
+            const chat = allChats.find(function(c) { return c.id === chatId; });
+            if (!chat || !isGroupChatEntry(chat)) return;
+            const wlTime = getMentionWaterline(chatId) ? new Date(getMentionWaterline(chatId)).getTime() : 0;
+            let latestAt = null;
+            let latestTime = 0;
+            Object.keys(messagesData).forEach(function(id) {
+                const m = messagesData[id];
+                if (!m || String(m.id).startsWith('temp-')) return;
+                if (!doesMessageMentionUser(m, chat)) return;
+                const t = getMessageCreatedTime(m);
+                if (t <= wlTime) return;
+                if (t > latestTime) {
+                    latestTime = t;
+                    latestAt = m.createdAt || m.created_at || new Date(t).toISOString();
+                }
+            });
+            if (latestAt) {
+                markMentionPending(chatId, latestAt);
+            } else {
+                syncMentionPendingAfterWaterline(chatId);
+            }
+        }
+
         function setMentionWaterline(chatId, createdAt) {
             if (!chatId || !createdAt) return;
             localStorage.setItem(getMentionWaterlineKey(chatId), createdAt);
+            syncMentionPendingAfterWaterline(chatId);
+            renderChatList();
         }
 
         function getMessageCreatedTime(m) {
@@ -4165,7 +4250,7 @@
                 return true;
             }
 
-            const text = msg.content || msg.text || msg.contentPlain || '';
+            const text = msg.contentPlain || msg.content_plain || msg.content || msg.text || '';
             if (!text.includes('@')) return false;
 
             const regex = /@([a-zA-Z0-9_]+)/g;
@@ -4763,6 +4848,16 @@
             return '<div class="unread-badge">' + (count > 99 ? '99+' : count) + '</div>';
         }
 
+        function renderChatUnreadIndicators(chat) {
+            const showMention = isGroupChatEntry(chat) && chatHasUnreadMention(chat.id);
+            const unreadHtml = renderUnreadBadge(chat);
+            if (!showMention && !unreadHtml) return '';
+            return '<div class="chat-unread-indicators">'
+                + (showMention ? '<div class="mention-badge" aria-label="' + tr('jumpToMention', 'К непрочитанному упоминанию') + '">@</div>' : '')
+                + unreadHtml
+                + '</div>';
+        }
+
         async function markChatAsRead(chatId, options = {}) {
             if (!chatId) return false;
 
@@ -4843,7 +4938,7 @@
                         '<div class="chat-info"><div class="chat-name">' + name + '</div>' +
                         '<div class="chat-last">' + (c.lastMessage || tr('noMessages', 'Нет сообщений')) + '</div></div>' +
                         '<div class="chat-time">' + (c.time || '') + '</div>' +
-                        renderUnreadBadge(c) +
+                        renderChatUnreadIndicators(c) +
                         '<div class="chat-actions"><button class="chat-action-icon" onclick="event.stopPropagation(); unarchiveChat(\'' + c.id + '\')" title="' + tr('restore', 'Восстановить') + '">📥</button></div>' +
                         '</div>';
                 }).join('');
@@ -4869,7 +4964,7 @@
                         '<div class="chat-last">' + (c.lastMessage || tr('noMessages', 'Нет сообщений')) + '</div>' +
                         '</div>' +
                         '<div class="chat-time">' + (c.time || '') + '</div>' +
-                        renderUnreadBadge(c) +
+                        renderChatUnreadIndicators(c) +
                         '<div class="chat-actions">' +
                         '<button class="chat-action-icon pinned" onclick="event.stopPropagation(); unpinChat(\'' + c.id + '\')" title="' + tr('unpin', 'Открепить') + '" style="color: var(--accent-color);">📌</button>' +
                         '<button class="chat-action-icon archived" onclick="event.stopPropagation(); archiveChat(\'' + c.id + '\')" title="' + tr('archiveChat', 'Архивировать') + '">📁</button>' +
@@ -4909,7 +5004,7 @@
                         '<div class="chat-last">' + (c.lastMessage || tr('noMessages', 'Нет сообщений')) + '</div>' +
                         '</div>' +
                         '<div class="chat-time">' + (c.time || '') + '</div>' +
-                        renderUnreadBadge(c) +
+                        renderChatUnreadIndicators(c) +
                         '<div class="chat-actions">' +
                         '<button class="chat-action-icon" onclick="event.stopPropagation(); pinChat(\'' + c.id + '\')" title="' + tr('pin', 'Закрепить') + '">📌</button>' +
                         '<button class="chat-action-icon archived" onclick="event.stopPropagation(); archiveChat(\'' + c.id + '\')" title="' + tr('archiveChat', 'Архивировать') + '">📁</button>' +
@@ -5078,6 +5173,7 @@
                 loadGroupMembersForMentions(id);
             } else {
                 groupMembersForMentions = [];
+                currentUserGroupOnline = false;
             }
 
             // Показываем кнопку участников только для групп
@@ -5305,6 +5401,8 @@
                 scrollToBottom();
                 refreshScrollBottomObserver();
                 updateMentionJumpButton();
+                refreshMentionPendingFromLoadedMessages(chatId);
+                renderChatList();
                 markChatAsRead(chatId, { silent: true }).catch(function(err) {
                     console.error('Mark chat as read error:', err);
                 });
@@ -5956,10 +6054,7 @@
 
         function isMentionRelevantToMe(tagLower) {
             if (tagLower === 'everyone') return true;
-            if (tagLower === 'here') {
-                const me = groupMembersForMentions.find(m => m.id === user.id);
-                return !!(me && me.isOnline);
-            }
+            if (tagLower === 'here') return currentUserGroupOnline;
             const myUsername = (user.username || '').toLowerCase();
             return tagLower === myUsername;
         }
@@ -6173,6 +6268,7 @@
         // ============================================
         async function loadGroupMembersForMentions(chatId) {
             groupMembersForMentions = [];
+            currentUserGroupOnline = false;
             if (!chatId) return;
             try {
                 const res = await fetch('/api/v1/chats/' + chatId + '/members-online', {
@@ -6180,8 +6276,11 @@
                 });
                 if (!res.ok) return;
                 const data = await res.json();
-                groupMembersForMentions = (data.members || [])
-                    .filter(m => m.id !== user.id && !m.isBot)
+                const members = data.members || [];
+                const me = members.find(m => m.id === user.id);
+                currentUserGroupOnline = !!(me && (me.isOnline || me.is_online) && !me.isBot && !me.is_bot);
+                groupMembersForMentions = members
+                    .filter(m => m.id !== user.id && !m.isBot && !m.is_bot)
                     .map(m => ({
                         id: m.id,
                         username: m.username || '',
@@ -6192,6 +6291,7 @@
                     }));
             } catch (_) {
                 groupMembersForMentions = [];
+                currentUserGroupOnline = false;
             }
         }
 
@@ -6205,20 +6305,30 @@
             mentionSuggestionIndex = 0;
         }
 
-        function getMentionContext() {
-            const input = document.getElementById('msgInput');
-            const sel = window.getSelection();
-            if (!input || !sel || !sel.rangeCount) return null;
-            const range = sel.getRangeAt(0);
-            if (!input.contains(range.endContainer)) return null;
+        function walkInputTextNodes(node, visitor) {
+            if (node.nodeType === Node.TEXT_NODE) {
+                visitor('text', node, node.textContent.length);
+            } else if (node.nodeType === Node.ELEMENT_NODE) {
+                if (node.tagName === 'IMG' && node.classList.contains('apple-emoji')) {
+                    visitor('emoji', node, (node.alt || '').length);
+                } else if (node.tagName === 'BR') {
+                    visitor('br', node, 1);
+                } else {
+                    node.childNodes.forEach(function(child) { walkInputTextNodes(child, visitor); });
+                }
+            }
+        }
 
-            const preRange = range.cloneRange();
-            preRange.selectNodeContents(input);
-            preRange.setEnd(range.endContainer, range.endOffset);
-            const textBefore = preRange.toString();
-            const match = textBefore.match(/@([a-zA-Z0-9_]*)$/);
-            if (!match) return null;
-            return { query: match[1], fullLen: match[0].length };
+        function getInputTextRaw() {
+            const input = document.getElementById('msgInput');
+            if (!input) return '';
+            let text = '';
+            walkInputTextNodes(input, function(kind, node, len) {
+                if (kind === 'text') text += node.textContent;
+                else if (kind === 'emoji') text += node.alt || '';
+                else if (kind === 'br') text += '\n';
+            });
+            return text;
         }
 
         function getCaretCharacterOffset() {
@@ -6226,31 +6336,85 @@
             const sel = window.getSelection();
             if (!input || !sel || !sel.rangeCount) return 0;
             const range = sel.getRangeAt(0);
-            const pre = range.cloneRange();
-            pre.selectNodeContents(input);
-            pre.setEnd(range.endContainer, range.endOffset);
-            return pre.toString().length;
+            if (!input.contains(range.endContainer)) return 0;
+
+            let offset = 0;
+            let done = false;
+
+            function visit(kind, node, len) {
+                if (done) return;
+                if (node === range.endContainer) {
+                    if (kind === 'text') {
+                        offset += Math.min(range.endOffset, len);
+                    } else if (node.nodeType === Node.ELEMENT_NODE && range.endOffset === 0) {
+                        // caret before this node
+                    } else if (kind === 'br' || kind === 'emoji') {
+                        offset += len;
+                    }
+                    done = true;
+                    return;
+                }
+                if (kind === 'text') offset += node.textContent.length;
+                else if (kind === 'emoji') offset += (node.alt || '').length;
+                else if (kind === 'br') offset += 1;
+            }
+
+            input.childNodes.forEach(function(child) {
+                if (done) return;
+                walkInputTextNodes(child, visit);
+            });
+            return offset;
+        }
+
+        function getMentionContext() {
+            const offset = getCaretCharacterOffset();
+            const textBefore = getInputTextRaw().slice(0, offset);
+            const match = textBefore.match(/@([a-zA-Z0-9_]*)$/);
+            if (!match) return null;
+            return { query: match[1], fullLen: match[0].length };
         }
 
         function setRangeAtCharacterOffset(range, chars, collapseToStart) {
             const input = document.getElementById('msgInput');
+            if (!input) return false;
             let remaining = chars;
-            const walker = document.createTreeWalker(input, NodeFilter.SHOW_TEXT, null);
-            let node;
-            while ((node = walker.nextNode())) {
-                const len = node.textContent.length;
+            let placed = false;
+
+            function visit(kind, node, len) {
+                if (placed) return;
                 if (remaining <= len) {
-                    if (collapseToStart) {
-                        range.setStart(node, remaining);
-                        range.collapse(true);
-                    } else {
-                        range.setEnd(node, remaining);
+                    if (kind === 'text') {
+                        if (collapseToStart) {
+                            range.setStart(node, remaining);
+                            range.collapse(true);
+                        } else {
+                            range.setEnd(node, remaining);
+                        }
+                    } else if (kind === 'br') {
+                        if (collapseToStart) {
+                            range.setStartBefore(node);
+                            range.collapse(true);
+                        } else {
+                            range.setEndAfter(node);
+                        }
+                    } else if (kind === 'emoji') {
+                        if (collapseToStart) {
+                            range.setStartBefore(node);
+                            range.collapse(true);
+                        } else {
+                            range.setEndAfter(node);
+                        }
                     }
-                    return true;
+                    placed = true;
+                    return;
                 }
                 remaining -= len;
             }
-            return false;
+
+            input.childNodes.forEach(function(child) {
+                if (!placed) walkInputTextNodes(child, visit);
+            });
+            return placed;
         }
 
         function replaceMentionWithToken(token) {
@@ -6374,6 +6538,7 @@
             if (!msg.mentionedUserIds.includes(user.id)) return;
             if (msg.senderId === user.id) return;
             const cid = chatId || msg.chatId;
+            markMentionPending(cid, msg.createdAt || msg.created_at);
             const fromList = allChats.find(c => c.id === cid);
             const chatName = (activeChat && activeChat.id === cid ? activeChat.name : null)
                 || chatTitle
@@ -6381,6 +6546,9 @@
                 || tr('groupChat', 'Группа');
             const sender = msg.senderFirstName || msg.sender?.firstName || msg.senderName || tr('user', 'Пользователь');
             showToast('info', sender + ' ' + tr('mentionedYouIn', 'упомянул вас в') + ' ' + chatName, '@');
+            if (!activeChat || activeChat.id !== cid) {
+                renderChatList();
+            }
         }
 
         // ============================================
@@ -6497,7 +6665,7 @@
         // ============================================
         document.getElementById('msgInput').addEventListener('input', function() {
             sendTyping();
-            handleMentionInput();
+            requestAnimationFrame(handleMentionInput);
         });
 
         // Вставка фото из буфера обмена
@@ -6910,24 +7078,7 @@
 
         // Обновляем переключение кнопок при вводе текста
         function getInputText() {
-            const input = document.getElementById('msgInput');
-            // Собираем текст: обычные текстовые узлы + alt у apple-emoji img
-            let text = '';
-            function walk(node) {
-                if (node.nodeType === Node.TEXT_NODE) {
-                    text += node.textContent;
-                } else if (node.nodeType === Node.ELEMENT_NODE) {
-                    if (node.tagName === 'IMG' && node.classList.contains('apple-emoji')) {
-                        text += node.alt || '';
-                    } else if (node.tagName === 'BR') {
-                        text += '\n';
-                    } else {
-                        node.childNodes.forEach(walk);
-                    }
-                }
-            }
-            input.childNodes.forEach(walk);
-            return text.trim();
+            return getInputTextRaw().trim();
         }
 
         function updateSendButton() {
