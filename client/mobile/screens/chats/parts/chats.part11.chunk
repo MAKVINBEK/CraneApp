@@ -1,0 +1,650 @@
+            if (!q || 'everyone'.startsWith(q)) {
+                items.push({ type: 'special', token: 'everyone', name: '@everyone', subtitle: everyoneLabel, icon: '📢' });
+            }
+
+            groupMembersForMentions.forEach(function(m) {
+                const username = (m.username || '').toLowerCase();
+                const first = (m.firstName || '').toLowerCase();
+                const last = (m.lastName || '').toLowerCase();
+                const display = (m.firstName + ' ' + (m.lastName || '')).trim().toLowerCase();
+                if (!username) return;
+                if (q && !username.startsWith(q) && !first.startsWith(q) && !last.startsWith(q) && !display.includes(q)) return;
+                items.push({
+                    type: 'user',
+                    token: m.username,
+                    name: m.firstName || m.username,
+                    subtitle: '@' + m.username,
+                    avatarUrl: m.avatarUrl,
+                    initial: (m.firstName || m.username || '?')[0].toUpperCase()
+                });
+            });
+
+            return items.slice(0, 12);
+        }
+
+        function renderMentionSuggestions(items) {
+            const el = document.getElementById('mentionSuggestions');
+            if (!el) return;
+            if (!items.length) {
+                hideMentionSuggestions();
+                return;
+            }
+            mentionSuggestionsList = items;
+            mentionSuggestionIndex = 0;
+            function escMention(s) {
+                return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            }
+            el.innerHTML = items.map(function(item, idx) {
+                const active = idx === 0 ? ' active' : '';
+                const special = item.type === 'special' ? ' mention-special' : '';
+                let avatarHtml = '<span>' + (item.icon || item.initial || '?') + '</span>';
+                if (item.avatarUrl) {
+                    avatarHtml = '<img src="' + escMention(item.avatarUrl) + '" alt="">';
+                }
+                return '<div class="mention-suggestion-item' + active + special + '" data-idx="' + idx + '" role="option">'
+                    + '<div class="mention-avatar">' + avatarHtml + '</div>'
+                    + '<div class="mention-meta"><div class="mention-name">' + escMention(item.name) + '</div>'
+                    + '<div class="mention-username">' + escMention(item.subtitle) + '</div></div></div>';
+            }).join('');
+            el.style.display = 'block';
+            el.setAttribute('aria-hidden', 'false');
+            el.querySelectorAll('.mention-suggestion-item').forEach(function(row) {
+                row.addEventListener('mousedown', function(e) {
+                    e.preventDefault();
+                    const idx = parseInt(row.dataset.idx, 10);
+                    const picked = mentionSuggestionsList[idx];
+                    if (picked) replaceMentionWithToken(picked.token);
+                });
+            });
+        }
+
+        function highlightMentionSuggestion(idx) {
+            const el = document.getElementById('mentionSuggestions');
+            if (!el) return;
+            el.querySelectorAll('.mention-suggestion-item').forEach(function(row, i) {
+                row.classList.toggle('active', i === idx);
+            });
+        }
+
+        function handleMentionInput() {
+            if (!activeChat || activeChat.type !== 'group') {
+                hideMentionSuggestions();
+                return;
+            }
+            const ctx = getMentionContext();
+            if (!ctx) {
+                hideMentionSuggestions();
+                return;
+            }
+            const items = buildMentionSuggestions(ctx.query);
+            renderMentionSuggestions(items);
+        }
+
+        function selectActiveMentionSuggestion() {
+            const picked = mentionSuggestionsList[mentionSuggestionIndex];
+            if (picked) replaceMentionWithToken(picked.token);
+            return !!picked;
+        }
+
+        function notifyIfMentioned(msg, chatId, chatTitle) {
+            if (!msg) return;
+            const cid = chatId || msg.chatId;
+            const fromList = allChats.find(function(c) { return c.id === cid; });
+            const chat = fromList || (activeChat && activeChat.id === cid ? activeChat : { type: 'group' });
+            if (!doesMessageMentionUser(msg, chat)) return;
+            markMentionPending(cid, msg.createdAt || msg.created_at);
+            if (activeChat && activeChat.id === cid) {
+                updateMentionJumpButton();
+            }
+            const chatName = (activeChat && activeChat.id === cid ? activeChat.name : null)
+                || chatTitle
+                || (fromList && fromList.name)
+                || tr('groupChat', 'Группа');
+            const sender = msg.senderFirstName || msg.sender?.firstName || msg.senderName || tr('user', 'Пользователь');
+            showToast('info', sender + ' ' + tr('mentionedYouIn', 'упомянул вас в') + ' ' + chatName, '@');
+            renderChatList();
+        }
+
+        // ============================================
+        // SEND MESSAGE
+        // ============================================
+        async function send() {
+            const input = document.getElementById('msgInput');
+            const text = getInputText();
+            if (!text || !activeChat) return;
+            
+            hideMentionSuggestions();
+            closeEmojiPicker();
+            
+            const tempId = 'temp-' + Date.now();
+            const tempMsg = {
+                id: tempId,
+                content: text,
+                senderId: user.id,
+                time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
+                senderName: user.firstName || user.username || tr('you', 'Вы'),
+                replyToMessageId: replyingTo ? replyingTo.messageId : null,
+                pending: true
+            };
+            
+            messagesData[tempId] = tempMsg;
+            document.getElementById('messages').appendChild(createMessageElement(tempMsg));
+            scrollToBottom();
+            
+            input.innerText = '';
+            updateSendButton();
+            const replyData = replyingTo;
+            cancelReply();
+            
+            try {
+                const body = { content: text, type: 'text' };
+                if (replyData) body.replyTo = replyData.messageId;
+
+                // Если разработчик отвечает на support request через бота
+                const isBotChatLocal = activeChat && (activeChat.isBot || (activeChat.name === 'CraneApp'));
+                const activeSupportRaw = localStorage.getItem('craneapp_active_support_request');
+                const devUsernames = ['adm1','admin','admin1','qzlfee'];
+                const isDevUser = devUsernames.includes((user.username||'').toLowerCase());
+
+                if (isBotChatLocal && isDevUser && activeSupportRaw) {
+                    const activeSupport = JSON.parse(activeSupportRaw);
+                    if (activeSupport.requestId && activeSupport.requestId !== 'null') {
+                        // Отправляем ответ через reply API
+                        const replyRes = await fetch('/api/v1/support/requests/' + activeSupport.requestId + '/reply', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                            body: JSON.stringify({ message: text })
+                        });
+                        if (replyRes.ok) {
+                            localStorage.removeItem('craneapp_active_support_request');
+                            // Показываем подтверждение в чате с ботом
+                            const tempDiv = document.createElement('div');
+                            tempDiv.className = 'message outgoing';
+                            tempDiv.innerHTML = text + '<div class="msg-time">' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) + '</div>';
+                            document.getElementById('messages').appendChild(tempDiv);
+                            document.getElementById('messages').scrollTop = 999999;
+                            showToast('success', tr('replySentToUser', 'Ответ отправлен пользователю'), '✓');
+                            return;
+                        }
+                    }
+                }
+                // E2E шифрование — не шифруем чат с ботом
+                if (window.E2E && !isBotChatLocal) {
+                    const enc = await window.E2E.encrypt(text, activeChat.id, token);
+                    if (enc.isEncrypted) {
+                        body.content = enc.content;
+                        body.iv = enc.iv;
+                        body.isEncrypted = true;
+                        body.contentPlain = text; // Сохраняем оригинальный текст для поиска
+                    }
+                } else {
+                    // Если не шифруем, тоже сохраняем contentPlain
+                    body.contentPlain = text;
+                }
+
+                const res = await fetch('/api/v1/messages/' + activeChat.id, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+
+                if (res.ok && data.message) {
+                    _confirmMessage(tempId, data.message);
+                    loadChats();
+                } else if (res.status === 403) {
+                    const el = document.querySelector('[data-message-id="' + tempId + '"]');
+                    if (el) el.remove();
+                    delete messagesData[tempId];
+                    showMuteInfoModal(data.error || tr('muted', 'Вы замучены'));
+                } else {
+                    const el = document.querySelector('[data-message-id="' + tempId + '"]');
+                    if (el) el.remove();
+                    delete messagesData[tempId];
+                    showToast('error', data.error || tr('notSent', 'Не отправлено'), '❌');
+                }
+            } catch (err) {
+                const el = document.querySelector('[data-message-id="' + tempId + '"]');
+                if (el) el.remove();
+                delete messagesData[tempId];
+                showToast('error', tr('notSent', 'Не отправлено'), '❌');
+            }
+        }
+
+        // ============================================
+        // INPUT TYPING
+        // ============================================
+        document.getElementById('msgInput').addEventListener('input', function() {
+            sendTyping();
+            requestAnimationFrame(handleMentionInput);
+        });
+
+        // Вставка фото из буфера обмена
+        document.getElementById('msgInput').addEventListener('paste', function(e) {
+            const items = e.clipboardData && e.clipboardData.items;
+            if (!items) return;
+            for (const item of items) {
+                if (item.type.startsWith('image/')) {
+                    e.preventDefault();
+                    const file = item.getAsFile();
+                    if (!file) return;
+                    if (file.size > MAX_FILE_SIZE) {
+                        showToast('error', tr('fileTooLarge50', 'Файл слишком большой. Максимум 50 МБ'), '❌');
+                        return;
+                    }
+                    const reader = new FileReader();
+                    reader.onload = e2 => showMediaSendPreview(e2.target.result, 'image');
+                    reader.readAsDataURL(file);
+                    return;
+                }
+            }
+        });
+
+        // ============================================
+        // TAB BAR
+        // ============================================
+        const tabs = [
+            { icon: '👥', labelKey: 'contacts', page: '../contacts/contacts.html' },
+            { icon: '📞', labelKey: 'calls', page: '../calls/calls.html' },
+            { icon: '💬', labelKey: 'chats', page: './chats.html', active: true },
+            { icon: '⚙', labelKey: 'settings', page: '../settings/settings.html' }
+        ];
+        
+        const tabBar = document.getElementById('tabBar');
+        tabs.forEach(function(t) {
+            const div = document.createElement('div');
+            div.className = 'tab-item' + (t.active ? ' active' : '');
+            const label = (window.i18n && window.i18n.t(t.labelKey)) || t.labelKey;
+            div.innerHTML = '<span class="tab-icon">' + t.icon + '</span><span class="tab-label" data-i18n="' + t.labelKey + '">' + label + '</span>';
+            div.onclick = function() { if (!t.active) location.href = t.page; };
+            tabBar.appendChild(div);
+        });
+
+        // ============================================
+        // TOAST
+        // ============================================
+        function showToast(type, message, icon) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = 'toast ' + type;
+            if (window.i18n && typeof message === 'string') {
+                message = window.i18n.localizeText(message);
+            }
+            toast.innerHTML = '<span>' + icon + '</span><span>' + message + '</span>';
+            container.appendChild(toast);
+            setTimeout(function() {
+                toast.style.opacity = '0';
+                setTimeout(function() { toast.remove(); }, 300);
+            }, 3000);
+        }
+
+        // ============================================
+        // PIN & ARCHIVE CHATS
+        // ============================================
+
+        // Pin чат
+        async function pinChat(chatId) {
+            try {
+                const res = await fetch('/api/v1/chats/' + chatId + '/pin', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: '{}'
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    pinnedChatIds.add(chatId);
+                    showToast('success', tr('chatPinned', 'Чат закреплён'), '📌');
+                    loadChats();
+                } else {
+                    showToast('error', data.error || tr('error', 'Ошибка'), '❌');
+                }
+            } catch (err) {
+                showToast('error', tr('networkError', 'Ошибка сети'), '❌');
+            }
+        }
+
+        async function unpinChat(chatId) {
+            try {
+                const res = await fetch('/api/v1/chats/' + chatId + '/pin', {
+                    method: 'DELETE',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: '{}'
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    pinnedChatIds.delete(chatId);
+                    showToast('success', tr('chatUnpinned', 'Чат откреплён'), '📌');
+                    loadChats();
+                } else {
+                    showToast('error', data.error || tr('error', 'Ошибка'), '❌');
+                }
+            } catch (err) {
+                showToast('error', tr('networkError', 'Ошибка сети'), '❌');
+            }
+        }
+
+        async function archiveChat(chatId) {
+            try {
+                const res = await fetch('/api/v1/chats/' + chatId + '/archive', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: '{}'
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    showToast('success', tr('chatArchived', 'Чат архивирован'), '📁');
+                    loadChats();
+                } else {
+                    showToast('error', data.error || tr('error', 'Ошибка'), '❌');
+                }
+            } catch (err) {
+                showToast('error', tr('networkError', 'Ошибка сети'), '❌');
+            }
+        }
+
+        async function unarchiveChat(chatId) {
+            try {
+                const res = await fetch('/api/v1/chats/' + chatId + '/archive', {
+                    method: 'DELETE',
+                    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                    body: '{}'
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    showToast('success', tr('chatRestored', 'Чат восстановлен'), '📁');
+                    loadChats();
+                } else {
+                    showToast('error', data.error || tr('error', 'Ошибка'), '❌');
+                }
+            } catch (err) {
+                showToast('error', tr('networkError', 'Ошибка сети'), '❌');
+            }
+        }
+
+        // Загрузить архивированные чаты
+        async function loadArchivedChats() {
+            try {
+                const res = await fetch('/api/v1/chats/archived', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const data = await res.json();
+                
+                archivedChats = [];
+                const seenArchivedIds = new Set(); // Защита от дубликатов
+                
+                if (data.chats && data.chats.length > 0) {
+                    // Сначала собираем все ID приватных чатов (только уникальные)
+                    const privateChatIds = [];
+                    const seenChatIds = new Set();
+                    
+                    for (const c of data.chats) {
+                        if (!seenChatIds.has(c.id)) {
+                            seenChatIds.add(c.id);
+                            if (c.type === 'private') {
+                                privateChatIds.push(c.id);
+                            }
+                        }
+                    }
+                    
+                    // Параллельно загружаем участников для всех приватных чатов
+                    const memberPromises = privateChatIds.map(async (chatId) => {
+                        try {
+                            const mRes = await fetch('/api/v1/chats/' + chatId + '/members', {
+                                headers: { 'Authorization': 'Bearer ' + token }
+                            });
+                            const mData = await mRes.json();
+                            const other = mData.members && mData.members.find(m => m.id !== user.id);
+                            
+                            if (other) {
+                                chatUsers[chatId] = {
+                                    id: other.id,
+                                    username: other.username,
+                                    name: other.first_name || other.username,
+                                    av: other.avatar_url,
+                                    bio: other.bio || '',
+                                    isOnline: other.is_online
+                                };
+                                return { chatId, name: other.first_name || other.username, avatar: other.avatar_url };
+                            }
+                        } catch (e) {
+                            console.error('Error loading archived chat members:', e);
+                        }
+                        return null;
+                    });
+                    
+                    const memberData = await Promise.all(memberPromises);
+                    const memberMap = {};
+                    memberData.forEach(m => {
+                        if (m) memberMap[m.chatId] = m;
+                    });
+                    
+                    // Теперь формируем массив архивированных чатов (с защитой от дубликатов)
+                    for (const c of data.chats) {
+                        // Пропускаем дубликаты по ID
+                        if (seenArchivedIds.has(c.id)) {
+                            continue;
+                        }
+                        seenArchivedIds.add(c.id);
+                        
+                        let chatName = c.title || 'Чат';
+                        let chatAv = '💬';
+                        
+                        if (c.type === 'private' && memberMap[c.id]) {
+                            chatName = memberMap[c.id].name;
+                            chatAv = memberMap[c.id].avatar || (chatName[0] || '?');
+                        }
+                        
+                        let lastMsgText = formatLastMessage(c);
+                        
+                        archivedChats.push({
+                            id: c.id,
+                            name: chatName,
+                            title: chatName,
+                            av: chatAv,
+                            avatarUrl: chatAv,
+                            lastMessage: lastMsgText,
+                            unreadCount: c.unreadCount || 0,
+                            time: c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''
+                        });
+                    }
+                }
+                
+                console.log('✅ Archived chats loaded:', archivedChats.length);
+            } catch (err) {
+                console.error('Load archived chats error:', err);
+                archivedChats = [];
+            }
+        }
+
+        function toggleArchivedChats() {
+            const list = document.getElementById('archivedChatsList');
+            if (list) {
+                list.style.display = list.style.display === 'none' ? 'block' : 'none';
+            }
+        }
+
+        function openArchivedChat(id, name) {
+            // Находим чат в архивированных для получения правильного имени
+            const chat = archivedChats.find(function(c) { return c.id === id; });
+            const chatName = chat ? (chat.name || chat.title) : name;
+            // Просто открываем чат - НЕ разархивируем его
+            openChat(id, chatName);
+        }
+
+        // Context Menu для чата
+        function showChatContextMenu(e, chatId) {
+            e.preventDefault();
+            currentContextChatId = chatId;
+            
+            const menu = document.getElementById('chatContextMenu');
+            const x = e.pageX || e.clientX || 0;
+            const y = e.pageY || e.clientY || 0;
+            
+            menu.style.left = Math.min(x, window.innerWidth - 200) + 'px';
+            menu.style.top = Math.min(y, window.innerHeight - 200) + 'px';
+            menu.classList.add('active');
+            
+            // Проверяем статус pinned
+            const isPinned = pinnedChatIds.has(chatId);
+            const isArchived = archivedChats.some(c => c.id === chatId);
+            
+            // Обновляем текст пункта "Закрепить/Открепить"
+            const pinText = document.getElementById('contextPinText');
+            if (pinText) {
+                const pinKey = isPinned ? 'unpin' : 'pin';
+                pinText.setAttribute('data-i18n', pinKey);
+                pinText.textContent = tr(pinKey, isPinned ? 'Unpin' : 'Pin');
+            }
+            
+            // Обновляем текст пункта "Архивировать/Разархивировать"
+            const archiveText = document.getElementById('contextArchiveText');
+            const archiveItem = document.getElementById('contextArchiveItem');
+            if (isArchived) {
+                if (archiveText) {
+                    archiveText.setAttribute('data-i18n', 'unarchiveChat');
+                    archiveText.textContent = tr('unarchiveChat', 'Unarchive');
+                }
+                if (archiveItem) archiveItem.onclick = function() { unarchiveChatFromMenu(); };
+            } else {
+                if (archiveText) {
+                    archiveText.setAttribute('data-i18n', 'archiveChat');
+                    archiveText.textContent = tr('archiveChat', 'Archive');
+                }
+                if (archiveItem) archiveItem.onclick = function() { archiveChatFromMenu(); };
+            }
+        }
+
+        function pinChatFromMenu() {
+            document.getElementById('chatContextMenu').classList.remove('active');
+            const isPinned = pinnedChatIds.has(currentContextChatId);
+            if (isPinned) {
+                unpinChat(currentContextChatId);
+            } else {
+                pinChat(currentContextChatId);
+            }
+        }
+
+        function archiveChatFromMenu() {
+            document.getElementById('chatContextMenu').classList.remove('active');
+            archiveChat(currentContextChatId);
+        }
+
+        function unarchiveChatFromMenu() {
+            document.getElementById('chatContextMenu').classList.remove('active');
+            unarchiveChat(currentContextChatId);
+        }
+
+        async function addContextChatToFolder() {
+            const chatId = currentContextChatId;
+            document.getElementById('chatContextMenu').classList.remove('active');
+            if (!chatId) return;
+            folderSelectChatId = chatId;
+            await openFolderSelectModal();
+        }
+
+        async function markChatReadFromMenu() {
+            const chatId = currentContextChatId;
+            document.getElementById('chatContextMenu').classList.remove('active');
+            if (!chatId) return;
+
+            try {
+                await markChatAsRead(chatId, { acknowledgeMentions: true });
+            } catch (err) {
+                showToast('error', tr('saveError', 'Ошибка сохранения'), '❌');
+            }
+        }
+
+        function deleteChatFromMenu() {
+            document.getElementById('chatContextMenu').classList.remove('active');
+            const chat = allChats.find(c => c.id === currentContextChatId);
+            activeChat = { id: currentContextChatId, name: chat?.name || chat?.title || 'Чат' };
+            deleteCurrentChat();
+        }
+
+        // Закрыть контекстное меню при клике
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.chat-context-menu')) {
+                document.getElementById('chatContextMenu').classList.remove('active');
+            }
+        });
+
+        // ============================================
+        // VIDEO NOTES (кружки)
+        // ============================================
+        let videoNoteMode = false; // false = голосовое, true = кружок
+        let videoNoteRecorder = null;
+        let videoNoteChunks = [];
+        let videoNoteTimer = null;
+        let videoNoteSeconds = 0;
+        let videoNoteStream = null;
+        let videoNoteRecording = false;
+        const VIDEO_NOTE_MAX = 60; // 1 минута
+
+        function switchToVideoNote() {
+            if (!cameraAvailable) return; // нет камеры — не переключаем
+            videoNoteMode = true;
+            document.getElementById('videoNoteBtn').style.display = 'flex';
+        }
+
+        let videoNoteHoldTimer = null;
+        const VIDEO_NOTE_HOLD_DELAY = 300; // мс до начала записи
+
+        function videoNoteMouseDown(e) {
+            e.preventDefault();
+            videoNoteHoldTimer = setTimeout(() => {
+                videoNoteHoldTimer = null;
+                startVideoNoteHold(e);
+            }, VIDEO_NOTE_HOLD_DELAY);
+        }
+
+        function videoNoteMouseUp(e) {
+            if (videoNoteHoldTimer) {
+                // Короткий клик — скрываем кнопку видео
+                clearTimeout(videoNoteHoldTimer);
+                videoNoteHoldTimer = null;
+                document.getElementById('videoNoteBtn').style.display = 'none';
+            } else {
+                // Удержание — останавливаем запись
+                stopVideoNoteHold(e);
+            }
+        }
+
+        function videoNoteTouchStart(e) {
+            e.preventDefault();
+            videoNoteHoldTimer = setTimeout(() => {
+                videoNoteHoldTimer = null;
+                startVideoNoteHold(e);
+            }, VIDEO_NOTE_HOLD_DELAY);
+        }
+
+        function videoNoteTouchEnd(e) {
+            if (videoNoteHoldTimer) {
+                clearTimeout(videoNoteHoldTimer);
+                videoNoteHoldTimer = null;
+                document.getElementById('videoNoteBtn').style.display = 'none';
+            } else {
+                stopVideoNoteHold(e);
+            }
+        }
+
+        // Обновляем переключение кнопок при вводе текста
+        function getInputText() {
+            return getInputTextRaw().trim();
+        }
+
+        function updateSendButton() {
+            const hasText = getInputText().length > 0;
+            document.getElementById('sendBtn').style.display = hasText ? 'flex' : 'none';
+            if (hasText) {
+                document.getElementById('videoNoteBtn').style.display = 'none';
+            } else {
+                if (videoNoteMode && cameraAvailable) {
+                    document.getElementById('videoNoteBtn').style.display = 'flex';
+                } else {
+                    document.getElementById('videoNoteBtn').style.display = 'none';
+                    if (!cameraAvailable) videoNoteMode = false;
+                }
+            }

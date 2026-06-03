@@ -10,6 +10,10 @@
         'parts/chats.part08.chunk',
         'parts/chats.part09.chunk',
         'parts/chats.part10.chunk',
+        'parts/chats.part11.chunk',
+        'parts/chats.part12.chunk',
+        'parts/chats.part13.chunk',
+        'parts/chats.part14.chunk'
     ];
 
     const source = parts.map((part) => loadText(part)).join('\n');

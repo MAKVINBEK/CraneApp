@@ -1,650 +1,650 @@
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + token
-                    },
-                    body: JSON.stringify({ type: 'private', participants: [userId] })
-                });
-                const data = await res.json();
-                
-                if (data.chatId) {
-                    btn.className = 'user-action-btn success';
-                    btn.textContent = '✓';
-                    
-                    chatUsers[data.chatId] = { id: userId, username: username, name: name, av: name[0] };
-                    
-                    setTimeout(function() {
-                        closeSearchModal();
-                        loadChats().then(function() {
-                            const chat = allChats.find(function(c) { return c.id === data.chatId; });
-                            if (chat) openChat(chat.id, chat.name);
-                        });
-                    }, 500);
-                }
-            } catch (err) {
-                btn.disabled = false;
-                btn.textContent = 'Написать';
-                showToast('error', 'Ошибка', '❌');
+                timeDiv.textContent = timeText;
             }
+            div.appendChild(timeDiv);
+            
+            // Реакции
+            if (m.reactions && m.reactions.length > 0) {
+                const reactionsEl = createReactionsElement(m.id, m.reactions);
+                div.appendChild(reactionsEl);
+            }
+            
+            return div;
         }
 
         // ============================================
-        // CHATS
+        // EMOJI PICKER
         // ============================================
-        async function decryptLastMessage(c) {
-            if (!c.lastMessageEncrypted || !c.lastMessageIv || !window.E2E) return c.lastMessage || '';
+        function toggleEmojiPicker() {
+            const picker = document.getElementById('emojiPicker');
+            const btn = document.getElementById('emojiBtn');
+
+            if (!picker) {
+                console.error('emojiPicker element not found');
+                return;
+            }
+
+            if (picker.classList.contains('active')) {
+                closeEmojiPicker();
+            } else {
+                picker.classList.add('active');
+                btn.classList.add('active');
+
+                // Закрываем другие панели
+                closeAttachmentPanel();
+                renderEmojiPicker();
+            }
+        }
+
+        function closeEmojiPicker() {
+            document.getElementById('emojiPicker').classList.remove('active');
+            document.getElementById('emojiBtn').classList.remove('active');
+        }
+
+        function switchEmojiTab(tab, btn) {
+            console.log('Switching to tab:', tab);
+            // Update tab buttons
+            document.querySelectorAll('.emoji-tab').forEach(function(b) {
+                b.classList.remove('active');
+            });
+            if (btn) btn.classList.add('active');
+
+            const emojiTab = document.getElementById('emojiTabContent');
+            const gifTab = document.getElementById('gifTabContent');
+            const stickerTab = document.getElementById('stickerTabContent');
+            emojiTab.style.display = tab === 'emoji' ? 'flex' : 'none';
+            gifTab.style.display = tab === 'gif' ? 'flex' : 'none';
+            stickerTab.style.display = tab === 'sticker' ? 'flex' : 'none';
+            if (tab === 'gif') {
+                console.log('Loading GIFs...');
+                loadGifs('');
+            }
+            if (tab === 'sticker') loadStickers();
+        }
+
+        // ── GIF в эмодзи-пикере ───────────────────────────────────────────
+        let gifDebounce;
+        let currentGifTab = 'all'; // 'all' or 'favorites'
+
+        function switchGifTab(tab) {
+            currentGifTab = tab;
+            const btnAll = document.getElementById('gifTabAll');
+            const btnFav = document.getElementById('gifTabFavorites');
+
+            if (tab === 'all') {
+                btnAll.style.background = 'var(--accent-color)';
+                btnAll.style.color = '#fff';
+                btnFav.style.background = 'var(--bg-tertiary)';
+                btnFav.style.color = 'var(--text-primary)';
+            } else {
+                btnFav.style.background = 'var(--accent-color)';
+                btnFav.style.color = '#fff';
+                btnAll.style.background = 'var(--bg-tertiary)';
+                btnAll.style.color = 'var(--text-primary)';
+            }
+
+            loadGifs(document.getElementById('gifSearch') ? document.getElementById('gifSearch').value : '');
+        }
+
+        function searchGifs(q) {
+            clearTimeout(gifDebounce);
+            gifDebounce = setTimeout(function() { loadGifs(q); }, 300);
+        }
+
+        async function loadGifs(query) {
+            const grid = document.getElementById('emojiGifGrid');
+            if (!grid) return;
+
             try {
-                return await window.E2E.decrypt(c.lastMessage, c.lastMessageIv, c.id, token);
-            } catch (_) {
-                return c.lastMessage || '';
-            }
-        }
-
-        function formatCallLastMessage(c, text) {
-            let callData = {};
-            const raw = text || c.lastMessage || c.content || '';
-            if (typeof raw === 'string') {
-                try { callData = JSON.parse(raw || '{}'); } catch(_) {}
-            } else if (raw && typeof raw === 'object') {
-                callData = raw;
-            }
-
-            const senderId = c.lastMessageSenderId || c.sender_id || c.senderId || c.sender?.id;
-            const isOutgoingCall = senderId && String(senderId) === String(user.id);
-            const isVideo = callData.callKind !== 'audio';
-
-            if (callData.status === 'missed') {
-                return isOutgoingCall ? '📞 ' + tr('unansweredCall', 'Звонок без ответа') : '📞 ' + tr('incomingMissedCall', 'Пропущенный звонок');
-            }
-
-            return isVideo ? '📹 ' + tr('videoCall', 'Видеозвонок') : '📞 ' + tr('audioCall', 'Аудиозвонок');
-        }
-
-        function formatLastMessageType(c, text) {
-                        if (c.lastMessageType === 'image' || c.lastMessageType === 'photo') return '🖼️ ' + tr('photoMessage', 'Фото');
-            if (c.lastMessageType === 'video') return '🎬 ' + tr('videoMessage', 'Видео');
-            if (c.lastMessageType === 'gif') return '🎞️ GIF';
-            if (c.lastMessageType === 'sticker') return '🎨 ' + tr('stickerMessage', 'Стикер');
-            if (c.lastMessageType === 'video_note') return '⭕ ' + tr('videoNoteMessage', 'Кружок');
-            if (c.lastMessageType === 'call' || c.type === 'call') return formatCallLastMessage(c, text);
-            return text || '';
-        }
-
-        function formatLastMessageFromMessage(msg, fallback) {
-            if (!msg) return fallback || '';
-            const content = isCraneAppBotMessage(msg) ? localizeBotMessageText(msg.content || '') : (msg.content || '');
-            return formatLastMessageType({
-                type: msg.type || 'text',
-                lastMessageType: msg.type || 'text',
-                lastMessage: content,
-                lastMessageSenderId: msg.sender_id || msg.senderId || msg.sender?.id
-            }, content) || fallback || '';
-        }
-
-        function isCraneAppBotLastMessage(c) {
-            const senderId = c.lastMessageSenderId || c.sender_id || c.senderId || c.sender?.id;
-            const chatUser = chatUsers[c.id];
-            return !!(chatUser && chatUser.isBot && senderId && String(senderId) === String(chatUser.id));
-        }
-
-        // Возвращает объект с lastMessage и опционально _rawEncrypted/_rawIv для отложенной расшифровки
-        function formatLastMessage(c) {
-            const typeOverride = formatLastMessageType(c, null);
-            if (typeOverride) return typeOverride; // медиа — не шифруется в тексте
-            if (c.lastMessageEncrypted && c.lastMessageIv) {
-                // Вернём пустую строку пока, расшифруем позже
-                return '';
-            }
-            return isCraneAppBotLastMessage(c) ? localizeBotMessageText(c.lastMessage || '') : (c.lastMessage || '');
-        }
-
-        // Подготавливает объект чата — сохраняет raw данные для расшифровки
-        function prepareChatEntry(c, base) {
-            const entry = Object.assign({}, base);
-            if (c.lastMessageEncrypted && c.lastMessageIv) {
-                entry._rawEncrypted = c.lastMessage;
-                entry._rawIv = c.lastMessageIv;
-                entry.lastMessage = '';
-            }
-            return entry;
-        }
-
-        async function loadChats() {
-            try {
-                // Сначала загружаем архивированные чаты (чтобы они были доступны при рендеринге)
-                await loadArchivedChats();
-                
-                // Затем загружаем обычные чаты
-                const chatsRes = await fetch('/api/v1/chats', { 
+                const endpoint = currentGifTab === 'favorites' ? '/api/v1/gifs/favorites' : '/api/v1/gifs';
+                const res = await fetch(endpoint, {
                     headers: { 'Authorization': 'Bearer ' + token }
                 });
-                const data = await chatsRes.json();
-                
-                // Сбрасываем pinned чаты и заполняем из данных
-                pinnedChatIds = new Set();
-                
-                // Очищаем массивы
-                allChats = [];
-                
-                // Map для защиты от дубликатов - используем для всех чатов
-                const uniqueChats = new Map(); // chatId -> chatData
-                
-                if (data.chats && data.chats.length > 0) {
-                    // Сначала загружаем все приватные чаты и их участников
-                    const privateChats = [];
-                    const otherChats = [];
-                    
-                    // Разделяем чаты на приватные и другие
-                    for (let i = 0; i < data.chats.length; i++) {
-                        const c = data.chats[i];
-                        if (c.type === 'private') {
-                            privateChats.push(c);
-                        } else {
-                            otherChats.push(c);
-                        }
-                    }
-                    
-                    // Обрабатываем приватные чаты — параллельно с таймаутом 5с
-                    function fetchWithTimeout(url, opts, ms) {
-                        const ctrl = new AbortController();
-                        const tid = setTimeout(() => ctrl.abort(), ms);
-                        return fetch(url, { ...opts, signal: ctrl.signal })
-                            .finally(() => clearTimeout(tid));
-                    }
 
-                    const memberResults = await Promise.allSettled(
-                        privateChats.map(c => {
-                            if (uniqueChats.has(c.id)) return Promise.resolve({ skip: true, c });
-                            return fetchWithTimeout('/api/v1/chats/' + c.id + '/members',
-                                { headers: { 'Authorization': 'Bearer ' + token } }, 5000)
-                                .then(r => r.ok ? r.json().then(d => ({ c, mData: d })) : Promise.resolve({ c, status: r.status }))
-                                .catch(() => ({ c, timeout: true }));
-                        })
-                    );
+                if (!res.ok) throw new Error('Failed to load GIFs');
+                const data = await res.json();
+                const allGifs = data.gifs || [];
 
-                    for (const result of memberResults) {
-                        if (result.status === 'rejected') continue;
-                        const val = result.value;
-                        if (!val || val.skip) continue;
-                        const c = val.c;
+                const filtered = query
+                    ? allGifs.filter(function(g) { return (g.name || '').toLowerCase().includes(query.toLowerCase()); })
+                    : allGifs;
 
-                        // При таймауте или ошибке — используем кэш
-                        if (val.timeout || val.status) {
-                            const cached = chatUsers[c.id];
-                            if (cached) {
-                                uniqueChats.set(c.id, prepareChatEntry(c, {
-                                    id: c.id, name: cached.name, av: cached.av,
-                                    lastMessage: formatLastMessage(c),
-                                    time: c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '',
-                                    isOnline: cached.isOnline, isPinned: c.isPinned || false,
-                                    lastMessageType: c.lastMessageType,
-                                    unreadCount: c.unreadCount || 0
-                                }));
-                                if (c.isPinned) pinnedChatIds.add(c.id);
-                            }
-                            continue;
-                        }
-
-                        const other = val.mData && val.mData.members && val.mData.members.find(function(m) {
-                            return m.id !== user.id;
-                        });
-
-                        if (other) {
-                            // Удаляем дубликаты по пользователю
-                            for (const [existingChatId] of uniqueChats) {
-                                const existingUser = chatUsers[existingChatId];
-                                if (existingUser && existingUser.id === other.id) {
-                                    uniqueChats.delete(existingChatId);
-                                    break;
-                                }
-                            }
-
-                            chatUsers[c.id] = {
-                                id: other.id,
-                                username: other.username,
-                                name: other.first_name || other.username,
-                                av: other.avatar_url || (other.first_name ? other.first_name[0] : other.username[0]),
-                                bio: other.bio || '',
-                                isOnline: other.is_blocked ? false : other.is_online,
-                                lastSeen: other.last_seen,
-                                badge: other.badge || null,
-                                badges: other.badges || [],
-                                isBot: other.is_bot || false,
-                                isPremium: other.is_premium || false,
-                                isBlocked: other.is_blocked || false
-                            };
-
-                            uniqueChats.set(c.id, prepareChatEntry(c, {
-                                id: c.id,
-                                name: chatUsers[c.id].name,
-                                av: chatUsers[c.id].av,
-                                lastMessage: formatLastMessage(c),
-                                lastMessageAt: c.lastMessageAt || null,
-                                time: c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '',
-                                isOnline: other.is_online,
-                                isPinned: c.isPinned || false,
-                                lastMessageType: c.lastMessageType,
-                                badge: other.badge || null,
-                                isBot: other.is_bot || false,
-                                unreadCount: c.unreadCount || 0
-                            }));
-
-                            if (c.isPinned) pinnedChatIds.add(c.id);
-                        }
-                    }
-                    
-                    // Обрабатываем групповые чаты и каналы
-                    for (let i = 0; i < otherChats.length; i++) {
-                        const c = otherChats[i];
-                        
-                        // Пропускаем если уже обработали этот чат
-                        if (uniqueChats.has(c.id)) {
-                            continue;
-                        }
-                        
-                        let lastMsgText = formatLastMessage(c);
-                        
-                         // Добавляем в Map
-                         uniqueChats.set(c.id, prepareChatEntry(c, {
-                             id: c.id,
-                             name: c.title || 'Чат',
-                             av: c.avatarUrl || (c.title ? c.title[0] : '?'),
-                             avatarUrl: c.avatarUrl || null,
-                             type: c.type,
-                             lastMessage: lastMsgText,
-                             lastMessageAt: c.lastMessageAt || null,
-                             time: c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '',
-                             isPinned: c.isPinned || false,
-                             unreadCount: c.unreadCount || 0
-                         }));
-                        
-                        // Добавляем в pinnedChatIds если чат закреплён
-                        if (c.isPinned) {
-                            pinnedChatIds.add(c.id);
-                        }
-                    }
-                }
-                
-                // Конвертируем Map в массив
-                allChats = Array.from(uniqueChats.values());
-
-                // Расшифровываем lastMessage для зашифрованных чатов
-                if (window.E2E) {
-                    await Promise.all(allChats.map(async c => {
-                        if (c._rawEncrypted && c._rawIv) {
-                            try {
-                                const plain = await window.E2E.decrypt(c._rawEncrypted, c._rawIv, c.id, token);
-                                const localizedPlain = isCraneAppBotLastMessage(c) ? localizeBotMessageText(plain) : plain;
-                                c.lastMessage = formatLastMessageType(c, localizedPlain);
-                            } catch (_) {}
-                            delete c._rawEncrypted;
-                            delete c._rawIv;
-                        }
-                    }));
+                grid.innerHTML = '';
+                if (!filtered.length) {
+                    const message = currentGifTab === 'favorites'
+                        ? tr('noFavoriteGifs', 'Нет избранных GIF')
+                        : tr('noGifsAdd', 'Нет GIF. Нажмите «+ GIF» чтобы добавить');
+                    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text-muted)">'
+                        + '<div style="font-size:32px;opacity:.4;margin-bottom:8px">🎞️</div>'
+                        + '<div style="font-size:13px">' + message + '</div></div>';
+                    return;
                 }
 
-                // Рендерим после загрузки ВСЕХ данных включая архивированные
-                renderChatList();
-                initFolderTabs();
-            } catch (err) {
-                console.error('Load chats error:', err);
-                allChats = [];
-                archivedChats = [];
-                renderChatList();
+                const limitedGifs = currentGifTab === 'favorites' ? filtered.slice(0, 50) : filtered;
+
+                limitedGifs.forEach(function(gif) {
+                    const item = document.createElement('div');
+                    item.style.cssText = 'cursor:pointer;border-radius:8px;background:var(--bg-tertiary);position:relative;';
+
+                    const img = document.createElement('img');
+                    img.src = gif.url;
+                    img.style.cssText = 'width:100%;height:auto;display:block;';
+                    img.loading = 'lazy';
+                    img.onclick = function() {
+                        setTimeout(function() {
+                            closeEmojiPicker();
+                            sendGifMessage(gif.url);
+                        }, 50);
+                    };
+
+                    const favBtn = document.createElement('button');
+                    favBtn.style.cssText = 'position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.5);border:none;color:#fff;border-radius:50%;width:24px;height:24px;font-size:14px;cursor:pointer;';
+                    favBtn.textContent = currentGifTab === 'favorites' ? '−' : '★';
+                    favBtn.onclick = function(e) {
+                        e.stopPropagation();
+                        toggleGifFavorite(gif);
+                    };
+
+                    item.appendChild(img);
+                    item.appendChild(favBtn);
+                    grid.appendChild(item);
+                });
+            } catch (error) {
+                grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text-muted)">' + tr('loadingError', 'Ошибка загрузки') + '</div>';
             }
         }
 
-        let activeFolder = null; // null = все чаты
-
-        // Значки — принимает массив badges + флаги isBot, isPremium, isFake, isScam
-        function makeBadgeSvg(g1, g2, id) {
-            return '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;margin-left:3px;flex-shrink:0">'
-                + '<circle cx="8" cy="8" r="8" fill="url(#' + id + ')"/>'
-                + '<path d="M4.5 8L7 10.5L11.5 5.5" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'
-                + '<defs><linearGradient id="' + id + '" x1="0" y1="0" x2="16" y2="16" gradientUnits="userSpaceOnUse">'
-                + '<stop stop-color="' + g1 + '"/><stop offset="1" stop-color="' + g2 + '"/>'
-                + '</linearGradient></defs></svg>';
+        async function toggleGifFavorite(gif) {
+            try {
+                const method = currentGifTab === 'favorites' ? 'DELETE' : 'POST';
+                await fetch('/api/v1/gifs/' + gif.id + '/favorite', {
+                    method: method,
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                loadGifs(document.getElementById('gifSearch') ? document.getElementById('gifSearch').value : '');
+            } catch (error) {
+                showToast('error', tr('error', 'Ошибка'), '❌');
+            }
         }
 
-        const BADGE_DEFS = {
-            developer: () => makeBadgeSvg('#FF007F', '#9D00FF', 'bd' + Math.random().toString(36).slice(2,6)),
-            verified:  () => makeBadgeSvg('#FF007F', '#9D00FF', 'bv' + Math.random().toString(36).slice(2,6)),
-            admin:     () => makeBadgeSvg('#0088FF', '#00C8C8', 'ba' + Math.random().toString(36).slice(2,6)),
-            premium:   () => '<span style="display:inline-block;vertical-align:middle;margin-left:3px;font-size:13px;line-height:1;filter:drop-shadow(0 0 3px #FFD700)">⭐</span>',
-            bot:       () => makeBadgeSvg('#FF007F', '#9D00FF', 'bb' + Math.random().toString(36).slice(2,6)),
-            fake:      () => '<span style="color:#FF4B4B;font-size:10px;font-weight:700;margin-left:3px;vertical-align:middle">FAKE</span>',
-            scam:      () => '<span style="color:#FF4B4B;font-size:10px;font-weight:700;margin-left:3px;vertical-align:middle">SCAM</span>',
+        // ── Стикеры в эмодзи-пикере ───────────────────────────────────────
+        var emojiCurrentPackIdx = null;
+
+        function loadStickers() {
+            loadStickerPacks();
+            emojiRenderPacksList();
+        }
+
+        function emojiRenderPacksList() {
+            const container = document.getElementById('emojiStickerPacks');
+            if (!container) return;
+            container.innerHTML = '';
+
+            // Рендерим все паки (теперь только личные)
+            stickerPacks.forEach(function(pack, i) {
+                const btn = document.createElement('button');
+                const isActive = emojiCurrentPackIdx === i;
+                btn.style.cssText = 'background:' + (isActive ? 'var(--accent-color)' : 'var(--bg-tertiary)') + ';border:none;border-radius:8px;padding:4px 10px;font-size:12px;color:' + (isActive ? '#fff' : 'var(--text-primary)') + ';cursor:pointer;white-space:nowrap;flex-shrink:0;';
+                btn.textContent = pack.name;
+                btn.onclick = function(e) {
+                    e.stopPropagation();
+                    emojiCurrentPackIdx = i;
+                    emojiRenderPacksList();
+                };
+                container.appendChild(btn);
+            });
+
+            emojiRenderStickerGrid();
+        }
+
+        function emojiRenderStickerGrid() {
+            const grid = document.getElementById('emojiStickerGrid');
+            const nameEl = document.getElementById('emojiStickerPackName');
+            const addBtn = document.getElementById('emojiAddStickerBtn');
+            if (!grid) return;
+            if (emojiCurrentPackIdx === null || !stickerPacks[emojiCurrentPackIdx]) {
+                grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text-muted);font-size:13px">' + tr('choosePackOrCreate', 'Выберите пак или создайте новый') + '</div>';
+                if (nameEl) {
+                    nameEl.setAttribute('data-i18n', 'choosePack');
+                    nameEl.textContent = tr('choosePack', 'Выберите пак');
+                }
+                if (addBtn) addBtn.style.display = 'none';
+                return;
+            }
+            const pack = stickerPacks[emojiCurrentPackIdx];
+            if (nameEl) {
+                nameEl.removeAttribute('data-i18n');
+                nameEl.textContent = pack.name;
+            }
+            // Показываем кнопку добавления только для личных паков
+            if (addBtn) addBtn.style.display = !pack.isCommon ? 'block' : 'none';
+            grid.innerHTML = '';
+            (pack.stickers || []).forEach(function(url, si) {
+                const wrap = document.createElement('div');
+                wrap.style.cssText = 'position:relative;border-radius:8px;overflow:hidden;cursor:pointer;aspect-ratio:1;background:var(--bg-tertiary);';
+                const img = document.createElement('img');
+                img.src = url;
+                img.style.cssText = 'width:100%;height:100%;object-fit:contain;padding:4px;';
+                img.onclick = function() { closeEmojiPicker(); sendStickerMessage(url); };
+                // Кнопка удаления только для личных паков
+                if (!pack.isCommon) {
+                    const del = document.createElement('button');
+                    del.textContent = '×';
+                    del.style.cssText = 'position:absolute;top:2px;right:2px;background:rgba(0,0,0,.65);border:none;color:#fff;border-radius:50%;width:16px;height:16px;font-size:11px;cursor:pointer;line-height:1;';
+                    del.onclick = async function(e) {
+                        e.stopPropagation();
+                        try {
+                            // Получаем ID стикера из данных пака
+                            const stickerId = pack.stickerIds ? pack.stickerIds[si] : null;
+                            if (!stickerId) {
+                                // Fallback: удаляем по индексу локально
+                                stickerPacks[emojiCurrentPackIdx].stickers.splice(si, 1);
+                                emojiRenderStickerGrid();
+                                return;
+                            }
+                            const res = await fetch('/api/v1/stickers/packs/' + pack.id + '/stickers/' + stickerId, {
+                                method: 'DELETE',
+                                headers: { 'Authorization': 'Bearer ' + token }
+                            });
+                            if (res.ok) {
+                                stickerPacks[emojiCurrentPackIdx].stickers.splice(si, 1);
+                                if (stickerPacks[emojiCurrentPackIdx].stickerIds) {
+                                    stickerPacks[emojiCurrentPackIdx].stickerIds.splice(si, 1);
+                                }
+                                emojiRenderStickerGrid();
+                            }
+                        } catch (error) {
+                            console.error('Delete sticker error:', error);
+                        }
+                    };
+                    wrap.appendChild(del);
+                }
+                // Контекстное меню для стикера
+                wrap.oncontextmenu = function(e) {
+                    e.preventDefault();
+                    showStickerContextMenu(e, pack, url);
+                };
+                wrap.appendChild(img);
+                grid.appendChild(wrap);
+            });
+            if (!pack.stickers || !pack.stickers.length) {
+            grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:16px;color:var(--text-muted);font-size:13px">' + (pack.isCommon ? (window.i18n?.t('stickersSoon') || 'Скоро здесь появятся стикеры') : (window.i18n?.t('noStickers') || 'Нет стикеров. Нажмите «+ Стикер»')) + '</div>';
+            }
+        }
+
+        function emojiAddStickerToPack() {
+            if (emojiCurrentPackIdx === null) { showToast('error', tr('choosePack', 'Выберите пак'), '❌'); return; }
+            // Переключаем currentStickerPackId чтобы addStickerToCurrentPack работал правильно
+            currentStickerPackId = emojiCurrentPackIdx;
+            document.getElementById('stickerInput').click();
+        }
+
+        function emojiOpenCreatePack() {
+            openCreatePackModal();
+        }
+
+        function showStickerContextMenu(e, pack, stickerUrl) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            // Удаляем старое меню если есть
+            const oldMenu = document.getElementById('stickerContextMenu');
+            if (oldMenu) oldMenu.remove();
+
+            const menu = document.createElement('div');
+            menu.id = 'stickerContextMenu';
+            menu.style.cssText = 'position:fixed;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.3);z-index:1000;min-width:200px;padding:4px 0;';
+
+            // Копировать ссылку на стикер-пак
+            const copyLinkItem = document.createElement('div');
+            copyLinkItem.style.cssText = 'padding:10px 16px;cursor:pointer;display:flex;align-items:center;gap:10px;font-size:14px;color:var(--text-primary);transition:background 0.1s;';
+            copyLinkItem.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span>' + tr('copyLink', 'Скопировать ссылку') + '</span>';
+            copyLinkItem.onclick = function() {
+                const link = window.location.origin + '/stickers/' + pack.id;
+                navigator.clipboard.writeText(link).then(function() {
+                    showToast('success', tr('linkCopied', 'Ссылка скопирована'), '📋');
+                });
+                menu.remove();
+            };
+            copyLinkItem.onmouseover = function() { this.style.background = 'var(--bg-tertiary)'; };
+            copyLinkItem.onmouseout = function() { this.style.background = 'transparent'; };
+            menu.appendChild(copyLinkItem);
+
+            // Добавить стикер-пак в мои (только для общих паков)
+            if (pack.isCommon) {
+                const addToMyItem = document.createElement('div');
+                addToMyItem.style.cssText = 'padding:10px 16px;cursor:pointer;display:flex;align-items:center;gap:10px;font-size:14px;color:var(--text-primary);transition:background 0.1s;';
+                addToMyItem.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg><span>' + tr('addToMyStickers', 'Добавить в мои стикеры') + '</span>';
+                addToMyItem.onclick = function() {
+                    addStickerPackToPersonal(pack);
+                    menu.remove();
+                };
+                addToMyItem.onmouseover = function() { this.style.background = 'var(--bg-tertiary)'; };
+                addToMyItem.onmouseout = function() { this.style.background = 'transparent'; };
+                menu.appendChild(addToMyItem);
+            }
+
+            // Позиционируем меню
+            const x = e.clientX;
+            const y = e.clientY;
+            menu.style.left = x + 'px';
+            menu.style.top = y + 'px';
+
+            document.body.appendChild(menu);
+
+            // Закрытие при клике вне меню
+            setTimeout(function() {
+                document.addEventListener('click', function closeMenu(e) {
+                    if (!menu.contains(e.target)) {
+                        menu.remove();
+                        document.removeEventListener('click', closeMenu);
+                    }
+                });
+            }, 0);
+        }
+
+        function addStickerPackToPersonal(pack) {
+            // Проверяем, не добавлен ли уже
+            const personalPacks = stickerPacks.filter(p => !p.isCommon);
+            const alreadyExists = personalPacks.some(p => p.name === pack.name);
+
+            if (alreadyExists) {
+                showToast('error', tr('packAlreadyAdded', 'Этот пак уже добавлен'), '❌');
+                return;
+            }
+
+            // Создаем копию пака для личных
+            const newPack = {
+                id: 'personal_' + Date.now(),
+                name: pack.name,
+                icon: pack.icon,
+                stickers: [...(pack.stickers || [])],
+                isCommon: false
+            };
+
+            stickerPacks.push(newPack);
+            saveStickerPacks();
+            renderStickerPacksList();
+            emojiRenderPacksList();
+            showToast('success', tr('stickerPackAdded', 'Стикерпак добавлен'), '✨');
+        }
+
+        function renderEmojiPicker() {
+            renderEmojiCategories();
+            // Рендерим текущую категорию или smileys по умолчанию
+            renderEmojis(currentEmojiCategory || 'smileys');
+        }
+
+        function renderEmojiCategories() {
+            const container = document.getElementById('emojiCategories');
+            container.innerHTML = '';
+            
+            const categories = ['recent', 'smileys', 'animals', 'food', 'activities', 'travel', 'objects', 'symbols'];
+            
+            categories.forEach(function(cat) {
+                const btn = document.createElement('button');
+                btn.className = 'emoji-cat' + (cat === currentEmojiCategory ? ' active' : '');
+                btn.innerHTML = window.EmojiCategories && window.EmojiCategories[cat] ? window.EmojiCategories[cat].icon : '😀';
+                btn.onclick = function() {
+                    currentEmojiCategory = cat;
+                    document.querySelectorAll('.emoji-cat').forEach(function(b) { b.classList.remove('active'); });
+                    btn.classList.add('active');
+                    renderEmojis(cat);
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        // Базовый набор эмодзи на случай если EmojiData не загружена
+        const DEFAULT_EMOJIS = {
+            'smileys': ['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩','😘','😗','😚','😙','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🤐','🤨','😐','😑','😶','😏','😒','🙄','😬','🤥','😌','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤮','🤧','🥵','🥶','🥴','😵','🤯','🤠','🥳','😎','🤓','🧐','😕','😟','🙁','☹️','😮','😯','😲','😳','🥺','😦','😧','😨','😰','😥','😢','😭','😱','😖','😣','😞','😓','😩','😫','🥱','😤','😡','😠','🤬','😈','👿','💀','☠️','💩','🤡','👹','👺','👻','👽','👾','🤖'],
+            'animals': ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐽','🐸','🐵','🙈','🙉','🙊','🐒','🐔','🐧','🐦','🐤','🐣','🐥','🦆','🦅','🦉','🦇','🐺','🐗','🐴','🦄','🐝','🐛','🦋','🐌','🐞','🐜','🦟','🦗','🕷️','🕸️','🦂','🐢','🐍','🦎','🦖','🦕','🐙','🦑','🦐','🦞','🦀','🐡','🐠','🐟','🐬','🐳','🐋','🦈','🐊','🐅','🐆','🦓','🦍','🦧','🐘','🦛','🦏','🐪','🐫','🦒','🦘','🐃','🐂','🐄','🐎','🐖','🐏','🐑','🦙','🐐','🦌','🐕','🐩','🦮','🐕‍🦺','🐈','🐈‍⬛','🐓','🦃','🦚','🦜','🦢','🦩','🕊️','🐇','🦝','🦨','🦡','🦦','🦥','🐁','🐀','🐿️','🦔'],
+            'food': ['🍏','🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🍈','🍒','🍑','🍍','🥭','🥥','🥝','🍅','🍆','🥑','🥦','🥬','🥒','🌶️','🌽','🥕','🧄','🧅','🥔','🍠','🥐','🥯','🍞','🥖','🥨','🧀','🥚','🍳','🧈','🥞','🧇','🥓','🥩','🍗','🍖','🦴','🌭','🍔','🍟','🍕','🌮','🌯','🥙','🧆','🥚','🍳','🥘','🍲','🥣','🥗','🍿','🧈','🧂','🥫','🍱','🍘','🍙','🍚','🍛','🍜','🍝','🍠','🍢','🍣','🍤','🍥','🍡','🍦','🍧','🍨','🍩','🍪','🎂','🍰','🧁','🥧','🍫','🍬','🍭','🍮','🍯','🍼','🥛','☕','🍵','🧃','🥤','🍶','🍺','🍻','🥂','🍷','🥃','🍸','🍹','🧉','🍾','🧊','🥄','🍴','🍽️','🥣','🥡','🥢','🧂'],
+            'activities': ['⚽','🏀','🏈','⚾','🥎','🎾','🏐','🏉','🥏','🎱','🪀','🏓','🏸','🏒','🏑','🥍','🏏','🥅','⛳','🪁','🏹','🎣','🤿','🥊','🥋','🎽','🛹','🛷','⛸️','🥌','🎿','⛷️','🏂','🏋️','🏋️‍♂️','🏋️‍♀️','🤼','🤼‍♂️','🤼‍♀️','🤸','🤸‍♂️','🤸‍♀️','⛹️','⛹️‍♂️','⛹️‍♀️','🤺','🤾','🤾‍♂️','🤾‍♀️','🏌️','🏌️‍♂️','🏌️‍♀️','🏇','🧘','🧘‍♂️','🧘‍♀️','🏄','🏄‍♂️','🏄‍♀️','🏊','🏊‍♂️','🏊‍♀️','🤽','🤽‍♂️','🤽‍♀️','🚣','🚣‍♂️','🚣‍♀️','🧗','🧗‍♂️','🧗‍♀️','🚵','🚵‍♂️','🚵‍♀️','🚴','🚴‍♂️','🚴‍♀️','🏆','🥇','🥈','🥉','🏅','🎖️','🏵️','🎗️','🎫','🎟️','🎪','🤹','🤹‍♂️','🤹‍♀️','🎭','🩰','🎨','🎬','🎤','🎧','🎼','🎹','🥁','🎷','🎺','🎸','🪕','🎻','🎲','🎯','🎳','🎮','🎰','🧩'],
+            'travel': ['🚗','🚕','🚙','🚌','🚎','🏎️','🚓','🚑','🚒','🚐','🚚','🚛','🚜','🦯','🦽','🦼','🛴','🚲','🛵','🏍️','🚨','🚔','🚍','🚘','🚖','🚡','🚠','🚟','🚃','🚋','🚞','🚝','🚄','🚅','🚈','🚂','🚆','🚇','🚊','🚉','✈️','🛫','🛬','🛩️','💺','🛰️','🚀','🛸','🚁','🛶','⛵','🚤','🛥️','🛳️','⛴️','🚢','⚓','⛽','🚧','🚦','🚥','🚏','🗺️','🧭','🧳','🌎','🌍','🌏','🌐','🗾','🧭','🏔️','⛰️','🌋','🗻','🏕️','🏖️','🏜️','🏝️','🏞️','🏟️','🏛️','🏗️','🧱','🪨','🪵','🛖','🏘️','🏚️','🏠','🏡','🏢','🏣','🏤','🏥','🏦','🏨','🏩','🏪','🏫','🏬','🏭','🏯','🏰','💒','🗼','🗽','⛪','🕌','🛕','🕍','⛩️','🕋','⛲','⛺','🌁','🌃','🏙️','🌄','🌅','🌆','🌇','🌉','♨️','🎠','🎡','🎢','💈','🎪'],
+            'objects': ['⌚','📱','📲','💻','⌨️','🖥️','🖨️','🖱️','🖲️','🕹️','🗜️','💽','💾','💿','📀','📼','📷','📸','📹','🎥','📽️','🎞️','📞','☎️','📟','📠','📺','📻','🎙️','🎚️','🎛️','🧭','⏱️','⏲️','⏰','🕰️','⌛','⏳','📡','🔋','🔌','💡','🔦','🕯️','🪔','🧯','🛢️','💸','💵','💴','💶','💷','🪙','💰','💳','💎','⚖️','🪜','🧰','🪛','🔧','🔨','⚒️','🛠️','⛏️','🔩','⚙️','🪤','🧱','⛓️','🧲','🔫','💣','🧱','🔪','🗡️','⚔️','🛡️','🚬','⚰️','⚱️','🗿','🪦','🧿','💈','⚗️','🔭','🔬','🕳️','🩹','🩺','💊','💉','🩸','🧬','🦠','🧫','🧪','🌡️','🧹','🧺','🧻','🚽','🚰','🚿','🛁','🛀','🧼','🪥','🪒','🧽','🛎️','🔑','🗝️','🚪','🪑','🛋️','🛏️','🛌','🧸','🪆','🖼️','🪞','🪟','🛍️','🛒','🎁','🎈','🎏','🎀','🪄','🪅','🎊','🎉','🎎','🏮','🎐','🧧','✉️','📩','📨','📧','📤','📥','📦','📫','📪','📬','📭','📮','🗳️','✏️','✒️','🖋️','🖊️','🖌️','🖍️','📝','💼','📁','📂','🗂️','📅','📆','🗒️','🗓️','📇','📈','📉','📊','📋','📌','📍','📎','🖇️','📏','📐','✂️','🗃️','🗄️','🗑️','🔒','🔓','🔏','🔐','🔑','🗝️'],
+            'symbols': ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','💟','☮️','✝️','☪️','🕉️','☸️','✡️','🔯','🕎','☯️','☦️','🛐','⛎','♈','♉','♊','♋','♌','♍','♎','♏','♐','♑','♒','♓','🆔','⚛️','🉑','☢️','☣️','📴','📳','🈶','🈚','🈸','🈺','🈷️','✴️','🆚','💮','🉐','㊙️','㊗️','🈴','🈵','🈹','🈲','🅰️','🅱️','🆎','🆑','🅾️','🆘','❌','⭕','🛑','⛔','📛','🚫','💯','💢','♨️','🚷','🚯','🚳','🚱','🔞','📵','🚭','❗','❕','❓','❔','‼️','⁉️','🔅','🔆','〽️','⚠️','🚸','🔱','⚜️','🔰','♻️','✅','🈯','💹','❇️','✳️','❎','🌐','💠','Ⓜ️','🌀','💤','🏧','🚾','♿','🅿️','🈳','🈂','🛂','🛃','🛄','🛅','🛗','🚹','🚺','🚼','⚧️','🚻','🚮','🎦','📶','🈁','🔣','ℹ️','🔤','🔡','🔠','🆖','🆗','🆙','🆒','🆕','🆓','0️⃣','1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟','🔢','#️⃣','*️⃣','⏏️','▶️','⏸️','⏯️','⏹️','⏺️','⏭️','⏮️','⏩','⏪','⏫','⏬','◀️','🔼','🔽','➡️','⬅️','⬆️','⬇️','↗️','↘️','↙️','↖️','↕️','↔️','↪️','↩️','⤴️','⤵️','🔀','🔁','🔂','🔄','🔃','🎵','🎶','➕','➖','➗','✖️','💲','💱','™️','©️','®️','〰️','➰','➿','🔚','🔙','🔛','🔝','🔜','✔️','☑️','🔘','🔴','🟠','🟡','🟢','🔵','🟣','⚫','⚪','🟤','🔺','🔻','🔸','🔹','🔶','🔷','🔳','🔲','▪️','▫️','◾','◽','◼️','◻️','⬛','⬜','🟥','🟧','🟨','🟩','🟦','🟪','🟫','🔈','🔇','🔉','🔊','🔔','🔕','📣','📢','💬','💭','🗯️','♠️','♣️','♥️','♦️','🃏','🎴','🀄','🕐','🕑','🕒','🕓','🕔','🕕','🕖','🕗','🕘','🕙','🕚','🕛','🕜','🕝','🕞','🕟','🕠','🕡','🕢','🕣','🕤','🕥','🕦','🕧']
         };
 
-        function renderBadges(badges, isBot, isPremium, isFake, isScam) {
-            let html = '';
-            // Если это бот — показываем только одну галочку бота
-            if (isBot) {
-                return BADGE_DEFS['bot']();
-            }
-            const list = Array.isArray(badges) ? [...badges] : (badges ? [badges] : []);
-            if (isPremium && !list.includes('premium')) list.push('premium');
-            if (isFake) list.push('fake');
-            if (isScam) list.push('scam');
-            for (const b of list) {
-                if (BADGE_DEFS[b]) html += BADGE_DEFS[b]();
-            }
-            return html;
-        }
-
-        // Обратная совместимость
-        function renderBadge(badge, isBot) {
-            return renderBadges(badge ? [badge] : [], isBot, false, false, false);
-        }
-        function initFolderTabs() {
-            const folders = JSON.parse(localStorage.getItem('craneapp_folders') || '[]');
-            const tabsEl = document.getElementById('folderTabs');
-            if (!folders.length) { tabsEl.style.display = 'none'; return; }
-
-            tabsEl.style.display = 'flex';
-            let html = '<div class="ftab' + (!activeFolder ? ' active' : '') + '" onclick="setFolder(null)">💬 Все</div>';
-            folders.forEach(f => {
-                const isActive = activeFolder === f.id;
-                html += '<div class="ftab' + (isActive ? ' active' : '') + '" onclick="setFolder(\'' + f.id + '\')">' + f.icon + ' ' + f.name + '</div>';
-            });
-            tabsEl.innerHTML = html;
-        }
-
-        function setFolder(folderId) {
-            activeFolder = folderId;
-            initFolderTabs();
-            renderChatList();
-        }
-
-        function renderUnreadBadge(chat) {
-            const count = Number(chat && chat.unreadCount) || 0;
-            if (count <= 0) return '';
-            return '<div class="unread-badge">' + (count > 99 ? '99+' : count) + '</div>';
-        }
-
-        async function markChatAsRead(chatId, options = {}) {
-            if (!chatId) return false;
-
-            const res = await fetch('/api/v1/chats/' + chatId + '/read', {
-                method: 'POST',
-                headers: {
-                    'Authorization': 'Bearer ' + token,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({})
-            });
-            if (!res.ok) throw new Error('mark read failed');
-
-            [allChats, archivedChats].forEach(function(list) {
-                const chat = list.find(c => c.id === chatId);
-                if (chat) chat.unreadCount = 0;
-            });
-            renderChatList();
-
-            if (!options.silent) {
-                showToast('success', tr('chatMarkedAsRead', 'Чат помечен прочитанным'), '✓');
-            }
-            return true;
-        }
-
-        function renderChatList(filter) {
-            filter = filter || '';
+        function renderEmojis(category, filter) {
+            const grid = document.getElementById('emojiGrid');
+            grid.innerHTML = '';
             
-            const list = document.getElementById('chatList');
+            let emojis = [];
             
-            // Сортируем по времени последнего сообщения (новые выше)
-            allChats.sort((a, b) => {
-                const ta = a.lastMessageAt ? new Date(a.lastMessageAt) : (a.time ? new Date('1970/01/01 ' + a.time) : new Date(0));
-                const tb = b.lastMessageAt ? new Date(b.lastMessageAt) : (b.time ? new Date('1970/01/01 ' + b.time) : new Date(0));
-                return tb - ta;
-            });
-
-            // Разделяем на закреплённые и обычные
-            let pinnedChats = [];
-            let normalChats = [];
-
-            // Фильтр по активной папке
-            let chatsToShow = allChats;
-            if (activeFolder) {
-                const folders = JSON.parse(localStorage.getItem('craneapp_folders') || '[]');
-                const folder = folders.find(f => f.id === activeFolder);
-                if (folder) {
-                    const ids = new Set(folder.chatIds || folder.chats || []);
-                    chatsToShow = allChats.filter(c => ids.has(c.id));
+            if (category === 'recent') {
+                emojis = window.getRecentEmojis ? window.getRecentEmojis() : [];
+                if (emojis.length === 0) {
+                    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--text-muted);font-size:14px;">Недавние эмодзи появятся здесь</div>';
+                    return;
                 }
-            }
-            
-            chatsToShow.forEach(function(c) {
-                if (pinnedChatIds.has(c.id)) {
-                    c.isPinned = true;
-                    pinnedChats.push(c);
-                } else {
-                    normalChats.push(c);
-                }
-            });
-            
-            const filtered = filter ? normalChats.filter(function(c) { 
-                return c.name.toLowerCase().indexOf(filter.toLowerCase()) >= 0; 
-            }) : normalChats;
-            
-            let html = '';
-            
-            // Секция архивированных — ПЕРВОЙ (как в Telegram)
-            if (archivedChats.length > 0 && !filter) {
-                html += '<div class="archived-chats-section">';
-                html += '<div class="archived-chats-header" onclick="toggleArchivedChats()">📁 ' + tr('archived', 'Archived') + ' (' + archivedChats.length + ')</div>';
-                html += '<div class="archived-chats-list" id="archivedChatsList" style="display: block;">';
-                html += archivedChats.map(function(c) {
-                    const name = c.name || c.title || tr('chatShort', 'Чат');
-                    const ph = c.av || c.avatarUrl || (name[0] || '?');
-                    return '<div class="chat-item" onclick="openArchivedChat(\'' + c.id + '\', \'' + name + '\')">' +
-                        renderAvatar(ph, name[0], 'avatar') +
-                        '<div class="chat-info"><div class="chat-name">' + name + '</div>' +
-                        '<div class="chat-last">' + (c.lastMessage || tr('noMessages', 'Нет сообщений')) + '</div></div>' +
-                        '<div class="chat-time">' + (c.time || '') + '</div>' +
-                        renderUnreadBadge(c) +
-                        '<div class="chat-actions"><button class="chat-action-icon" onclick="event.stopPropagation(); unarchiveChat(\'' + c.id + '\')" title="' + tr('restore', 'Восстановить') + '">📥</button></div>' +
-                        '</div>';
-                }).join('');
-                html += '</div></div>';
-            }
-
-            // Секция закреплённых
-            if (pinnedChats.length > 0 && !filter) {
-                html += '<div class="pinned-chats-section" style="margin-bottom: 8px;">';
-                html += '<div class="pinned-chats-header" style="color: var(--accent-color); font-weight: 600;">📌 ' + tr('pinned', 'Pinned') + '</div>';
-                
-                html += pinnedChats.map(function(c) {
-                    const isActive = activeChat && activeChat.id === c.id;
-                    const ph = typeof c.av === 'string' && c.av.length <= 2 ? c.av : c.name[0];
-                    return '<div class="chat-item pinned ' + (isActive ? 'active' : '') + '" ' +
-                        'data-chat-type="' + (c.type || (c.isGroup ? 'group' : 'private')) + '" ' +
-                        'onclick="openChat(\'' + c.id + '\', \'' + c.name + '\')" ' +
-                        'oncontextmenu="showChatContextMenu(event, \'' + c.id + '\')" ' +
-                        'style="background: linear-gradient(90deg, rgba(255,0,127,0.15) 0%, transparent 100%); border-left: 3px solid var(--accent-color);">' +
-                        renderAvatar(c.av, ph, 'avatar') +
-                        '<div class="chat-info">' +
-                        '<div class="chat-name" style="color: var(--accent-color);"><span class="pin-icon">📌</span> ' + c.name + '</div>' +
-                        '<div class="chat-last">' + (c.lastMessage || tr('noMessages', 'Нет сообщений')) + '</div>' +
-                        '</div>' +
-                        '<div class="chat-time">' + (c.time || '') + '</div>' +
-                        renderUnreadBadge(c) +
-                        '<div class="chat-actions">' +
-                        '<button class="chat-action-icon pinned" onclick="event.stopPropagation(); unpinChat(\'' + c.id + '\')" title="' + tr('unpin', 'Открепить') + '" style="color: var(--accent-color);">📌</button>' +
-                        '<button class="chat-action-icon archived" onclick="event.stopPropagation(); archiveChat(\'' + c.id + '\')" title="' + tr('archiveChat', 'Архивировать') + '">📁</button>' +
-                        '</div>' +
-                        '</div>';
-                }).join('');
-                
-                html += '</div>';
-            }
-            
-            // Секция обычных чатов
-            if (filtered.length === 0 && !pinnedChats.length) {
-                html += '<div style="padding:30px;text-align:center;color:var(--text-muted);font-size:14px;">' + tr('noChats', 'Нет чатов') + '</div>';
             } else {
-                html += filtered.map(function(c) {
-                    const isActive = activeChat && activeChat.id === c.id;
-                    const ph = typeof c.av === 'string' && c.av.length <= 2 ? c.av : c.name[0];
-                    const chatUser = chatUsers[c.id];
-                    const isBlocked = chatUser && chatUser.isBlocked;
-                    // Журавль для бота CraneApp или призрак для заблокированных
-                    let avatarHtml;
-                    if (isBlocked) {
-                        avatarHtml = '<div class="avatar"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18v-6a3 3 0 0 1 6 0v6"/><path d="M6 18a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3v-6a3 3 0 0 0-3-3H9a3 3 0 0 0-3 3v6z"/><path d="M12 2a5 5 0 0 0-5 5v2h10V7a5 5 0 0 0-5-5z"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="16" r="1"/></svg></div>';
-                    } else if (c.isBot || c.badge === 'verified' && c.name === 'CraneApp') {
-                        avatarHtml = '<div class="avatar"><img class="avatar-img" src="/logo.png" alt=""></div>';
-                    } else {
-                        avatarHtml = renderAvatar(c.av, ph, 'avatar');
-                    }
-                    const displayName = isBlocked ? tr('blockedAccount', 'Заблокированный аккаунт') : c.name;
-                    return '<div class="chat-item ' + (isActive ? 'active' : '') + '" ' +
-                        'data-chat-type="' + (c.type || (c.isGroup ? 'group' : 'private')) + '" ' +
-                        'onclick="openChat(\'' + c.id + '\', \'' + displayName + '\')" ' +
-                        'oncontextmenu="showChatContextMenu(event, \'' + c.id + '\')">' +
-                        avatarHtml +
-                        '<div class="chat-info">' +
-                        '<div class="chat-name">' + displayName + (c.badge || c.isBot ? renderBadge(c.badge, c.isBot) : '') + '</div>' +
-                        '<div class="chat-last">' + (c.lastMessage || tr('noMessages', 'Нет сообщений')) + '</div>' +
-                        '</div>' +
-                        '<div class="chat-time">' + (c.time || '') + '</div>' +
-                        renderUnreadBadge(c) +
-                        '<div class="chat-actions">' +
-                        '<button class="chat-action-icon" onclick="event.stopPropagation(); pinChat(\'' + c.id + '\')" title="' + tr('pin', 'Закрепить') + '">📌</button>' +
-                        '<button class="chat-action-icon archived" onclick="event.stopPropagation(); archiveChat(\'' + c.id + '\')" title="' + tr('archiveChat', 'Архивировать') + '">📁</button>' +
-                        '</div>' +
-                        '</div>';
-                }).join('');
+                // Используем window.EmojiData если есть, иначе DEFAULT_EMOJIS
+                emojis = (window.EmojiData && window.EmojiData[category]) 
+                    ? window.EmojiData[category] 
+                    : (DEFAULT_EMOJIS[category] || []);
             }
             
-            list.innerHTML = html;
+            if (filter) {
+                emojis = emojis.filter(function(e) { return e.indexOf(filter) >= 0; });
+            }
+            
+            emojis.forEach(function(emoji) {
+                const item = document.createElement('div');
+                item.className = 'emoji-item';
+                item.textContent = emoji;
+                item.onclick = function() { insertEmoji(emoji); };
+                grid.appendChild(item);
+            });
         }
 
-        document.getElementById('searchInput').addEventListener('input', function(e) {
-            // handled by handleUnifiedSearch via oninput
+        function filterEmojis(query) {
+            if (!query) {
+                renderEmojis(currentEmojiCategory);
+                return;
+            }
+
+            const grid = document.getElementById('emojiGrid');
+            grid.innerHTML = '';
+
+            const allCategories = ['smileys', 'animals', 'food', 'activities', 'travel', 'objects', 'symbols'];
+            let allEmojis = [];
+
+            allCategories.forEach(function(cat) {
+                if (window.EmojiData && window.EmojiData[cat]) {
+                    allEmojis = allEmojis.concat(window.EmojiData[cat]);
+                }
+            });
+
+            allEmojis = [...new Set(allEmojis)];
+
+            // Фильтруем эмодзи по запросу
+            const filtered = allEmojis.filter(function(emoji) {
+                return emoji.includes(query);
+            });
+
+            filtered.forEach(function(emoji) {
+                const item = document.createElement('div');
+                item.className = 'emoji-item';
+                item.textContent = emoji;
+                item.onclick = function() { insertEmoji(emoji); };
+                grid.appendChild(item);
+            });
+        }
+
+        function insertEmoji(emoji) {
+            const input = document.getElementById('msgInput');
+            input.focus();
+            document.execCommand('insertText', false, emoji);
+            
+            if (window.addToRecent) {
+                window.addToRecent(emoji);
+            }
+        }
+
+        // ============================================
+        // TEXT FORMATTING IN INPUT
+        // ============================================
+        function formatInputText(format) {
+            const input = document.getElementById('msgInput');
+            const selection = window.getSelection();
+            
+            if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+                showToast('info', 'Выделите текст для форматирования', '✏️');
+                return;
+            }
+            
+            const selectedText = selection.toString();
+            let prefix = '', suffix = '';
+            
+            switch (format) {
+                case 'bold':   prefix = '**'; suffix = '**'; break;
+                case 'italic': prefix = '_';  suffix = '_';  break;
+                case 'spoiler':prefix = '||'; suffix = '||'; break;
+            }
+            
+            document.execCommand('insertText', false, prefix + selectedText + suffix);
+            input.focus();
+        }
+
+        // Горячие клавиши, Enter и навигация по подсказкам @
+        document.getElementById('msgInput').addEventListener('keydown', function(e) {
+            if (mentionSuggestionsList.length) {
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    mentionSuggestionIndex = (mentionSuggestionIndex + 1) % mentionSuggestionsList.length;
+                    highlightMentionSuggestion(mentionSuggestionIndex);
+                    return;
+                }
+                if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    mentionSuggestionIndex = (mentionSuggestionIndex - 1 + mentionSuggestionsList.length) % mentionSuggestionsList.length;
+                    highlightMentionSuggestion(mentionSuggestionIndex);
+                    return;
+                }
+                if (e.key === 'Enter' || e.key === 'Tab') {
+                    e.preventDefault();
+                    selectActiveMentionSuggestion();
+                    return;
+                }
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    hideMentionSuggestions();
+                    return;
+                }
+            }
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                send();
+                return;
+            }
+            if (e.ctrlKey || e.metaKey) {
+                if (e.key === 'b') {
+                    e.preventDefault();
+                    formatInputText('bold');
+                } else if (e.key === 'i') {
+                    e.preventDefault();
+                    formatInputText('italic');
+                }
+            }
         });
 
-        let unifiedSearchTimeout;
-        function handleUnifiedSearch(q) {
-            clearTimeout(unifiedSearchTimeout);
-            if (!q) { renderChatList(); return; }
-            unifiedSearchTimeout = setTimeout(async () => {
-                // Фильтруем локальные чаты
-                renderChatList(q);
-                // Ищем пользователей если запрос похож на юзернейм или имя
-                if (q.length >= 2) {
-                    try {
-                        const res = await fetch('/api/v1/users/search?q=' + encodeURIComponent(q.replace('@','')), {
-                            headers: { 'Authorization': 'Bearer ' + token }
-                        });
-                        if (!res.ok) return;
-                        const data = await res.json();
-                        const users = (data.users || []).filter(u => u.id !== user.id);
-                        if (users.length) {
-                        // Добавляем найденных пользователей в список чатов как отдельную секцию
-                        const list = document.getElementById('chatList');
-                        let section = document.getElementById('userSearchResults');
-                        if (!section) {
-                            section = document.createElement('div');
-                            section.id = 'userSearchResults';
-                            list.appendChild(section);
-                        }
-                        section.innerHTML = '<div style="padding:8px 16px 4px;font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-muted);">' + tr('people', 'Люди') + '</div>' +
-                            users.map(u => {
-                                // Журавль для бота CraneApp
-                                const av = u.username === 'craneapp_bot'
-                                    ? '<img src="/logo.png" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">'
-                                    : (u.avatar_url && isImage(u.avatar_url)
-                                        ? '<img src="'+u.avatar_url+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">'
-                                        : '<div style="width:100%;height:100%;background:linear-gradient(135deg,#FF007F,#9D00FF);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;font-weight:700;">'+(u.firstName||u.username||'U')[0]+'</div>');
-                                const displayName = u.firstName && u.lastName ? u.firstName + ' ' + u.lastName : (u.firstName || u.username || tr('user', 'Пользователь'));
-                                return '<div class="chat-item" onclick="startChatFromSearch(\''+u.id+'\',\''+displayName.replace(/'/g,"\\'")+'\')" style="padding:12px 16px;cursor:pointer;transition:background 0.2s;display:flex;align-items:center;gap:12px;">' +
-                                    '<div style="width:48px;height:48px;border-radius:50%;overflow:hidden;flex-shrink:0;background:var(--bg-tertiary);">'+av+'</div>' +
-                                    '<div style="flex:1;min-width:0;">' +
-                                        '<div style="font-size:15px;font-weight:600;color:var(--text-primary);margin-bottom:2px;">'+displayName+'</div>' +
-                                        '<div style="font-size:13px;color:var(--text-muted);">@'+(u.username||'')+'</div>' +
-                                    '</div>' +
-                                '</div>';
-                            }).join('');
-                        }
-                    } catch (err) {
-                        console.error('User search error:', err);
-                    }
+        // Контекстное меню для форматирования текста в поле ввода
+        const msgInput = document.getElementById('msgInput');
+        const inputContextMenu = document.getElementById('inputContextMenu');
+
+        msgInput.addEventListener('contextmenu', function(e) {
+            const selection = window.getSelection();
+            
+            // Показываем меню только если есть выделение
+            if (selection && !selection.isCollapsed && selection.toString().length > 0) {
+                e.preventDefault();
+                
+                const x = e.pageX || e.clientX || 0;
+                const y = e.pageY || e.clientY || 0;
+                
+                inputContextMenu.style.left = Math.min(x, window.innerWidth - 180) + 'px';
+                inputContextMenu.style.top = Math.min(y, window.innerHeight - 150) + 'px';
+                inputContextMenu.classList.add('active');
+            }
+        });
+
+        // Закрыть контекстное меню при клике вне его
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('#inputContextMenu') && !e.target.closest('#msgInput')) {
+                inputContextMenu.classList.remove('active');
+            }
+        });
+
+        document.addEventListener('click', function(e) {
+            const picker = document.getElementById('emojiPicker');
+            const btn = document.getElementById('emojiBtn');
+            
+            if (picker.classList.contains('active')) {
+                if (!picker.contains(e.target) && !btn.contains(e.target)) {
+                    closeEmojiPicker();
                 }
-                // Ищем по сообщениям
-                try {
-                    const res = await fetch('/api/v1/messages/search?q=' + encodeURIComponent(q), {
+            }
+
+            const mentionEl = document.getElementById('mentionSuggestions');
+            const msgInputWrap = document.getElementById('msgInputWrap');
+            if (mentionEl && mentionEl.style.display !== 'none') {
+                if (!mentionEl.contains(e.target) && !(msgInputWrap && msgInputWrap.contains(e.target))) {
+                    hideMentionSuggestions();
+                }
+            }
+        });
+
+        // ============================================
+        // STICKER PACKS
+        // ============================================
+        async function loadStickerPacks() {
+            try {
+                const res = await fetch('/api/v1/stickers/packs', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!res.ok) throw new Error('Failed to load sticker packs');
+                const data = await res.json();
+                stickerPacks = data.packs.map(p => ({
+                    id: p.id,
+                    name: p.name,
+                    description: p.description,
+                    icon: p.iconUrl || '🎨',
+                    stickers: [],
+                    stickerIds: [],
+                    isCommon: false
+                }));
+
+                // Загружаем стикеры для каждого пака
+                for (const pack of stickerPacks) {
+                    const stickersRes = await fetch('/api/v1/stickers/packs/' + pack.id, {
                         headers: { 'Authorization': 'Bearer ' + token }
                     });
-                    if (!res.ok) {
-                        console.error('Message search failed with status:', res.status);
-                        return;
+                    if (stickersRes.ok) {
+                        const stickersData = await stickersRes.json();
+                        pack.stickers = stickersData.stickers.map(s => s.imageUrl);
+                        pack.stickerIds = stickersData.stickers.map(s => s.id);
                     }
-                    const data = await res.json();
-                    const messages = data.messages || [];
-                    if (!messages.length) return;
-
-                    const list = document.getElementById('chatList');
-                    let section = document.getElementById('messageSearchResults');
-                    if (!section) {
-                        section = document.createElement('div');
-                        section.id = 'messageSearchResults';
-                        list.appendChild(section);
-                    }
-
-                    section.innerHTML = '<div style="padding:8px 16px 4px;font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-muted);">' + tr('messagesLabel', 'Сообщения') + '</div>' +
-                        messages.map(m => {
-                            const chatName = m.chatType === 'private'
-                                ? (m.senderFirstName && m.senderLastName ? m.senderFirstName + ' ' + m.senderLastName : (m.senderFirstName || m.senderUsername || tr('user', 'Пользователь')))
-                                : m.chatName || tr('chatShort', 'Чат');
-                            const preview = m.content.length > 50 ? m.content.substring(0, 50) + '...' : m.content;
-                            const time = new Date(m.createdAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-                            return '<div class="chat-item" onclick="openChatFromMessageSearch(\''+m.chatId+'\',\''+m.id+'\')" style="padding:12px 16px;cursor:pointer;transition:background 0.2s;">' +
-                                '<div style="flex:1;min-width:0;overflow:hidden;">' +
-                                    '<div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+chatName+'</div>' +
-                                    '<div style="font-size:13px;color:var(--text-primary);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+preview+'</div>' +
-                                    '<div style="font-size:11px;color:var(--text-muted);">'+time+'</div>' +
-                                '</div>' +
-                            '</div>';
-                        }).join('');
-                } catch (err) {
-                    console.error('Message search error:', err);
                 }
-            }, 300);
+
+                renderStickerPacksList();
+            } catch (error) {
+                console.error('Load sticker packs error:', error);
+                // Fallback к localStorage если сервер недоступен
+                const stored = localStorage.getItem('craneapp_sticker_packs');
+                stickerPacks = stored ? JSON.parse(stored) : [];
+                renderStickerPacksList();
+            }
         }
 
-        function escapeAttr(s) { return (s||'').replace(/'/g,"\\'"); }
-        function escapeHtml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-        async function startChatFromSearch(userId, name, username) {
-            document.getElementById('searchInput').value = '';
-            handleUnifiedSearch('');
-            try {
-                const res = await fetch('/api/v1/chats/create', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-                    body: JSON.stringify({ type: 'private', participants: [userId] })
-                });
-                const data = await res.json();
-                if (data.chatId) {
-                    await loadChats();
-                    openChat(data.chatId, name);
-                }
-            } catch (_) { showToast('error', 'Ошибка', '❌'); }
+        async function saveStickerPacks() {
+            // Сохранение происходит на сервере через API
+            // localStorage больше не используется
         }
 
-        async function openChatFromMessageSearch(chatId, messageId) {
-            document.getElementById('searchInput').value = '';
-            handleUnifiedSearch('');
-            const chat = allChats.find(c => c.id === chatId);
-            const chatName = chat ? chat.name : 'Чат';
-            openChat(chatId, chatName);
-            // После загрузки сообщений прокрутим к нужному
-            setTimeout(() => {
-                const msgEl = document.querySelector('[data-message-id="' + messageId + '"]');
-                if (msgEl) {
-                    msgEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    msgEl.style.background = 'rgba(255, 0, 127, 0.2)';
-                    setTimeout(() => msgEl.style.background = '', 2000);
-                }
-            }, 500);
-        }
+        function renderStickerPacksList() {
+            const container = document.getElementById('stickerPacks');
+            container.innerHTML = '';
 
+            // Кнопка создания нового пак
+            const addBtn = document.createElement('div');
+            addBtn.className = 'sticker-pack-item sticker-pack-add';

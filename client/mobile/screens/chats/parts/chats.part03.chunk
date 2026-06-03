@@ -1,650 +1,650 @@
-            }
-            
-            const timeDiv = document.createElement('div');
-            timeDiv.className = 'msg-time';
-            const timeText = m.time || (m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '');
-            const isOutgoingMsg = m.senderId === user.id || m.outgoing;
-            if (isOutgoingMsg) {
-                // Глазик: pending = часы, sent = одна галочка, read = две галочки
-                let statusIcon = '';
-                if (m.pending) {
-                    statusIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.75"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
-                } else if (m.isRead || m.status === 'read') {
-                    statusIcon = '<svg width="16" height="10" viewBox="0 0 16 10" fill="none"><path d="M1 5l3 3 5-7" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 5l3 3 5-7" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+                if (data.qrCode) {
+                    qrImage.innerHTML = `<img src="${data.qrCode}" style="width: 200px; height: 200px; border-radius: 12px;">`;
                 } else {
-                    statusIcon = '<svg width="12" height="10" viewBox="0 0 12 10" fill="none" style="opacity:.85"><path d="M1 5l3 3 7-7" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+                    qrImage.innerHTML = '<div style="width: 200px; height: 200px; background: var(--bg-tertiary); border-radius: 12px; display: flex; align-items: center; justify-content: center;"><span style="color: var(--text-muted);">' + tr('error', 'Ошибка') + '</span></div>';
                 }
-                timeDiv.innerHTML = timeText + ' <span style="display:inline-flex;align-items:center;margin-left:2px;vertical-align:middle">' + statusIcon + '</span>';
-            } else {
-                timeDiv.textContent = timeText;
+            } catch (err) {
+                qrImage.innerHTML = '<div style="width: 200px; height: 200px; background: var(--bg-tertiary); border-radius: 12px; display: flex; align-items: center; justify-content: center;"><span style="color: var(--text-muted);">' + tr('networkError', 'Ошибка сети') + '</span></div>';
             }
-            div.appendChild(timeDiv);
-            
-            // Реакции
-            if (m.reactions && m.reactions.length > 0) {
-                const reactionsEl = createReactionsElement(m.id, m.reactions);
-                div.appendChild(reactionsEl);
-            }
-            
-            return div;
         }
-
-        // ============================================
-        // EMOJI PICKER
-        // ============================================
-        function toggleEmojiPicker() {
-            const picker = document.getElementById('emojiPicker');
-            const btn = document.getElementById('emojiBtn');
-
-            if (!picker) {
-                console.error('emojiPicker element not found');
+        
+        function closeQrCodeModal() {
+            document.getElementById('qrCodeModal').classList.remove('active');
+        }
+        
+        async function archiveUser() {
+            toggleProfileMenu();
+            if (!currentProfileUser) return;
+            
+            // Ищем чат с пользователем
+            const chatWithUser = allChats.find(c => {
+                const cu = chatUsers[c.id];
+                return cu && cu.id === currentProfileUser.id;
+            });
+            
+            if (!chatWithUser) {
+                showToast('error', tr('chatNotFound', 'Чат не найден'), '❌');
                 return;
             }
-
-            if (picker.classList.contains('active')) {
-                closeEmojiPicker();
-            } else {
-                picker.classList.add('active');
-                btn.classList.add('active');
-
-                // Закрываем другие панели
-                closeMediaPanel();
-                closeAttachmentPanel();
-                renderEmojiPicker();
-            }
-        }
-
-        function closeEmojiPicker() {
-            document.getElementById('emojiPicker').classList.remove('active');
-            document.getElementById('emojiBtn').classList.remove('active');
-        }
-
-        function switchEmojiTab(tab, btn) {
-            console.log('Switching to tab:', tab);
-            // Update tab buttons
-            document.querySelectorAll('.emoji-tab').forEach(function(b) {
-                b.classList.remove('active');
-            });
-            if (btn) btn.classList.add('active');
-
-            const emojiTab = document.getElementById('emojiTabContent');
-            const gifTab = document.getElementById('gifTabContent');
-            const stickerTab = document.getElementById('stickerTabContent');
-            emojiTab.style.display = tab === 'emoji' ? 'flex' : 'none';
-            gifTab.style.display = tab === 'gif' ? 'flex' : 'none';
-            stickerTab.style.display = tab === 'sticker' ? 'flex' : 'none';
-            if (tab === 'gif') {
-                console.log('Loading GIFs...');
-                loadGifs('');
-            }
-            if (tab === 'sticker') loadStickers();
-        }
-
-        // ── GIF в эмодзи-пикере ───────────────────────────────────────────
-        let gifDebounce;
-        let currentGifTab = 'all'; // 'all' or 'favorites'
-
-        function switchGifTab(tab) {
-            currentGifTab = tab;
-            const btnAll = document.getElementById('gifTabAll');
-            const btnFav = document.getElementById('gifTabFavorites');
-
-            if (tab === 'all') {
-                btnAll.style.background = 'var(--accent-color)';
-                btnAll.style.color = '#fff';
-                btnFav.style.background = 'var(--bg-tertiary)';
-                btnFav.style.color = 'var(--text-primary)';
-            } else {
-                btnFav.style.background = 'var(--accent-color)';
-                btnFav.style.color = '#fff';
-                btnAll.style.background = 'var(--bg-tertiary)';
-                btnAll.style.color = 'var(--text-primary)';
-            }
-
-            loadGifs(document.getElementById('gifSearch') ? document.getElementById('gifSearch').value : '');
-        }
-
-        function searchGifs(q) {
-            clearTimeout(gifDebounce);
-            gifDebounce = setTimeout(function() { loadGifs(q); }, 300);
-        }
-
-        async function loadGifs(query) {
-            const grid = document.getElementById('emojiGifGrid');
-            if (!grid) return;
-
+            
+            // Архивируем через API
             try {
-                const endpoint = currentGifTab === 'favorites' ? '/api/v1/gifs/favorites' : '/api/v1/gifs';
-                const res = await fetch(endpoint, {
+                const res = await fetch(`/api/v1/chats/${chatWithUser.id}/archive`, {
+                    method: 'POST',
+                    headers: { 
+                        'Authorization': 'Bearer ' + token,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (res.ok) {
+                    showToast('success', tr('chatArchived', 'Чат архивирован'), '📁');
+                    await loadArchivedChats();
+                    loadChats();
+                } else {
+                    showToast('error', tr('archiveError', 'Ошибка архивирования'), '❌');
+                }
+            } catch (err) {
+                showToast('error', tr('networkError', 'Ошибка сети'), '❌');
+            }
+        }
+        
+        // Переменная для хранения данных при добавлении в папку
+        let folderSelectChatId = null;
+        let folderSelectData = [];
+
+        function getFolderChatIds(folder) {
+            if (!folder) return [];
+            if (!Array.isArray(folder.chatIds)) {
+                folder.chatIds = Array.isArray(folder.chats) ? folder.chats : [];
+            }
+            return folder.chatIds;
+        }
+
+        async function addToFolder() {
+            toggleProfileMenu();
+            if (!currentProfileUser) return;
+            
+            // Ищем чат с пользователем
+            const chatWithUser = allChats.find(c => {
+                const cu = chatUsers[c.id];
+                return cu && cu.id === currentProfileUser.id;
+            });
+            
+            if (!chatWithUser) {
+                showToast('error', tr('chatNotFound', 'Чат не найден'), '❌');
+                return;
+            }
+            
+            folderSelectChatId = chatWithUser.id;
+            await openFolderSelectModal();
+        }
+
+        async function openFolderSelectModal() {
+            const modal = document.getElementById('folderSelectModal');
+            const list = document.getElementById('folderSelectList');
+            
+            list.innerHTML = '<div class="folder-loading">' + tr('loadingFolders', 'Загрузка папок...') + '</div>';
+            modal.classList.add('active');
+            
+            try {
+                const res = await fetch('/api/v1/users/folders', {
                     headers: { 'Authorization': 'Bearer ' + token }
                 });
-
-                if (!res.ok) throw new Error('Failed to load GIFs');
                 const data = await res.json();
-                const allGifs = data.gifs || [];
-
-                const filtered = query
-                    ? allGifs.filter(function(g) { return (g.name || '').toLowerCase().includes(query.toLowerCase()); })
-                    : allGifs;
-
-                grid.innerHTML = '';
-                if (!filtered.length) {
-                    const message = currentGifTab === 'favorites'
-                        ? tr('noFavoriteGifs', 'Нет избранных GIF')
-                        : tr('noGifsAdd', 'Нет GIF. Нажмите «+ GIF» чтобы добавить');
-                    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text-muted)">'
-                        + '<div style="font-size:32px;opacity:.4;margin-bottom:8px">🎞️</div>'
-                        + '<div style="font-size:13px">' + message + '</div></div>';
+                folderSelectData = data.folders || [];
+                
+                if (folderSelectData.length === 0) {
+                    list.innerHTML = '<div class="folder-empty">' + tr('noFoldersSettings', 'У вас нет папок.<br>Создайте их в настройках.') + '</div>';
                     return;
                 }
-
-                const limitedGifs = currentGifTab === 'favorites' ? filtered.slice(0, 50) : filtered;
-
-                limitedGifs.forEach(function(gif) {
+                
+                list.innerHTML = '';
+                folderSelectData.forEach((folder, index) => {
                     const item = document.createElement('div');
-                    item.style.cssText = 'cursor:pointer;border-radius:8px;background:var(--bg-tertiary);position:relative;';
-
-                    const img = document.createElement('img');
-                    img.src = gif.url;
-                    img.style.cssText = 'width:100%;height:auto;display:block;';
-                    img.loading = 'lazy';
-                    img.onclick = function() {
-                        setTimeout(function() {
-                            closeEmojiPicker();
-                            sendGifMessage(gif.url);
-                        }, 50);
-                    };
-
-                    const favBtn = document.createElement('button');
-                    favBtn.style.cssText = 'position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.5);border:none;color:#fff;border-radius:50%;width:24px;height:24px;font-size:14px;cursor:pointer;';
-                    favBtn.textContent = currentGifTab === 'favorites' ? '−' : '★';
-                    favBtn.onclick = function(e) {
-                        e.stopPropagation();
-                        toggleGifFavorite(gif);
-                    };
-
-                    item.appendChild(img);
-                    item.appendChild(favBtn);
-                    grid.appendChild(item);
+                    item.className = 'folder-item';
+                    item.onclick = () => selectFolder(index);
+                    const chatIds = getFolderChatIds(folder);
+                    const isInFolder = chatIds.includes(folderSelectChatId);
+                    item.innerHTML = `
+                        <div class="folder-item-icon">${folder.icon || '📂'}</div>
+                        <div class="folder-item-info">
+                            <div class="folder-item-name">${folder.name}</div>
+                            <div class="folder-item-count">${chatIds.length} чатов ${isInFolder ? '(уже в папке)' : ''}</div>
+                        </div>
+                        ${isInFolder ? '✓' : ''}
+                    `;
+                    list.appendChild(item);
                 });
-            } catch (error) {
-                grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text-muted)">' + tr('loadingError', 'Ошибка загрузки') + '</div>';
+            } catch (err) {
+                list.innerHTML = '<div class="folder-empty">' + tr('folderLoadError', 'Ошибка загрузки папок') + '</div>';
             }
         }
 
-        async function toggleGifFavorite(gif) {
+        async function selectFolder(index) {
+            if (!folderSelectChatId || index < 0 || index >= folderSelectData.length) return;
+            
+            const folder = folderSelectData[index];
+            const chatIds = getFolderChatIds(folder);
+            
+            if (chatIds.includes(folderSelectChatId)) {
+                showToast('info', tr('chatAlreadyInFolder', 'Чат уже в этой папке'), '📂');
+                closeFolderSelectModal();
+                return;
+            }
+            
+            chatIds.push(folderSelectChatId);
+            
             try {
-                const method = currentGifTab === 'favorites' ? 'DELETE' : 'POST';
-                await fetch('/api/v1/gifs/' + gif.id + '/favorite', {
-                    method: method,
-                    headers: { 'Authorization': 'Bearer ' + token }
+                const saveRes = await fetch('/api/v1/users/folders', {
+                    method: 'PUT',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token 
+                    },
+                    body: JSON.stringify({ folders: folderSelectData })
                 });
-                loadGifs(document.getElementById('gifSearch') ? document.getElementById('gifSearch').value : '');
-            } catch (error) {
-                showToast('error', tr('error', 'Ошибка'), '❌');
+                if (!saveRes.ok) throw new Error('folder save failed');
+                
+                showToast('success', `Чат добавлен в папку "${folder.name}"`, '📂');
+                localStorage.setItem('craneapp_folders', JSON.stringify(folderSelectData));
+                initFolderTabs();
+                renderChatList();
+                closeFolderSelectModal();
+            } catch (err) {
+                showToast('error', tr('saveError', 'Ошибка сохранения'), '❌');
             }
         }
 
-        // ── Стикеры в эмодзи-пикере ───────────────────────────────────────
-        var emojiCurrentPackIdx = null;
-
-        function loadStickers() {
-            loadStickerPacks();
-            emojiRenderPacksList();
+        function closeFolderSelectModal() {
+            document.getElementById('folderSelectModal').classList.remove('active');
+            folderSelectChatId = null;
         }
 
-        function emojiRenderPacksList() {
-            const container = document.getElementById('emojiStickerPacks');
-            if (!container) return;
-            container.innerHTML = '';
-
-            // Рендерим все паки (теперь только личные)
-            stickerPacks.forEach(function(pack, i) {
-                const btn = document.createElement('button');
-                const isActive = emojiCurrentPackIdx === i;
-                btn.style.cssText = 'background:' + (isActive ? 'var(--accent-color)' : 'var(--bg-tertiary)') + ';border:none;border-radius:8px;padding:4px 10px;font-size:12px;color:' + (isActive ? '#fff' : 'var(--text-primary)') + ';cursor:pointer;white-space:nowrap;flex-shrink:0;';
-                btn.textContent = pack.name;
-                btn.onclick = function(e) {
-                    e.stopPropagation();
-                    emojiCurrentPackIdx = i;
-                    emojiRenderPacksList();
-                };
-                container.appendChild(btn);
-            });
-
-            emojiRenderStickerGrid();
+        function createNewFolder() {
+            closeFolderSelectModal();
+            showToast('info', tr('folderCreateInSettings', 'Создание папок в настройках'), '📂');
         }
-
-        function emojiRenderStickerGrid() {
-            const grid = document.getElementById('emojiStickerGrid');
-            const nameEl = document.getElementById('emojiStickerPackName');
-            const addBtn = document.getElementById('emojiAddStickerBtn');
-            if (!grid) return;
-            if (emojiCurrentPackIdx === null || !stickerPacks[emojiCurrentPackIdx]) {
-                grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text-muted);font-size:13px">' + tr('choosePackOrCreate', 'Выберите пак или создайте новый') + '</div>';
-                if (nameEl) {
-                    nameEl.setAttribute('data-i18n', 'choosePack');
-                    nameEl.textContent = tr('choosePack', 'Выберите пак');
-                }
-                if (addBtn) addBtn.style.display = 'none';
-                return;
-            }
-            const pack = stickerPacks[emojiCurrentPackIdx];
-            if (nameEl) {
-                nameEl.removeAttribute('data-i18n');
-                nameEl.textContent = pack.name;
-            }
-            // Показываем кнопку добавления только для личных паков
-            if (addBtn) addBtn.style.display = !pack.isCommon ? 'block' : 'none';
-            grid.innerHTML = '';
-            (pack.stickers || []).forEach(function(url, si) {
-                const wrap = document.createElement('div');
-                wrap.style.cssText = 'position:relative;border-radius:8px;overflow:hidden;cursor:pointer;aspect-ratio:1;background:var(--bg-tertiary);';
-                const img = document.createElement('img');
-                img.src = url;
-                img.style.cssText = 'width:100%;height:100%;object-fit:contain;padding:4px;';
-                img.onclick = function() { closeEmojiPicker(); sendStickerMessage(url); };
-                // Кнопка удаления только для личных паков
-                if (!pack.isCommon) {
-                    const del = document.createElement('button');
-                    del.textContent = '×';
-                    del.style.cssText = 'position:absolute;top:2px;right:2px;background:rgba(0,0,0,.65);border:none;color:#fff;border-radius:50%;width:16px;height:16px;font-size:11px;cursor:pointer;line-height:1;';
-                    del.onclick = async function(e) {
-                        e.stopPropagation();
-                        try {
-                            // Получаем ID стикера из данных пака
-                            const stickerId = pack.stickerIds ? pack.stickerIds[si] : null;
-                            if (!stickerId) {
-                                // Fallback: удаляем по индексу локально
-                                stickerPacks[emojiCurrentPackIdx].stickers.splice(si, 1);
-                                emojiRenderStickerGrid();
-                                return;
-                            }
-                            const res = await fetch('/api/v1/stickers/packs/' + pack.id + '/stickers/' + stickerId, {
-                                method: 'DELETE',
-                                headers: { 'Authorization': 'Bearer ' + token }
-                            });
-                            if (res.ok) {
-                                stickerPacks[emojiCurrentPackIdx].stickers.splice(si, 1);
-                                if (stickerPacks[emojiCurrentPackIdx].stickerIds) {
-                                    stickerPacks[emojiCurrentPackIdx].stickerIds.splice(si, 1);
-                                }
-                                emojiRenderStickerGrid();
-                            }
-                        } catch (error) {
-                            console.error('Delete sticker error:', error);
-                        }
-                    };
-                    wrap.appendChild(del);
-                }
-                // Контекстное меню для стикера
-                wrap.oncontextmenu = function(e) {
-                    e.preventDefault();
-                    showStickerContextMenu(e, pack, url);
-                };
-                wrap.appendChild(img);
-                grid.appendChild(wrap);
-            });
-            if (!pack.stickers || !pack.stickers.length) {
-            grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:16px;color:var(--text-muted);font-size:13px">' + (pack.isCommon ? (window.i18n?.t('stickersSoon') || 'Скоро здесь появятся стикеры') : (window.i18n?.t('noStickers') || 'Нет стикеров. Нажмите «+ Стикер»')) + '</div>';
-            }
-        }
-
-        function emojiAddStickerToPack() {
-            if (emojiCurrentPackIdx === null) { showToast('error', tr('choosePack', 'Выберите пак'), '❌'); return; }
-            // Переключаем currentStickerPackId чтобы addStickerToCurrentPack работал правильно
-            currentStickerPackId = emojiCurrentPackIdx;
-            document.getElementById('stickerInput').click();
-        }
-
-        function emojiOpenCreatePack() {
-            openCreatePackModal();
-        }
-
-        function showStickerContextMenu(e, pack, stickerUrl) {
-            e.preventDefault();
-            e.stopPropagation();
-
-            // Удаляем старое меню если есть
-            const oldMenu = document.getElementById('stickerContextMenu');
-            if (oldMenu) oldMenu.remove();
-
-            const menu = document.createElement('div');
-            menu.id = 'stickerContextMenu';
-            menu.style.cssText = 'position:fixed;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.3);z-index:1000;min-width:200px;padding:4px 0;';
-
-            // Копировать ссылку на стикер-пак
-            const copyLinkItem = document.createElement('div');
-            copyLinkItem.style.cssText = 'padding:10px 16px;cursor:pointer;display:flex;align-items:center;gap:10px;font-size:14px;color:var(--text-primary);transition:background 0.1s;';
-            copyLinkItem.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span>' + tr('copyLink', 'Скопировать ссылку') + '</span>';
-            copyLinkItem.onclick = function() {
-                const link = window.location.origin + '/stickers/' + pack.id;
-                navigator.clipboard.writeText(link).then(function() {
-                    showToast('success', tr('linkCopied', 'Ссылка скопирована'), '📋');
-                });
-                menu.remove();
-            };
-            copyLinkItem.onmouseover = function() { this.style.background = 'var(--bg-tertiary)'; };
-            copyLinkItem.onmouseout = function() { this.style.background = 'transparent'; };
-            menu.appendChild(copyLinkItem);
-
-            // Добавить стикер-пак в мои (только для общих паков)
-            if (pack.isCommon) {
-                const addToMyItem = document.createElement('div');
-                addToMyItem.style.cssText = 'padding:10px 16px;cursor:pointer;display:flex;align-items:center;gap:10px;font-size:14px;color:var(--text-primary);transition:background 0.1s;';
-                addToMyItem.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg><span>' + tr('addToMyStickers', 'Добавить в мои стикеры') + '</span>';
-                addToMyItem.onclick = function() {
-                    addStickerPackToPersonal(pack);
-                    menu.remove();
-                };
-                addToMyItem.onmouseover = function() { this.style.background = 'var(--bg-tertiary)'; };
-                addToMyItem.onmouseout = function() { this.style.background = 'transparent'; };
-                menu.appendChild(addToMyItem);
-            }
-
-            // Позиционируем меню
-            const x = e.clientX;
-            const y = e.clientY;
-            menu.style.left = x + 'px';
-            menu.style.top = y + 'px';
-
-            document.body.appendChild(menu);
-
-            // Закрытие при клике вне меню
-            setTimeout(function() {
-                document.addEventListener('click', function closeMenu(e) {
-                    if (!menu.contains(e.target)) {
-                        menu.remove();
-                        document.removeEventListener('click', closeMenu);
-                    }
-                });
-            }, 0);
-        }
-
-        function addStickerPackToPersonal(pack) {
-            // Проверяем, не добавлен ли уже
-            const personalPacks = stickerPacks.filter(p => !p.isCommon);
-            const alreadyExists = personalPacks.some(p => p.name === pack.name);
-
-            if (alreadyExists) {
-                showToast('error', tr('packAlreadyAdded', 'Этот пак уже добавлен'), '❌');
-                return;
-            }
-
-            // Создаем копию пака для личных
-            const newPack = {
-                id: 'personal_' + Date.now(),
-                name: pack.name,
-                icon: pack.icon,
-                stickers: [...(pack.stickers || [])],
-                isCommon: false
-            };
-
-            stickerPacks.push(newPack);
-            saveStickerPacks();
-            renderStickerPacksList();
-            emojiRenderPacksList();
-            showToast('success', tr('stickerPackAdded', 'Стикерпак добавлен'), '✨');
-        }
-
-        function renderEmojiPicker() {
-            renderEmojiCategories();
-            // Рендерим текущую категорию или smileys по умолчанию
-            renderEmojis(currentEmojiCategory || 'smileys');
-        }
-
-        function renderEmojiCategories() {
-            const container = document.getElementById('emojiCategories');
-            container.innerHTML = '';
-            
-            const categories = ['recent', 'smileys', 'animals', 'food', 'activities', 'travel', 'objects', 'symbols'];
-            
-            categories.forEach(function(cat) {
-                const btn = document.createElement('button');
-                btn.className = 'emoji-cat' + (cat === currentEmojiCategory ? ' active' : '');
-                btn.innerHTML = window.EmojiCategories && window.EmojiCategories[cat] ? window.EmojiCategories[cat].icon : '😀';
-                btn.onclick = function() {
-                    currentEmojiCategory = cat;
-                    document.querySelectorAll('.emoji-cat').forEach(function(b) { b.classList.remove('active'); });
-                    btn.classList.add('active');
-                    renderEmojis(cat);
-                };
-                container.appendChild(btn);
-            });
-        }
-
-        // Базовый набор эмодзи на случай если EmojiData не загружена
-        const DEFAULT_EMOJIS = {
-            'smileys': ['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩','😘','😗','😚','😙','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🤐','🤨','😐','😑','😶','😏','😒','🙄','😬','🤥','😌','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤮','🤧','🥵','🥶','🥴','😵','🤯','🤠','🥳','😎','🤓','🧐','😕','😟','🙁','☹️','😮','😯','😲','😳','🥺','😦','😧','😨','😰','😥','😢','😭','😱','😖','😣','😞','😓','😩','😫','🥱','😤','😡','😠','🤬','😈','👿','💀','☠️','💩','🤡','👹','👺','👻','👽','👾','🤖'],
-            'animals': ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐽','🐸','🐵','🙈','🙉','🙊','🐒','🐔','🐧','🐦','🐤','🐣','🐥','🦆','🦅','🦉','🦇','🐺','🐗','🐴','🦄','🐝','🐛','🦋','🐌','🐞','🐜','🦟','🦗','🕷️','🕸️','🦂','🐢','🐍','🦎','🦖','🦕','🐙','🦑','🦐','🦞','🦀','🐡','🐠','🐟','🐬','🐳','🐋','🦈','🐊','🐅','🐆','🦓','🦍','🦧','🐘','🦛','🦏','🐪','🐫','🦒','🦘','🐃','🐂','🐄','🐎','🐖','🐏','🐑','🦙','🐐','🦌','🐕','🐩','🦮','🐕‍🦺','🐈','🐈‍⬛','🐓','🦃','🦚','🦜','🦢','🦩','🕊️','🐇','🦝','🦨','🦡','🦦','🦥','🐁','🐀','🐿️','🦔'],
-            'food': ['🍏','🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🍈','🍒','🍑','🍍','🥭','🥥','🥝','🍅','🍆','🥑','🥦','🥬','🥒','🌶️','🌽','🥕','🧄','🧅','🥔','🍠','🥐','🥯','🍞','🥖','🥨','🧀','🥚','🍳','🧈','🥞','🧇','🥓','🥩','🍗','🍖','🦴','🌭','🍔','🍟','🍕','🌮','🌯','🥙','🧆','🥚','🍳','🥘','🍲','🥣','🥗','🍿','🧈','🧂','🥫','🍱','🍘','🍙','🍚','🍛','🍜','🍝','🍠','🍢','🍣','🍤','🍥','🍡','🍦','🍧','🍨','🍩','🍪','🎂','🍰','🧁','🥧','🍫','🍬','🍭','🍮','🍯','🍼','🥛','☕','🍵','🧃','🥤','🍶','🍺','🍻','🥂','🍷','🥃','🍸','🍹','🧉','🍾','🧊','🥄','🍴','🍽️','🥣','🥡','🥢','🧂'],
-            'activities': ['⚽','🏀','🏈','⚾','🥎','🎾','🏐','🏉','🥏','🎱','🪀','🏓','🏸','🏒','🏑','🥍','🏏','🥅','⛳','🪁','🏹','🎣','🤿','🥊','🥋','🎽','🛹','🛷','⛸️','🥌','🎿','⛷️','🏂','🏋️','🏋️‍♂️','🏋️‍♀️','🤼','🤼‍♂️','🤼‍♀️','🤸','🤸‍♂️','🤸‍♀️','⛹️','⛹️‍♂️','⛹️‍♀️','🤺','🤾','🤾‍♂️','🤾‍♀️','🏌️','🏌️‍♂️','🏌️‍♀️','🏇','🧘','🧘‍♂️','🧘‍♀️','🏄','🏄‍♂️','🏄‍♀️','🏊','🏊‍♂️','🏊‍♀️','🤽','🤽‍♂️','🤽‍♀️','🚣','🚣‍♂️','🚣‍♀️','🧗','🧗‍♂️','🧗‍♀️','🚵','🚵‍♂️','🚵‍♀️','🚴','🚴‍♂️','🚴‍♀️','🏆','🥇','🥈','🥉','🏅','🎖️','🏵️','🎗️','🎫','🎟️','🎪','🤹','🤹‍♂️','🤹‍♀️','🎭','🩰','🎨','🎬','🎤','🎧','🎼','🎹','🥁','🎷','🎺','🎸','🪕','🎻','🎲','🎯','🎳','🎮','🎰','🧩'],
-            'travel': ['🚗','🚕','🚙','🚌','🚎','🏎️','🚓','🚑','🚒','🚐','🚚','🚛','🚜','🦯','🦽','🦼','🛴','🚲','🛵','🏍️','🚨','🚔','🚍','🚘','🚖','🚡','🚠','🚟','🚃','🚋','🚞','🚝','🚄','🚅','🚈','🚂','🚆','🚇','🚊','🚉','✈️','🛫','🛬','🛩️','💺','🛰️','🚀','🛸','🚁','🛶','⛵','🚤','🛥️','🛳️','⛴️','🚢','⚓','⛽','🚧','🚦','🚥','🚏','🗺️','🧭','🧳','🌎','🌍','🌏','🌐','🗾','🧭','🏔️','⛰️','🌋','🗻','🏕️','🏖️','🏜️','🏝️','🏞️','🏟️','🏛️','🏗️','🧱','🪨','🪵','🛖','🏘️','🏚️','🏠','🏡','🏢','🏣','🏤','🏥','🏦','🏨','🏩','🏪','🏫','🏬','🏭','🏯','🏰','💒','🗼','🗽','⛪','🕌','🛕','🕍','⛩️','🕋','⛲','⛺','🌁','🌃','🏙️','🌄','🌅','🌆','🌇','🌉','♨️','🎠','🎡','🎢','💈','🎪'],
-            'objects': ['⌚','📱','📲','💻','⌨️','🖥️','🖨️','🖱️','🖲️','🕹️','🗜️','💽','💾','💿','📀','📼','📷','📸','📹','🎥','📽️','🎞️','📞','☎️','📟','📠','📺','📻','🎙️','🎚️','🎛️','🧭','⏱️','⏲️','⏰','🕰️','⌛','⏳','📡','🔋','🔌','💡','🔦','🕯️','🪔','🧯','🛢️','💸','💵','💴','💶','💷','🪙','💰','💳','💎','⚖️','🪜','🧰','🪛','🔧','🔨','⚒️','🛠️','⛏️','🔩','⚙️','🪤','🧱','⛓️','🧲','🔫','💣','🧱','🔪','🗡️','⚔️','🛡️','🚬','⚰️','⚱️','🗿','🪦','🧿','💈','⚗️','🔭','🔬','🕳️','🩹','🩺','💊','💉','🩸','🧬','🦠','🧫','🧪','🌡️','🧹','🧺','🧻','🚽','🚰','🚿','🛁','🛀','🧼','🪥','🪒','🧽','🛎️','🔑','🗝️','🚪','🪑','🛋️','🛏️','🛌','🧸','🪆','🖼️','🪞','🪟','🛍️','🛒','🎁','🎈','🎏','🎀','🪄','🪅','🎊','🎉','🎎','🏮','🎐','🧧','✉️','📩','📨','📧','📤','📥','📦','📫','📪','📬','📭','📮','🗳️','✏️','✒️','🖋️','🖊️','🖌️','🖍️','📝','💼','📁','📂','🗂️','📅','📆','🗒️','🗓️','📇','📈','📉','📊','📋','📌','📍','📎','🖇️','📏','📐','✂️','🗃️','🗄️','🗑️','🔒','🔓','🔏','🔐','🔑','🗝️'],
-            'symbols': ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','💟','☮️','✝️','☪️','🕉️','☸️','✡️','🔯','🕎','☯️','☦️','🛐','⛎','♈','♉','♊','♋','♌','♍','♎','♏','♐','♑','♒','♓','🆔','⚛️','🉑','☢️','☣️','📴','📳','🈶','🈚','🈸','🈺','🈷️','✴️','🆚','💮','🉐','㊙️','㊗️','🈴','🈵','🈹','🈲','🅰️','🅱️','🆎','🆑','🅾️','🆘','❌','⭕','🛑','⛔','📛','🚫','💯','💢','♨️','🚷','🚯','🚳','🚱','🔞','📵','🚭','❗','❕','❓','❔','‼️','⁉️','🔅','🔆','〽️','⚠️','🚸','🔱','⚜️','🔰','♻️','✅','🈯','💹','❇️','✳️','❎','🌐','💠','Ⓜ️','🌀','💤','🏧','🚾','♿','🅿️','🈳','🈂','🛂','🛃','🛄','🛅','🛗','🚹','🚺','🚼','⚧️','🚻','🚮','🎦','📶','🈁','🔣','ℹ️','🔤','🔡','🔠','🆖','🆗','🆙','🆒','🆕','🆓','0️⃣','1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟','🔢','#️⃣','*️⃣','⏏️','▶️','⏸️','⏯️','⏹️','⏺️','⏭️','⏮️','⏩','⏪','⏫','⏬','◀️','🔼','🔽','➡️','⬅️','⬆️','⬇️','↗️','↘️','↙️','↖️','↕️','↔️','↪️','↩️','⤴️','⤵️','🔀','🔁','🔂','🔄','🔃','🎵','🎶','➕','➖','➗','✖️','💲','💱','™️','©️','®️','〰️','➰','➿','🔚','🔙','🔛','🔝','🔜','✔️','☑️','🔘','🔴','🟠','🟡','🟢','🔵','🟣','⚫','⚪','🟤','🔺','🔻','🔸','🔹','🔶','🔷','🔳','🔲','▪️','▫️','◾','◽','◼️','◻️','⬛','⬜','🟥','🟧','🟨','🟩','🟦','🟪','🟫','🔈','🔇','🔉','🔊','🔔','🔕','📣','📢','💬','💭','🗯️','♠️','♣️','♥️','♦️','🃏','🎴','🀄','🕐','🕑','🕒','🕓','🕔','🕕','🕖','🕗','🕘','🕙','🕚','🕛','🕜','🕝','🕞','🕟','🕠','🕡','🕢','🕣','🕤','🕥','🕦','🕧']
-        };
-
-        function renderEmojis(category, filter) {
-            const grid = document.getElementById('emojiGrid');
+        
+        // Загрузка данных для табов профиля
+        function loadProfileMedia(userId) {
+            const grid = document.getElementById('profileMediaGrid');
             grid.innerHTML = '';
             
-            let emojis = [];
-            
-            if (category === 'recent') {
-                emojis = window.getRecentEmojis ? window.getRecentEmojis() : [];
-                if (emojis.length === 0) {
-                    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--text-muted);font-size:14px;">Недавние эмодзи появятся здесь</div>';
-                    return;
+            // Ищем медиа в сообщениях с этим пользователем
+            const media = [];
+            Object.values(messagesData).forEach(msg => {
+                if ((msg.senderId === userId || msg.chatId === activeChat?.id) && 
+                    (msg.type === 'image' || msg.type === 'photo' || msg.type === 'video')) {
+                    media.push(msg);
                 }
+            });
+            
+            if (media.length === 0) {
+                grid.innerHTML = '<div class="profile-empty">' + tr('noMediaFiles', 'Нет медиафайлов') + '</div>';
+                return;
+            }
+            
+            media.slice(0, 20).forEach(m => {
+                const div = document.createElement('div');
+                div.className = 'profile-media-item';
+                if (m.mediaUrl || m.fileUrl) {
+                    div.innerHTML = `<img src="${m.mediaUrl || m.fileUrl}" loading="lazy">`;
+                    div.onclick = () => window.open(m.mediaUrl || m.fileUrl, '_blank');
+                }
+                grid.appendChild(div);
+            });
+        }
+        
+        function loadProfileFiles(userId) {
+            const list = document.getElementById('profileFilesList');
+            list.innerHTML = '';
+            
+            const files = Object.values(messagesData).filter(msg => 
+                (msg.senderId === userId || msg.chatId === activeChat?.id) && 
+                msg.type === 'file'
+            );
+            
+            if (files.length === 0) {
+                list.innerHTML = '<div class="profile-empty">' + tr('noFiles', 'Нет файлов') + '</div>';
+                return;
+            }
+            
+            files.slice(0, 20).forEach(f => {
+                const div = document.createElement('div');
+                div.className = 'profile-file-item';
+                div.innerHTML = `
+                    <div class="file-icon">📄</div>
+                    <div class="file-info">
+                        <div class="file-name">${f.fileName || tr('fileMedia', 'Файл')}</div>
+                        <div class="file-size">${f.fileSize || ''}</div>
+                    </div>
+                `;
+                if (f.fileUrl) {
+                    div.onclick = () => window.open(f.fileUrl, '_blank');
+                }
+                list.appendChild(div);
+            });
+        }
+        
+        function loadProfileLinks(userId) {
+            const list = document.getElementById('profileLinksList');
+            list.innerHTML = '';
+            
+            const links = [];
+            Object.values(messagesData).forEach(msg => {
+                if (msg.senderId === userId || msg.chatId === activeChat?.id) {
+                    const content = msg.content || msg.text || '';
+                    const urlRegex = /(https?:\/\/[^\s]+)/g;
+                    const matches = content.match(urlRegex);
+                    if (matches) links.push(...matches);
+                }
+            });
+            
+            if (links.length === 0) {
+                list.innerHTML = '<div class="profile-empty">' + tr('noLinks', 'Нет ссылок') + '</div>';
+                return;
+            }
+            
+            [...new Set(links)].slice(0, 20).forEach(url => {
+                const div = document.createElement('div');
+                div.className = 'profile-link-item';
+                div.innerHTML = `<div class="link-url">🔗 ${url.substring(0, 50)}${url.length > 50 ? '...' : ''}</div>`;
+                div.onclick = () => window.open(url, '_blank');
+                list.appendChild(div);
+            });
+        }
+        
+        function loadProfileGroups(userId) {
+            const list = document.getElementById('profileGroupsList');
+            list.innerHTML = '';
+            
+            // Ищем группы где есть оба пользователя
+            const commonGroups = allChats.filter(c => {
+                if (c.type !== 'group') return false;
+                const members = c.members || [];
+                return members.includes(userId) && members.includes(user?.id);
+            });
+            
+            if (commonGroups.length === 0) {
+                list.innerHTML = '<div class="profile-empty">' + tr('noCommonGroups', 'Нет общих групп') + '</div>';
+                return;
+            }
+            
+            commonGroups.forEach(g => {
+                const div = document.createElement('div');
+                div.className = 'profile-group-item';
+                div.innerHTML = `
+                    <div class="group-avatar">👥</div>
+                    <div class="group-info">
+                        <div class="group-name">${g.name}</div>
+                        <div class="group-members">${g.members?.length || 0} участников</div>
+                    </div>
+                `;
+                div.onclick = () => {
+                    closeUserProfileModal();
+                    openChat(g.id, g.name);
+                };
+                list.appendChild(div);
+            });
+        }
+        
+        function openUserProfileModal(userData) {
+            const avatarEl = document.getElementById('profileAvatar');
+            const nameEl = document.getElementById('profileName');
+            const usernameEl = document.getElementById('profileUsername');
+            const statusEl = document.getElementById('profileStatus');
+            const bioLine = document.getElementById('profileBioLine');
+            const chatBtn = document.getElementById('profileChatBtn');
+
+            // Убираем старое описание и используем новое
+            const bioEl = document.getElementById('profileBio');
+
+            // Проверяем заблокирован ли пользователь
+            const isBlocked = userData.isBlocked || false;
+
+            // Аватарка пользователя
+            if (isBlocked) {
+                // SVG иконка призрака для заблокированных
+                avatarEl.innerHTML = '<svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18v-6a3 3 0 0 1 6 0v6"/><path d="M6 18a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3v-6a3 3 0 0 0-3-3H9a3 3 0 0 0-3 3v6z"/><path d="M12 2a5 5 0 0 0-5 5v2h10V7a5 5 0 0 0-5-5z"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="16" r="1"/></svg>';
+            } else if (userData.username === 'craneapp_bot') {
+                // Журавль для бота CraneApp
+                avatarEl.innerHTML = '<img src="/logo.png" alt="">';
+            } else if (userData.avatarUrl && (userData.avatarUrl.startsWith('data:image') || userData.avatarUrl.startsWith('http') || userData.avatarUrl.startsWith('/'))) {
+                avatarEl.innerHTML = '<img src="' + userData.avatarUrl + '" alt="">';
+            } else if (userData.isBot) {
+                avatarEl.innerHTML = '<span style="font-size: 60px;">🤖</span>';
             } else {
-                // Используем window.EmojiData если есть, иначе DEFAULT_EMOJIS
-                emojis = (window.EmojiData && window.EmojiData[category]) 
-                    ? window.EmojiData[category] 
-                    : (DEFAULT_EMOJIS[category] || []);
+                avatarEl.innerHTML = '<span>' + (userData.name || userData.username || '👤')[0].toUpperCase() + '</span>';
+            }
+
+            nameEl.textContent = isBlocked ? (window.i18n?.t('blockedAccount') || 'Заблокированный аккаунт') : (userData.name || window.i18n?.t('user') || 'Пользователь');
+            usernameEl.textContent = isBlocked ? '' : ('@' + (userData.username || 'unknown'));
+            statusEl.textContent = isBlocked ? (window.i18n?.t('accountBlocked') || 'Аккаунт заблокирован') : (userData.online ? (window.i18n?.t('online') || 'онлайн') : (userData.isBot ? (window.i18n?.t('bot') || 'бот') : (window.i18n?.t('lastSeenRecently') || 'был(а) недавно')));
+            statusEl.style.color = isBlocked ? '#FF4B4B' : (userData.isBot ? 'var(--accent-color)' : (userData.online ? 'var(--success-color)' : 'var(--text-muted)'));
+            
+            // Описание (только если есть)
+            if (bioLine) {
+                bioLine.textContent = userData.bio || '';
+                bioLine.style.display = userData.bio ? 'block' : 'none';
+            }
+            // Совместимость со старым кодом
+            if (bioEl) {
+                if (userData.bio) {
+                    bioEl.innerHTML = userData.bio;
+                    bioEl.style.display = 'block';
+                } else {
+                    bioEl.style.display = 'none';
+                }
+            }
+
+            // Кнопка чата — только для других пользователей (не себя, не ботов, не заблокированных)
+            if (chatBtn && userData.id && userData.id !== user.id && !userData.isBot && !isBlocked) {
+                chatBtn.style.display = 'flex';
+                // Проверяем есть ли уже чат с этим пользователем
+                const existingChat = allChats.find(c => {
+                    const cu = chatUsers[c.id];
+                    return cu && cu.id === userData.id;
+                });
+            chatBtn.querySelector('span').textContent = existingChat ? (window.i18n?.t('goToChat') || 'Перейти в чат') : (window.i18n?.t('startChat') || 'Начать переписку');
+                chatBtn.onclick = () => profileStartChat(userData.id, userData.name || userData.username, existingChat);
+            } else if (chatBtn) {
+                chatBtn.style.display = 'none';
+            }
+
+            // Кнопка копирования юзернейма — скрываем для заблокированных
+            const copyBtn = document.querySelector('.profile-copy-btn');
+            if (copyBtn) {
+                copyBtn.style.display = isBlocked ? 'none' : 'flex';
+            }
+
+            // Кнопки действий для разработчиков — при просмотре активных жалоб или если пользователь замучен/забанен
+            const adminActions = document.getElementById('profileAdminActions');
+            const isDevUser = ['adm1','admin','admin1','qzlfee'].includes((user.username||'').toLowerCase());
+            const isFromActiveReport = userData.fromReport && userData.reportStatus !== 'resolved';
+            const isMuted = userData.isMuted || false;
+
+            if (adminActions && isDevUser && userData.id && userData.id !== user.id && (isFromActiveReport || isMuted || isBlocked)) {
+                adminActions.style.display = 'flex';
+
+                // Показываем/скрываем кнопки в зависимости от статуса
+                const muteBtn = document.getElementById('muteBtn');
+                const unmuteBtn = document.getElementById('unmuteBtn');
+                const blockBtn = document.getElementById('blockBtn');
+                const unblockBtn = document.getElementById('unblockBtn');
+
+                if (muteBtn && unmuteBtn) {
+                    muteBtn.style.display = isMuted ? 'none' : 'flex';
+                    unmuteBtn.style.display = isMuted ? 'flex' : 'none';
+                }
+                if (blockBtn && unblockBtn) {
+                    blockBtn.style.display = isBlocked ? 'none' : 'flex';
+                    unblockBtn.style.display = isBlocked ? 'flex' : 'none';
+                }
+            } else if (adminActions) {
+                adminActions.style.display = 'none';
             }
             
-            if (filter) {
-                emojis = emojis.filter(function(e) { return e.indexOf(filter) >= 0; });
-            }
+            // Закрываем меню если открыто
+            const menu = document.getElementById('profileMenu');
+            if (menu) menu.classList.remove('active');
             
-            emojis.forEach(function(emoji) {
-                const item = document.createElement('div');
-                item.className = 'emoji-item';
-                item.textContent = emoji;
-                item.onclick = function() { insertEmoji(emoji); };
-                grid.appendChild(item);
-            });
+            // Сохраняем текущего пользователя профиля
+            currentProfileUser = userData;
+            
+            // Загружаем настройку уведомлений
+            const notifications = JSON.parse(localStorage.getItem('chatNotifications') || '{}');
+            document.getElementById('profileNotifications').checked = notifications[userData.id] !== false;
+            
+            // Загружаем данные для табов
+            loadProfileMedia(userData.id);
+            loadProfileFiles(userData.id);
+            loadProfileLinks(userData.id);
+            loadProfileGroups(userData.id);
+            
+            // Показываем первый таб
+            switchProfileTab('media');
+            
+            document.getElementById('userProfileModal').classList.add('active');
         }
 
-        function filterEmojis(query) {
-            if (!query) {
-                renderEmojis(currentEmojiCategory);
+        async function profileStartChat(userId, name, existingChat) {
+            closeUserProfileModal();
+            if (existingChat) {
+                openChat(existingChat.id, existingChat.name);
                 return;
             }
-
-            const grid = document.getElementById('emojiGrid');
-            grid.innerHTML = '';
-
-            const allCategories = ['smileys', 'animals', 'food', 'activities', 'travel', 'objects', 'symbols'];
-            let allEmojis = [];
-
-            allCategories.forEach(function(cat) {
-                if (window.EmojiData && window.EmojiData[cat]) {
-                    allEmojis = allEmojis.concat(window.EmojiData[cat]);
-                }
-            });
-
-            allEmojis = [...new Set(allEmojis)];
-
-            // Фильтруем эмодзи по запросу
-            const filtered = allEmojis.filter(function(emoji) {
-                return emoji.includes(query);
-            });
-
-            filtered.forEach(function(emoji) {
-                const item = document.createElement('div');
-                item.className = 'emoji-item';
-                item.textContent = emoji;
-                item.onclick = function() { insertEmoji(emoji); };
-                grid.appendChild(item);
-            });
-        }
-
-        function insertEmoji(emoji) {
-            const input = document.getElementById('msgInput');
-            input.focus();
-            document.execCommand('insertText', false, emoji);
-            
-            if (window.addToRecent) {
-                window.addToRecent(emoji);
-            }
-        }
-
-        // ============================================
-        // TEXT FORMATTING IN INPUT
-        // ============================================
-        function formatInputText(format) {
-            const input = document.getElementById('msgInput');
-            const selection = window.getSelection();
-            
-            if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
-                showToast('info', 'Выделите текст для форматирования', '✏️');
-                return;
-            }
-            
-            const selectedText = selection.toString();
-            let prefix = '', suffix = '';
-            
-            switch (format) {
-                case 'bold':   prefix = '**'; suffix = '**'; break;
-                case 'italic': prefix = '_';  suffix = '_';  break;
-                case 'spoiler':prefix = '||'; suffix = '||'; break;
-            }
-            
-            document.execCommand('insertText', false, prefix + selectedText + suffix);
-            input.focus();
-        }
-
-        // Обработка горячих клавиш Ctrl+B, Ctrl+I
-        document.getElementById('msgInput').addEventListener('keydown', function(e) {
-            if (e.ctrlKey || e.metaKey) {
-                if (e.key === 'b') {
-                    e.preventDefault();
-                    formatInputText('bold');
-                } else if (e.key === 'i') {
-                    e.preventDefault();
-                    formatInputText('italic');
-                }
-            }
-        });
-
-        // Контекстное меню для форматирования текста в поле ввода
-        const msgInput = document.getElementById('msgInput');
-        const inputContextMenu = document.getElementById('inputContextMenu');
-
-        msgInput.addEventListener('contextmenu', function(e) {
-            const selection = window.getSelection();
-            
-            // Показываем меню только если есть выделение
-            if (selection && !selection.isCollapsed && selection.toString().length > 0) {
-                e.preventDefault();
-                
-                const x = e.pageX || e.clientX || 0;
-                const y = e.pageY || e.clientY || 0;
-                
-                inputContextMenu.style.left = Math.min(x, window.innerWidth - 180) + 'px';
-                inputContextMenu.style.top = Math.min(y, window.innerHeight - 150) + 'px';
-                inputContextMenu.classList.add('active');
-            }
-        });
-
-        // Закрыть контекстное меню при клике вне его
-        document.addEventListener('click', function(e) {
-            if (!e.target.closest('#inputContextMenu') && !e.target.closest('#msgInput')) {
-                inputContextMenu.classList.remove('active');
-            }
-        });
-
-        document.addEventListener('click', function(e) {
-            const picker = document.getElementById('emojiPicker');
-            const btn = document.getElementById('emojiBtn');
-            
-            if (picker.classList.contains('active')) {
-                if (!picker.contains(e.target) && !btn.contains(e.target)) {
-                    closeEmojiPicker();
-                }
-            }
-        });
-
-        // ============================================
-        // STICKER PACKS
-        // ============================================
-        async function loadStickerPacks() {
             try {
-                const res = await fetch('/api/v1/stickers/packs', {
+                const res = await fetch('/api/v1/chats/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    body: JSON.stringify({ type: 'private', participants: [userId] })
+                });
+                const data = await res.json();
+                if (data.chatId) {
+                    await loadChats();
+                    openChat(data.chatId, name);
+                }
+            } catch (e) {
+                showToast('error', 'Ошибка', '❌');
+            }
+        }
+
+        function closeUserProfileModal() {
+            document.getElementById('userProfileModal').classList.remove('active');
+        }
+
+        function openChatUserProfile() {
+            if (!activeChat) return;
+            
+            if (activeChat.type === 'group' || activeChat.type === 'channel') {
+                openGroupInfoModal(activeChat.id);
+                return;
+            }
+
+            const chatUser = chatUsers[activeChat.id];
+            if (chatUser) {
+                openUserProfileModal({
+                    id: chatUser.id,
+                    name: chatUser.name,
+                    username: chatUser.username,
+                    avatarUrl: chatUser.av,
+                    bio: chatUser.bio || '',
+                    online: chatUser.isOnline,
+                    isBot: chatUser.isBot || false,
+                    isBlocked: chatUser.isBlocked || false,
+                    isMuted: chatUser.isMuted || false
+                });
+            } else {
+                showToast('info', tr('userDataUnavailable', 'Данные пользователя недоступны'), '⚠️');
+            }
+        }
+
+        async function openGroupInfoModal(chatId) {
+            const chat = allChats.find(c => c.id === chatId);
+            if (!chat) return;
+
+            let members = [];
+            try {
+                const res = await fetch('/api/v1/chats/' + chatId + '/members', {
                     headers: { 'Authorization': 'Bearer ' + token }
                 });
-                if (!res.ok) throw new Error('Failed to load sticker packs');
-                const data = await res.json();
-                stickerPacks = data.packs.map(p => ({
-                    id: p.id,
-                    name: p.name,
-                    description: p.description,
-                    icon: p.iconUrl || '🎨',
-                    stickers: [],
-                    stickerIds: [],
-                    isCommon: false
-                }));
-
-                // Загружаем стикеры для каждого пака
-                for (const pack of stickerPacks) {
-                    const stickersRes = await fetch('/api/v1/stickers/packs/' + pack.id, {
-                        headers: { 'Authorization': 'Bearer ' + token }
-                    });
-                    if (stickersRes.ok) {
-                        const stickersData = await stickersRes.json();
-                        pack.stickers = stickersData.stickers.map(s => s.imageUrl);
-                        pack.stickerIds = stickersData.stickers.map(s => s.id);
-                    }
+                if (res.ok) {
+                    const data = await res.json();
+                    members = data.members || [];
                 }
+            } catch (_) {}
 
-                renderStickerPacksList();
-            } catch (error) {
-                console.error('Load sticker packs error:', error);
-                // Fallback к localStorage если сервер недоступен
-                const stored = localStorage.getItem('craneapp_sticker_packs');
-                stickerPacks = stored ? JSON.parse(stored) : [];
-                renderStickerPacksList();
+            const av = chat.avatarUrl && isImage(chat.avatarUrl)
+                ? '<img src="' + chat.avatarUrl + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">'
+                : '<span style="font-size:32px;">' + (chat.name[0] || '💬') + '</span>';
+
+            const membersHtml = members.map(m => {
+                const mName = m.first_name || m.username || tr('user', 'Пользователь');
+                const mAv = m.avatar_url && isImage(m.avatar_url)
+                    ? '<img src="' + m.avatar_url + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">'
+                    : '<span style="font-size:16px;font-weight:600;">' + mName[0].toUpperCase() + '</span>';
+                const onlineDot = m.is_online && !m.is_bot ? '<span style="width:8px;height:8px;border-radius:50%;background:#00E676;display:inline-block;margin-left:6px;flex-shrink:0;"></span>' : '';
+                const roleLabel = m.role === 'owner' ? '<span style="font-size:11px;color:var(--accent-color);margin-left:4px;">' + (window.i18n?.t('creator') || 'Создатель') + '</span>' : '';
+                const isMe = m.id === user.id;
+                const isBot = m.is_bot;
+                const clickable = !isMe && !isBot;
+                const clickAttr = clickable
+                    ? `onclick="closeGroupInfoAndOpenProfile('${m.id}','${mName}','${m.username || ''}','${m.avatar_url || ''}',${!!m.is_online})"`
+                    : '';
+                return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border-color);cursor:${clickable ? 'pointer' : 'default'};" ${clickAttr}>
+                    <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#FF007F,#9D00FF);display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;overflow:hidden;">${mAv}</div>
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:15px;font-weight:600;display:flex;align-items:center;flex-wrap:wrap;gap:2px;">${mName}${roleLabel}${onlineDot}</div>
+                        <div style="font-size:13px;color:var(--text-muted);">@${m.username || ''}</div>
+                    </div>
+                </div>`;
+            }).join('');
+
+            let modal = document.getElementById('groupInfoModal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'groupInfoModal';
+                modal.style.cssText = 'position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px);';
+                modal.onclick = e => { if (e.target === modal) modal.remove(); };
+                document.body.appendChild(modal);
+            }
+
+            modal.innerHTML = `
+                <div style="background:var(--bg-secondary,#111);border-radius:24px 24px 0 0;width:100%;max-width:480px;max-height:85vh;overflow-y:auto;animation:slideUp 0.25s cubic-bezier(0.34,1.56,0.64,1);">
+                    <div style="display:flex;align-items:center;justify-content:flex-end;padding:16px 20px 0;">
+                        <button onclick="document.getElementById('groupInfoModal').remove()" style="background:rgba(255,255,255,0.08);border:none;color:var(--text-primary);width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;">×</button>
+                    </div>
+                    <div style="display:flex;flex-direction:column;align-items:center;padding:8px 20px 20px;text-align:center;">
+                        <div style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#FF007F,#9D00FF);display:flex;align-items:center;justify-content:center;color:#fff;font-size:32px;overflow:hidden;margin-bottom:12px;">${av}</div>
+                        <div style="font-size:22px;font-weight:700;letter-spacing:-0.02em;">${chat.name}</div>
+                        <div style="font-size:14px;color:var(--text-muted);margin-top:4px;">${members.length} ${pluralMembers(members.length)}</div>
+                    </div>
+                    <div style="margin:0 12px 20px;background:rgba(255,255,255,0.04);border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,0.06);">
+                        <div style="padding:10px 16px;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-muted);">${tr('members', 'Участники')}</div>
+                        ${membersHtml || '<div style="padding:16px;color:var(--text-muted);text-align:center;">' + tr('noMembers', 'Нет участников') + '</div>'}
+                    </div>
+                </div>`;
+            modal.style.display = 'flex';
+        }
+
+        function closeGroupInfoAndOpenProfile(id, name, username, avatarUrl, isOnline) {
+            const modal = document.getElementById('groupInfoModal');
+            if (modal) modal.remove();
+            openUserProfileModal({ id, name, username, avatarUrl, online: isOnline });
+        }
+
+        document.getElementById('userProfileModal').addEventListener('click', function(e) { 
+            if (e.target.id === 'userProfileModal') closeUserProfileModal(); 
+        });
+
+        // ============================================
+        // MEDIA PREVIEW
+        // ============================================
+        function openMediaPreview(url, type) {
+            currentPreviewMediaUrl = url;
+            const contentEl = document.getElementById('mediaPreviewContent');
+            
+            if (type === 'video') {
+                contentEl.innerHTML = '<video src="' + url + '" controls autoplay style="max-width:100%;max-height:100%;border-radius:4px;"></video>';
+            } else {
+                contentEl.innerHTML = '<img src="' + url + '" alt="" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;user-select:none;" draggable="false">';
+            }
+            
+            document.getElementById('mediaPreviewOverlay').classList.add('active');
+        }
+
+        function closeMediaPreview(event) {
+            if (event && event.target !== document.getElementById('mediaPreviewOverlay')) return;
+            const contentEl = document.getElementById('mediaPreviewContent');
+            const video = contentEl.querySelector('video');
+            if (video) video.pause();
+            contentEl.innerHTML = '';
+            document.getElementById('mediaPreviewOverlay').classList.remove('active');
+            currentPreviewMediaUrl = null;
+        }
+
+        function downloadMedia() {
+            if (!currentPreviewMediaUrl) return;
+            const a = document.createElement('a');
+            a.href = currentPreviewMediaUrl;
+            a.download = 'media_' + Date.now();
+            a.click();
+            showToast('success', 'Загрузка началась', '📥');
+        }
+
+        function downloadCurrentMedia() {
+            document.getElementById('messageContextMenu').classList.remove('active');
+            const msg = messagesData[currentMessageId];
+            if (!msg || !msg.mediaUrl) return;
+            const a = document.createElement('a');
+            a.href = msg.mediaUrl;
+            a.download = 'photo_' + Date.now();
+            a.click();
+            showToast('success', tr('downloadStarted', 'Загрузка началась'), '📥');
+        }
+
+        async function copyMessagePhoto() {
+            document.getElementById('messageContextMenu').classList.remove('active');
+            const msg = messagesData[currentMessageId];
+            if (!msg || !msg.mediaUrl) return;
+            try {
+                // Пробуем скопировать в буфер обмена как изображение
+                const res = await fetch(msg.mediaUrl);
+                const blob = await res.blob();
+                await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+                showToast('success', tr('photoCopied', 'Фото скопировано'), '📋');
+            } catch (_) {
+                // Fallback — копируем URL
+                navigator.clipboard.writeText(msg.mediaUrl).catch(() => {});
+                showToast('success', tr('linkCopied', 'Ссылка скопирована'), '📋');
             }
         }
 
-        async function saveStickerPacks() {
-            // Сохранение происходит на сервере через API
-            // localStorage больше не используется
+        function copyMediaLink() {
+            if (!currentPreviewMediaUrl) return;
+            
+            if (currentPreviewMediaUrl.startsWith('data:')) {
+                showToast('success', tr('mediaCopiedBuffer', 'Медиа сохранено в буфер'), '📋');
+            } else {
+                navigator.clipboard.writeText(currentPreviewMediaUrl);
+                showToast('success', tr('linkCopied', 'Ссылка скопирована'), '📋');
+            }
         }
 
-        function renderStickerPacksList() {
-            const container = document.getElementById('stickerPacks');
-            container.innerHTML = '';
+        // ============================================
+        // ATTACHMENT PANEL (как в Telegram)
+        // ============================================
+        function toggleAttachmentPanel() {
+            const panel = document.getElementById('attachmentPanel');
+            const btn = document.getElementById('mediaBtn');
+            
+            if (panel.classList.contains('active')) {
+                panel.classList.remove('active');
+                btn.classList.remove('active');
+            } else {
+                // Закрываем другие панели
+                closeEmojiPicker();
+                panel.classList.add('active');
+                btn.classList.add('active');
+            }
+        }
 
-            // Кнопка создания нового пак
-            const addBtn = document.createElement('div');
-            addBtn.className = 'sticker-pack-item sticker-pack-add';
-            addBtn.onclick = openCreatePackModal;
-            addBtn.innerHTML = '<div class="sticker-pack-icon sticker-pack-add">➕</div><span class="sticker-pack-name">Новый</span>';
-            container.appendChild(addBtn);
+        function closeAttachmentPanel() {
+            document.getElementById('attachmentPanel').classList.remove('active');
+            document.getElementById('mediaBtn').classList.remove('active');
+        }
 
-            // Рендерим все паки (теперь только личные)
-            stickerPacks.forEach(function(pack, index) {
-                const realIndex = index + 1; // +1 из-за кнопки создания
-                const item = document.createElement('div');
-                item.className = 'sticker-pack-item' + (currentStickerPackId === realIndex ? ' active' : '');
-                item.onclick = function() { selectStickerPack(realIndex); };
-                // Аватар - последний стикер или иконка
-                const avatar = pack.stickers && pack.stickers.length > 0 ? pack.stickers[pack.stickers.length - 1] : (pack.icon || '🎨');
-                item.innerHTML = '<div class="sticker-pack-icon"><img src="' + avatar + '" alt=""></div><span class="sticker-pack-name">' + pack.name + '</span>';
-                container.appendChild(item);
-            });
+        function openFilePicker() {
+            closeAttachmentPanel();
+            document.getElementById('fileInput').click();
+        }
 
-            if (stickerPacks.length > 0 && currentStickerPackId === null) {
-                selectStickerPack(1);
+        function shareLocation() {
+            closeAttachmentPanel();
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        const locationUrl = `https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}`;
+                        const locationText = tr('myLocationMessage', '📍 Моя геопозиция: {url}', { url: locationUrl });
+                        sendMessage(locationText);

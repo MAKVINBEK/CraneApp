@@ -1,67 +1,446 @@
 // ============================================
         // REACTIONS
         // ============================================
-        const reactionController = window.CraneReactionController.create({
-            getToken: () => token,
-            getCurrentMessageId: () => currentMessageId,
-            getMessage: (messageId) => messagesData[messageId],
-            isValidMessageId: (messageId) => isValidUUID(messageId),
-        });
+        const QUICK_REACTIONS = ['👍','❤️','😂','😮','😢','🔥','👏','🎉'];
+
+        let reactionPickerEl = null;
+        let reactionFullPickerEl = null;
+        let reactionTargetMessageId = null;
 
         function toggleReactionFromMenu(emoji) {
-            reactionController.toggleReactionFromMenu(emoji);
+            document.getElementById('messageContextMenu').classList.remove('active');
+            if (!isValidUUID(currentMessageId)) return;
+            toggleReaction(currentMessageId, emoji);
         }
 
         function openReactionPickerFromMenu() {
-            reactionController.openReactionPickerFromMenu();
+            if (!isValidUUID(currentMessageId)) return;
+            const msgId = currentMessageId;
+            document.getElementById('messageContextMenu').classList.remove('active');
+            setTimeout(() => showFullEmojiPicker(msgId), 50);
         }
 
+        // Подсвечиваем уже поставленные реакции в контекстном меню
         function updateContextMenuReactions(messageId) {
-            reactionController.updateContextMenuReactions(messageId);
+            const msg = messagesData[messageId];
+            if (!msg || !msg.reactions) return;
+            const myReactions = new Set(msg.reactions.filter(r => r.myReaction).map(r => r.emoji));
+            document.querySelectorAll('.context-reaction-btn[onclick*="toggleReactionFromMenu"]').forEach(btn => {
+                const emoji = btn.textContent.trim();
+                btn.classList.toggle('active-reaction', myReactions.has(emoji));
+            });
+        }
+
+        function createReactionsElement(messageId, reactions) {
+            const el = document.createElement('div');
+            el.className = 'message-reactions';
+            el.dataset.messageId = messageId;
+            reactions.forEach(r => {
+                const badge = document.createElement('div');
+                badge.className = 'reaction-badge' + (r.myReaction ? ' my-reaction' : '');
+                badge.innerHTML = `<span>${r.emoji}</span><span class="reaction-count">${r.count}</span>`;
+                badge.onclick = (e) => { e.stopPropagation(); toggleReaction(messageId, r.emoji); };
+                el.appendChild(badge);
+            });
+            return el;
         }
 
         function updateMessageReactions(messageId, reactions) {
-            reactionController.updateMessageReactions(messageId, reactions);
+            const msgEl = document.querySelector('[data-message-id="' + messageId + '"]');
+            if (!msgEl) return;
+            
+            const old = msgEl.querySelector('.message-reactions');
+            if (old) old.remove();
+            
+            if (reactions && reactions.length > 0) {
+                const reactionsData = reactions.map(r => ({
+                    emoji: r.emoji,
+                    count: parseInt(r.count),
+                    myReaction: r.my_reaction || r.myReaction
+                }));
+                const el = createReactionsElement(messageId, reactionsData);
+                const timeEl = msgEl.querySelector('.msg-time');
+                if (timeEl) msgEl.insertBefore(el, timeEl);
+                else msgEl.appendChild(el);
+            }
         }
 
         function showReactionPicker(e, messageId) {
-            reactionController.showReactionPicker(e, messageId);
+            e.stopPropagation();
+            closeReactionPicker();
+            reactionTargetMessageId = messageId;
+            
+            reactionPickerEl = document.createElement('div');
+            reactionPickerEl.className = 'reaction-picker';
+            
+            QUICK_REACTIONS.forEach(emoji => {
+                const btn = document.createElement('div');
+                btn.className = 'reaction-picker-emoji';
+                btn.textContent = emoji;
+                btn.onclick = (ev) => { ev.stopPropagation(); toggleReaction(messageId, emoji); closeReactionPicker(); };
+                reactionPickerEl.appendChild(btn);
+            });
+            
+            const more = document.createElement('div');
+            more.className = 'reaction-picker-more';
+            more.textContent = '＋';
+            more.onclick = (ev) => { ev.stopPropagation(); showFullEmojiPicker(messageId); };
+            reactionPickerEl.appendChild(more);
+            
+            document.body.appendChild(reactionPickerEl);
+            
+            const msgEl = document.querySelector('[data-message-id="' + messageId + '"]');
+            if (msgEl) {
+                const rect = msgEl.getBoundingClientRect();
+                const pickerW = 320;
+                let left = rect.left;
+                if (left + pickerW > window.innerWidth) left = window.innerWidth - pickerW - 8;
+                if (left < 8) left = 8;
+                const top = Math.max(8, rect.top - 60);
+                reactionPickerEl.style.left = left + 'px';
+                reactionPickerEl.style.top = top + 'px';
+            }
         }
 
         function showFullEmojiPicker(messageId) {
-            reactionController.showFullEmojiPicker(messageId);
+            closeReactionPicker();
+            reactionTargetMessageId = messageId;
+            
+            reactionFullPickerEl = document.createElement('div');
+            reactionFullPickerEl.className = 'reaction-full-picker';
+            
+            const grid = document.createElement('div');
+            grid.className = 'reaction-full-picker-grid';
+            
+            const allCategories = ['smileys', 'animals', 'food', 'activities', 'travel', 'objects', 'symbols'];
+            let allEmojis = [];
+            allCategories.forEach(cat => {
+                if (window.EmojiData && window.EmojiData[cat]) allEmojis = allEmojis.concat(window.EmojiData[cat]);
+            });
+            if (allEmojis.length === 0) allEmojis = QUICK_REACTIONS;
+            
+            allEmojis.slice(0, 200).forEach(emoji => {
+                const btn = document.createElement('div');
+                btn.className = 'reaction-full-picker-emoji';
+                btn.textContent = emoji;
+                btn.onclick = (e) => { e.stopPropagation(); toggleReaction(messageId, emoji); closeFullEmojiPicker(); };
+                grid.appendChild(btn);
+            });
+            
+            reactionFullPickerEl.appendChild(grid);
+            document.body.appendChild(reactionFullPickerEl);
+            
+            // Центрируем по экрану
+            const pickerW = 300;
+            const pickerH = 280;
+            reactionFullPickerEl.style.left = Math.max(8, (window.innerWidth - pickerW) / 2) + 'px';
+            reactionFullPickerEl.style.top = Math.max(8, (window.innerHeight - pickerH) / 2) + 'px';
         }
 
         function closeReactionPicker() {
-            reactionController.closeReactionPicker();
+            if (reactionPickerEl) { reactionPickerEl.remove(); reactionPickerEl = null; }
         }
 
         function closeFullEmojiPicker() {
-            reactionController.closeFullEmojiPicker();
+            if (reactionFullPickerEl) { reactionFullPickerEl.remove(); reactionFullPickerEl = null; }
         }
 
         async function toggleReaction(messageId, emoji) {
-            return reactionController.toggleReaction(messageId, emoji);
+            if (!isValidUUID(messageId)) return;
+            try {
+                const res = await fetch('/api/v1/messages/' + messageId + '/reactions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    body: JSON.stringify({ emoji })
+                });
+                const data = await res.json();
+                if (data.reactions !== undefined) {
+                    updateMessageReactions(messageId, data.reactions);
+                }
+            } catch (err) {
+                console.error('Reaction error:', err);
+            }
         }
+
+        document.addEventListener('click', function(e) {
+            if (reactionPickerEl && !reactionPickerEl.contains(e.target)) closeReactionPicker();
+            if (reactionFullPickerEl && !reactionFullPickerEl.contains(e.target)) closeFullEmojiPicker();
+        });
 
         // ============================================
         // INIT
         // ============================================
         const token = localStorage.getItem('craneapp_auth_token');
-        let user = JSON.parse(localStorage.getItem('craneapp_user_data') || '{}');
-        const chatTextUtils = window.CraneChatTextUtils.create({
-            getActiveChat: () => activeChat,
-            getChatUsers: () => chatUsers,
-            pluralMembers: (count) => pluralMembers(count),
-        });
-        const {
-            chatStatusText,
-            formatI18n,
-            isCraneAppBotMessage,
-            localizeBotMessageText,
-            tc,
-            tr,
-        } = chatTextUtils;
+        let user = {};
+        try {
+            user = JSON.parse(localStorage.getItem('craneapp_user_data') || '{}') || {};
+        } catch (e) {
+            console.error('Error parsing craneapp_user_data:', e);
+        }
+        function formatI18n(value, vars) {
+            if (!vars || !value || typeof value !== 'string') return value;
+            return value.replace(/\{(\w+)\}/g, function(match, key) {
+                return vars[key] !== undefined ? vars[key] : match;
+            });
+        }
+        function tr(key, fallback, vars) {
+            const value = window.i18n?.t(key, vars);
+            if (value && value !== key) return value;
+            return formatI18n(window.i18n?.translations?.en?.[key] || fallback, vars);
+        }
+        function tc(key, count, fallback) {
+            return window.i18n?.tc ? window.i18n.tc(key, count) : (fallback || (count + ' ' + pluralMembers(count)));
+        }
+        function chatStatusText(userStatus) {
+            if (userStatus?.isBot) return tr('bot', 'bot');
+            if (!userStatus) return tr('online', 'online');
+            if (userStatus.isOnline || userStatus.online) return tr('online', 'online');
+            if (userStatus.lastSeen === null) return tr('lastSeenHidden', 'last seen hidden');
+            const lastSeen = userStatus.lastSeen ? new Date(userStatus.lastSeen) : null;
+            if (lastSeen && !Number.isNaN(lastSeen.getTime())) {
+                const diff = Date.now() - lastSeen.getTime();
+                const minutes = Math.floor(diff / 60000);
+                const hours = Math.floor(diff / 3600000);
+                const days = Math.floor(diff / 86400000);
+                if (minutes < 1) return tr('justNow', 'just now');
+                if (minutes < 60) return tr('minutesAgo', minutes + ' min. ago', { count: minutes });
+                if (hours < 24) return tr('hoursAgo', hours + ' h. ago', { count: hours });
+                if (days < 7) return tr('daysAgo', days + ' d. ago', { count: days });
+            }
+            return tr('lastSeenRecently', 'last seen recently');
+        }
+        const BOT_MESSAGE_TEXTS = {
+            ru: {
+                botWelcome: '🤖 Здравствуй! Я CraneApp — официальный бот.\n\n✨ Что я умею:\n• Уведомлять о входах с новых устройств\n• Следить за безопасностью твоего аккаунта\n• Сообщать о важных обновлениях\n• Отвечать на твои вопросы 24/7\n\n🛡️ Безопасность превыше всего — если замечу что-то подозрительное, мгновенно сообщу.\n\n💡 Напиши /help в любой момент, чтобы узнать все мои команды.\n\nДобро пожаловать в CraneApp! 🚀',
+                botHelp: '🤖 Привет! Я CraneApp — официальный бот.\n\n📋 Команды:\n/help — список команд\n/status — мой статус\n/support text — написать в поддержку',
+                botDevCommands: '\n\n🔧 Команды разработчика:\n/badge @user verified|admin|developer|premium|fake|scam — добавить значок\n/unbadge @user [badge] — убрать значок\n/premium @user — выдать/снять Premium\n/mute @user [min] — замутить\n/unmute @user — размутить\n/ban @user — заблокировать\n/unban @user — разблокировать\n/info @user — информация\n/broadcast text — рассылка\n/stats — статистика',
+                loginNotification: '🔐 Новый вход в аккаунт\n\n📱 Устройство: {device}\n🌍 Местоположение: {location}\n🌐 IP-адрес: {ip}\n🕐 Время: {time}\n\nЕсли это были не вы — немедленно смените пароль.',
+                botSupportUsage: 'Укажите сообщение: /support text',
+                botSupportCooldown: 'Вы уже отправляли запрос. Следующий можно отправить через {minutes} мин.',
+                botSupportSent: 'Ваш запрос отправлен в поддержку. Мы ответим в ближайшее время.',
+                botSupportNotification: '📨 Новый запрос в поддержку от @{username}:\n"{message}"',
+                botUnknownCommand: 'Неизвестная команда. Напишите /help',
+                botError: 'Ошибка: {message}',
+                botStatus: '👤 @{username}\n💎 Premium: {premium}\n🏷 Значки: {badges}',
+                botStats: '📊 Статистика CraneApp:\n👥 Пользователей: {users}\n💎 Premium: {premium}\n🚫 Забанено: {banned}\n💬 Чатов: {chats}\n📨 Сообщений за 24ч: {messages}'
+            },
+            en: {
+                botWelcome: '🤖 Hello! I am CraneApp, the official bot.\n\n✨ What I can do:\n• Notify you about logins from new devices\n• Help protect your account\n• Share important updates\n• Answer your questions 24/7\n\n🛡️ Security comes first. If I notice anything suspicious, I will let you know immediately.\n\n💡 Type /help anytime to see all my commands.\n\nWelcome to CraneApp! 🚀',
+                botHelp: '🤖 Hi! I am CraneApp, the official bot.\n\n📋 Commands:\n/help — command list\n/status — my status\n/support text — contact support',
+                botDevCommands: '\n\n🔧 Developer commands:\n/badge @user verified|admin|developer|premium|fake|scam — add badge\n/unbadge @user [badge] — remove badge\n/premium @user — grant/remove Premium\n/mute @user [min] — mute\n/unmute @user — unmute\n/ban @user — ban\n/unban @user — unban\n/info @user — info\n/broadcast text — broadcast\n/stats — statistics',
+                loginNotification: '🔐 New login to your account\n\n📱 Device: {device}\n🌍 Location: {location}\n🌐 IP address: {ip}\n🕐 Time: {time}\n\nIf this was not you, change your password immediately.',
+                botSupportUsage: 'Specify a message: /support text',
+                botSupportCooldown: 'You have already sent a request. You can send the next one in {minutes} min.',
+                botSupportSent: 'Your request was sent to support. We will reply soon.',
+                botSupportNotification: '📨 New support request from @{username}:\n"{message}"',
+                botUnknownCommand: 'Unknown command. Type /help',
+                botError: 'Error: {message}',
+                botStatus: '👤 @{username}\n💎 Premium: {premium}\n🏷 Badges: {badges}',
+                botStats: '📊 CraneApp statistics:\n👥 Users: {users}\n💎 Premium: {premium}\n🚫 Banned: {banned}\n💬 Chats: {chats}\n📨 Messages in 24h: {messages}'
+            },
+            de: {
+                botWelcome: '🤖 Hallo! Ich bin CraneApp, der offizielle Bot.\n\n✨ Was ich kann:\n• Dich über Anmeldungen von neuen Geräten informieren\n• Dein Konto schützen helfen\n• Wichtige Updates teilen\n• Deine Fragen rund um die Uhr beantworten\n\n🛡️ Sicherheit geht vor. Wenn ich etwas Verdächtiges bemerke, sage ich dir sofort Bescheid.\n\n💡 Tippe jederzeit /help, um alle Befehle zu sehen.\n\nWillkommen bei CraneApp! 🚀',
+                botHelp: '🤖 Hi! Ich bin CraneApp, der offizielle Bot.\n\n📋 Befehle:\n/help — Befehlsliste\n/status — mein Status\n/support text — Support kontaktieren',
+                botDevCommands: '\n\n🔧 Entwicklerbefehle:\n/badge @user verified|admin|developer|premium|fake|scam — Badge hinzufügen\n/unbadge @user [badge] — Badge entfernen\n/premium @user — Premium vergeben/entfernen\n/mute @user [min] — stummschalten\n/unmute @user — Stummschaltung aufheben\n/ban @user — sperren\n/unban @user — entsperren\n/info @user — Info\n/broadcast text — Broadcast\n/stats — Statistik',
+                loginNotification: '🔐 Neue Anmeldung bei deinem Konto\n\n📱 Gerät: {device}\n🌍 Standort: {location}\n🌐 IP-Adresse: {ip}\n🕐 Zeit: {time}\n\nWenn du das nicht warst, ändere sofort dein Passwort.',
+                botSupportUsage: 'Gib eine Nachricht an: /support text',
+                botSupportCooldown: 'Du hast bereits eine Anfrage gesendet. Die nächste ist in {minutes} Min. möglich.',
+                botSupportSent: 'Deine Anfrage wurde an den Support gesendet. Wir antworten bald.',
+                botSupportNotification: '📨 Neue Support-Anfrage von @{username}:\n"{message}"',
+                botUnknownCommand: 'Unbekannter Befehl. Tippe /help',
+                botError: 'Fehler: {message}',
+                botStatus: '👤 @{username}\n💎 Premium: {premium}\n🏷 Badges: {badges}',
+                botStats: '📊 CraneApp-Statistik:\n👥 Nutzer: {users}\n💎 Premium: {premium}\n🚫 Gesperrt: {banned}\n💬 Chats: {chats}\n📨 Nachrichten in 24h: {messages}'
+            },
+            fr: {
+                botWelcome: '🤖 Bonjour ! Je suis CraneApp, le bot officiel.\n\n✨ Ce que je peux faire :\n• Vous avertir des connexions depuis de nouveaux appareils\n• Aider à protéger votre compte\n• Partager les mises à jour importantes\n• Répondre à vos questions 24/7\n\n🛡️ La sécurité passe avant tout. Si je remarque quelque chose de suspect, je vous préviens immédiatement.\n\n💡 Tapez /help à tout moment pour voir toutes mes commandes.\n\nBienvenue sur CraneApp ! 🚀',
+                botHelp: '🤖 Salut ! Je suis CraneApp, le bot officiel.\n\n📋 Commandes :\n/help — liste des commandes\n/status — mon statut\n/support text — contacter le support',
+                botDevCommands: '\n\n🔧 Commandes développeur :\n/badge @user verified|admin|developer|premium|fake|scam — ajouter un badge\n/unbadge @user [badge] — retirer un badge\n/premium @user — accorder/retirer Premium\n/mute @user [min] — rendre muet\n/unmute @user — réactiver\n/ban @user — bannir\n/unban @user — débannir\n/info @user — info\n/broadcast text — diffusion\n/stats — statistiques',
+                loginNotification: '🔐 Nouvelle connexion à votre compte\n\n📱 Appareil : {device}\n🌍 Emplacement : {location}\n🌐 Adresse IP : {ip}\n🕐 Heure : {time}\n\nSi ce n’était pas vous, changez immédiatement votre mot de passe.',
+                botSupportUsage: 'Indiquez un message : /support text',
+                botSupportCooldown: 'Vous avez déjà envoyé une demande. La prochaine sera possible dans {minutes} min.',
+                botSupportSent: 'Votre demande a été envoyée au support. Nous répondrons bientôt.',
+                botSupportNotification: '📨 Nouvelle demande de support de @{username} :\n"{message}"',
+                botUnknownCommand: 'Commande inconnue. Tapez /help',
+                botError: 'Erreur : {message}',
+                botStatus: '👤 @{username}\n💎 Premium : {premium}\n🏷 Badges : {badges}',
+                botStats: '📊 Statistiques CraneApp :\n👥 Utilisateurs : {users}\n💎 Premium : {premium}\n🚫 Bannis : {banned}\n💬 Chats : {chats}\n📨 Messages en 24h : {messages}'
+            },
+            es: {
+                botWelcome: '🤖 ¡Hola! Soy CraneApp, el bot oficial.\n\n✨ Lo que puedo hacer:\n• Avisarte sobre inicios de sesión desde nuevos dispositivos\n• Ayudar a proteger tu cuenta\n• Compartir actualizaciones importantes\n• Responder tus preguntas 24/7\n\n🛡️ La seguridad es lo primero. Si noto algo sospechoso, te avisaré de inmediato.\n\n💡 Escribe /help cuando quieras para ver todos mis comandos.\n\n¡Bienvenido a CraneApp! 🚀',
+                botHelp: '🤖 ¡Hola! Soy CraneApp, el bot oficial.\n\n📋 Comandos:\n/help — lista de comandos\n/status — mi estado\n/support text — contactar soporte',
+                botDevCommands: '\n\n🔧 Comandos de desarrollador:\n/badge @user verified|admin|developer|premium|fake|scam — añadir insignia\n/unbadge @user [badge] — quitar insignia\n/premium @user — dar/quitar Premium\n/mute @user [min] — silenciar\n/unmute @user — quitar silencio\n/ban @user — bloquear\n/unban @user — desbloquear\n/info @user — información\n/broadcast text — difusión\n/stats — estadísticas',
+                loginNotification: '🔐 Nuevo inicio de sesión en tu cuenta\n\n📱 Dispositivo: {device}\n🌍 Ubicación: {location}\n🌐 Dirección IP: {ip}\n🕐 Hora: {time}\n\nSi no fuiste tú, cambia tu contraseña inmediatamente.',
+                botSupportUsage: 'Indica un mensaje: /support text',
+                botSupportCooldown: 'Ya enviaste una solicitud. Podrás enviar la siguiente en {minutes} min.',
+                botSupportSent: 'Tu solicitud fue enviada a soporte. Responderemos pronto.',
+                botSupportNotification: '📨 Nueva solicitud de soporte de @{username}:\n"{message}"',
+                botUnknownCommand: 'Comando desconocido. Escribe /help',
+                botError: 'Error: {message}',
+                botStatus: '👤 @{username}\n💎 Premium: {premium}\n🏷 Insignias: {badges}',
+                botStats: '📊 Estadísticas de CraneApp:\n👥 Usuarios: {users}\n💎 Premium: {premium}\n🚫 Bloqueados: {banned}\n💬 Chats: {chats}\n📨 Mensajes en 24h: {messages}'
+            },
+            it: {
+                botWelcome: '🤖 Ciao! Sono CraneApp, il bot ufficiale.\n\n✨ Cosa posso fare:\n• Avvisarti degli accessi da nuovi dispositivi\n• Aiutare a proteggere il tuo account\n• Condividere aggiornamenti importanti\n• Rispondere alle tue domande 24/7\n\n🛡️ La sicurezza viene prima di tutto. Se noto qualcosa di sospetto, te lo dirò subito.\n\n💡 Scrivi /help in qualsiasi momento per vedere tutti i comandi.\n\nBenvenuto in CraneApp! 🚀',
+                botHelp: '🤖 Ciao! Sono CraneApp, il bot ufficiale.\n\n📋 Comandi:\n/help — elenco comandi\n/status — il mio stato\n/support text — contatta il supporto',
+                botDevCommands: '\n\n🔧 Comandi sviluppatore:\n/badge @user verified|admin|developer|premium|fake|scam — aggiungi badge\n/unbadge @user [badge] — rimuovi badge\n/premium @user — assegna/rimuovi Premium\n/mute @user [min] — silenzia\n/unmute @user — rimuovi silenzio\n/ban @user — blocca\n/unban @user — sblocca\n/info @user — info\n/broadcast text — broadcast\n/stats — statistiche',
+                loginNotification: '🔐 Nuovo accesso al tuo account\n\n📱 Dispositivo: {device}\n🌍 Posizione: {location}\n🌐 Indirizzo IP: {ip}\n🕐 Ora: {time}\n\nSe non eri tu, cambia subito la password.',
+                botSupportUsage: 'Specifica un messaggio: /support text',
+                botSupportCooldown: 'Hai già inviato una richiesta. Potrai inviarne un’altra tra {minutes} min.',
+                botSupportSent: 'La tua richiesta è stata inviata al supporto. Risponderemo presto.',
+                botSupportNotification: '📨 Nuova richiesta di supporto da @{username}:\n"{message}"',
+                botUnknownCommand: 'Comando sconosciuto. Scrivi /help',
+                botError: 'Errore: {message}',
+                botStatus: '👤 @{username}\n💎 Premium: {premium}\n🏷 Badge: {badges}',
+                botStats: '📊 Statistiche CraneApp:\n👥 Utenti: {users}\n💎 Premium: {premium}\n🚫 Bloccati: {banned}\n💬 Chat: {chats}\n📨 Messaggi in 24h: {messages}'
+            },
+            pt: {
+                botWelcome: '🤖 Olá! Eu sou o CraneApp, o bot oficial.\n\n✨ O que posso fazer:\n• Avisar sobre logins em novos dispositivos\n• Ajudar a proteger sua conta\n• Compartilhar atualizações importantes\n• Responder suas perguntas 24/7\n\n🛡️ Segurança em primeiro lugar. Se eu notar algo suspeito, avisarei imediatamente.\n\n💡 Digite /help a qualquer momento para ver todos os comandos.\n\nBem-vindo ao CraneApp! 🚀',
+                botHelp: '🤖 Oi! Eu sou o CraneApp, o bot oficial.\n\n📋 Comandos:\n/help — lista de comandos\n/status — meu status\n/support text — contatar suporte',
+                botDevCommands: '\n\n🔧 Comandos de desenvolvedor:\n/badge @user verified|admin|developer|premium|fake|scam — adicionar selo\n/unbadge @user [badge] — remover selo\n/premium @user — conceder/remover Premium\n/mute @user [min] — silenciar\n/unmute @user — remover silêncio\n/ban @user — banir\n/unban @user — desbanir\n/info @user — informação\n/broadcast text — transmissão\n/stats — estatísticas',
+                loginNotification: '🔐 Novo login na sua conta\n\n📱 Dispositivo: {device}\n🌍 Localização: {location}\n🌐 Endereço IP: {ip}\n🕐 Hora: {time}\n\nSe não foi você, altere sua senha imediatamente.',
+                botSupportUsage: 'Informe uma mensagem: /support text',
+                botSupportCooldown: 'Você já enviou uma solicitação. A próxima poderá ser enviada em {minutes} min.',
+                botSupportSent: 'Sua solicitação foi enviada ao suporte. Responderemos em breve.',
+                botSupportNotification: '📨 Nova solicitação de suporte de @{username}:\n"{message}"',
+                botUnknownCommand: 'Comando desconhecido. Digite /help',
+                botError: 'Erro: {message}',
+                botStatus: '👤 @{username}\n💎 Premium: {premium}\n🏷 Selos: {badges}',
+                botStats: '📊 Estatísticas do CraneApp:\n👥 Usuários: {users}\n💎 Premium: {premium}\n🚫 Banidos: {banned}\n💬 Chats: {chats}\n📨 Mensagens em 24h: {messages}'
+            },
+            pl: {
+                botWelcome: '🤖 Cześć! Jestem CraneApp, oficjalny bot.\n\n✨ Co potrafię:\n• Powiadamiać o logowaniach z nowych urządzeń\n• Pomagać chronić konto\n• Przekazywać ważne aktualizacje\n• Odpowiadać na pytania 24/7\n\n🛡️ Bezpieczeństwo jest najważniejsze. Jeśli zauważę coś podejrzanego, od razu dam znać.\n\n💡 Wpisz /help w dowolnym momencie, aby zobaczyć wszystkie komendy.\n\nWitamy w CraneApp! 🚀',
+                botHelp: '🤖 Cześć! Jestem CraneApp, oficjalny bot.\n\n📋 Komendy:\n/help — lista komend\n/status — mój status\n/support text — kontakt z pomocą',
+                botDevCommands: '\n\n🔧 Komendy deweloperskie:\n/badge @user verified|admin|developer|premium|fake|scam — dodaj odznakę\n/unbadge @user [badge] — usuń odznakę\n/premium @user — nadaj/usuń Premium\n/mute @user [min] — wycisz\n/unmute @user — cofnij wyciszenie\n/ban @user — zablokuj\n/unban @user — odblokuj\n/info @user — info\n/broadcast text — ogłoszenie\n/stats — statystyki',
+                loginNotification: '🔐 Nowe logowanie na konto\n\n📱 Urządzenie: {device}\n🌍 Lokalizacja: {location}\n🌐 Adres IP: {ip}\n🕐 Czas: {time}\n\nJeśli to nie Ty, natychmiast zmień hasło.',
+                botSupportUsage: 'Podaj wiadomość: /support text',
+                botSupportCooldown: 'Wysłano już zgłoszenie. Następne będzie możliwe za {minutes} min.',
+                botSupportSent: 'Twoje zgłoszenie wysłano do pomocy. Odpowiemy wkrótce.',
+                botSupportNotification: '📨 Nowe zgłoszenie do pomocy od @{username}:\n"{message}"',
+                botUnknownCommand: 'Nieznana komenda. Wpisz /help',
+                botError: 'Błąd: {message}',
+                botStatus: '👤 @{username}\n💎 Premium: {premium}\n🏷 Odznaki: {badges}',
+                botStats: '📊 Statystyki CraneApp:\n👥 Użytkownicy: {users}\n💎 Premium: {premium}\n🚫 Zablokowani: {banned}\n💬 Czaty: {chats}\n📨 Wiadomości w 24h: {messages}'
+            },
+            uk: {
+                botWelcome: '🤖 Вітаю! Я CraneApp, офіційний бот.\n\n✨ Що я вмію:\n• Повідомляти про входи з нових пристроїв\n• Допомагати захищати акаунт\n• Ділитися важливими оновленнями\n• Відповідати на запитання 24/7\n\n🛡️ Безпека понад усе. Якщо помічу щось підозріле, одразу повідомлю.\n\n💡 Напишіть /help будь-коли, щоб побачити всі мої команди.\n\nЛаскаво просимо до CraneApp! 🚀',
+                botHelp: '🤖 Привіт! Я CraneApp, офіційний бот.\n\n📋 Команди:\n/help — список команд\n/status — мій статус\n/support text — звернутися в підтримку',
+                botDevCommands: '\n\n🔧 Команди розробника:\n/badge @user verified|admin|developer|premium|fake|scam — додати значок\n/unbadge @user [badge] — прибрати значок\n/premium @user — видати/зняти Premium\n/mute @user [min] — замутити\n/unmute @user — розмутити\n/ban @user — заблокувати\n/unban @user — розблокувати\n/info @user — інформація\n/broadcast text — розсилка\n/stats — статистика',
+                loginNotification: '🔐 Новий вхід в акаунт\n\n📱 Пристрій: {device}\n🌍 Місцезнаходження: {location}\n🌐 IP-адреса: {ip}\n🕐 Час: {time}\n\nЯкщо це були не ви, негайно змініть пароль.',
+                botSupportUsage: 'Вкажіть повідомлення: /support text',
+                botSupportCooldown: 'Ви вже надсилали запит. Наступний можна надіслати через {minutes} хв.',
+                botSupportSent: 'Ваш запит надіслано в підтримку. Ми відповімо найближчим часом.',
+                botSupportNotification: '📨 Новий запит у підтримку від @{username}:\n"{message}"',
+                botUnknownCommand: 'Невідома команда. Напишіть /help',
+                botError: 'Помилка: {message}',
+                botStatus: '👤 @{username}\n💎 Premium: {premium}\n🏷 Значки: {badges}',
+                botStats: '📊 Статистика CraneApp:\n👥 Користувачів: {users}\n💎 Premium: {premium}\n🚫 Заблоковано: {banned}\n💬 Чатів: {chats}\n📨 Повідомлень за 24г: {messages}'
+            },
+            tr: {
+                botWelcome: '🤖 Merhaba! Ben CraneApp, resmi bot.\n\n✨ Yapabildiklerim:\n• Yeni cihazlardan girişleri bildirmek\n• Hesabını korumaya yardımcı olmak\n• Önemli güncellemeleri paylaşmak\n• Sorularını 7/24 yanıtlamak\n\n🛡️ Güvenlik önce gelir. Şüpheli bir şey fark edersem hemen haber veririm.\n\n💡 Tüm komutları görmek için istediğin zaman /help yaz.\n\nCraneApp’e hoş geldin! 🚀',
+                botHelp: '🤖 Selam! Ben CraneApp, resmi bot.\n\n📋 Komutlar:\n/help — komut listesi\n/status — durumum\n/support text — desteğe yaz',
+                botDevCommands: '\n\n🔧 Geliştirici komutları:\n/badge @user verified|admin|developer|premium|fake|scam — rozet ekle\n/unbadge @user [badge] — rozeti kaldır\n/premium @user — Premium ver/kaldır\n/mute @user [min] — sustur\n/unmute @user — susturmayı kaldır\n/ban @user — engelle\n/unban @user — engeli kaldır\n/info @user — bilgi\n/broadcast text — duyuru\n/stats — istatistik',
+                loginNotification: '🔐 Hesabına yeni giriş\n\n📱 Cihaz: {device}\n🌍 Konum: {location}\n🌐 IP adresi: {ip}\n🕐 Zaman: {time}\n\nBu sen değilsen hemen şifreni değiştir.',
+                botSupportUsage: 'Bir mesaj belirt: /support text',
+                botSupportCooldown: 'Zaten bir istek gönderdin. Sonrakini {minutes} dk. içinde gönderebilirsin.',
+                botSupportSent: 'İsteğin desteğe gönderildi. Yakında yanıtlayacağız.',
+                botSupportNotification: '📨 @{username} kullanıcısından yeni destek isteği:\n"{message}"',
+                botUnknownCommand: 'Bilinmeyen komut. /help yaz',
+                botError: 'Hata: {message}',
+                botStatus: '👤 @{username}\n💎 Premium: {premium}\n🏷 Rozetler: {badges}',
+                botStats: '📊 CraneApp istatistikleri:\n👥 Kullanıcılar: {users}\n💎 Premium: {premium}\n🚫 Engellenenler: {banned}\n💬 Sohbetler: {chats}\n📨 24 saatte mesaj: {messages}'
+            }
+        };
+        const BOT_SOURCE_ALIASES = {
+            botHelp: ['🤖 Привет! Я CraneApp — официальный бот.\n\n📋 Команды:\n/help — список команд\n/status — мой статус\n/support текст — написать в поддержку'],
+            botDevCommands: ['\n\n🔧 Команды разработчика:\n/badge @user verified|admin|developer|premium|fake|scam — добавить значок\n/unbadge @user [значок] — убрать значок\n/premium @user — выдать/снять Premium\n/mute @user [мин] — замутить\n/unmute @user — размутить\n/ban @user — заблокировать\n/unban @user — разблокировать\n/info @user — информация\n/broadcast текст — рассылка\n/stats — статистика'],
+            botSupportUsage: ['Укажите сообщение: /support ваш вопрос', 'Specify a message: /support your question']
+        };
+        const BOT_TEMPLATE_KEYS = ['loginNotification', 'botSupportCooldown', 'botSupportNotification', 'botError', 'botStatus', 'botStats'];
+        const botTemplateCache = {};
+        function currentBotLang() {
+            return BOT_MESSAGE_TEXTS[window.i18n?.currentLang] ? window.i18n.currentLang : 'en';
+        }
+        function botText(key, vars) {
+            const lang = currentBotLang();
+            return formatI18n((BOT_MESSAGE_TEXTS[lang] && BOT_MESSAGE_TEXTS[lang][key]) || BOT_MESSAGE_TEXTS.en[key] || BOT_MESSAGE_TEXTS.ru[key] || key, vars);
+        }
+        function isCraneAppBotMessage(m) {
+            const senderUsername = m?.senderUsername || m?.sender?.username || '';
+            if (senderUsername === 'craneapp_bot') return true;
+            const chatUser = activeChat && chatUsers[activeChat.id];
+            const senderId = m?.sender_id || m?.senderId || m?.sender?.id;
+            if (chatUser && chatUser.isBot && senderId && String(senderId) === String(chatUser.id)) return true;
+            return !!((m?.isBot === true || m?.senderIsBot === true || m?.sender?.isBot === true)
+                && activeChat && activeChat.name === 'CraneApp');
+        }
+        function escapeRegExp(value) {
+            return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+        function templateToMatcher(template) {
+            const names = [];
+            let pattern = escapeRegExp(template).replace(/\\\{(\w+)\\\}/g, function(_, name) {
+                names.push(name);
+                return '([\\s\\S]*?)';
+            });
+            return { regex: new RegExp('^' + pattern + '$'), names };
+        }
+        function botSourceValues(key) {
+            const values = [];
+            Object.keys(BOT_MESSAGE_TEXTS).forEach(function(lang) {
+                if (BOT_MESSAGE_TEXTS[lang][key]) values.push(BOT_MESSAGE_TEXTS[lang][key]);
+            });
+            (BOT_SOURCE_ALIASES[key] || []).forEach(function(value) { values.push(value); });
+            return values;
+        }
+        function matchBotTemplate(key, text) {
+            botTemplateCache[key] = botTemplateCache[key] || botSourceValues(key).map(templateToMatcher);
+            for (const matcher of botTemplateCache[key]) {
+                const match = String(text).match(matcher.regex);
+                if (!match) continue;
+                const vars = {};
+                matcher.names.forEach(function(name, index) {
+                    vars[name] = match[index + 1];
+                });
+                return vars;
+            }
+            return null;
+        }
+        function normalizeBotMessageCommands(text) {
+            return String(text || '')
+                .replace('/support текст', '/support text')
+                .replace('/support ваш вопрос', '/support text')
+                .replace('/support your question', '/support text')
+                .replace('/broadcast текст', '/broadcast text')
+                .replace('/unbadge @user [значок]', '/unbadge @user [badge]')
+                .replace('/mute @user [мин]', '/mute @user [min]');
+        }
+        function localizeBotMessageText(text) {
+            if (!text || typeof text !== 'string') return text || '';
+            const normalized = normalizeBotMessageCommands(text);
+            const helpDevSources = botSourceValues('botHelp').flatMap(function(help) {
+                return botSourceValues('botDevCommands').map(function(dev) {
+                    return normalizeBotMessageCommands(help + dev);
+                });
+            });
+            if (helpDevSources.includes(normalized)) return botText('botHelp') + botText('botDevCommands');
+            const statusPrefix = normalized.match(/^([✅❌⏳]\s+)([\s\S]+)$/);
+            if (statusPrefix) {
+                const localizedBody = localizeBotMessageText(statusPrefix[2]);
+                if (localizedBody !== statusPrefix[2]) return statusPrefix[1] + localizedBody;
+            }
+            for (const key of Object.keys(BOT_MESSAGE_TEXTS.en)) {
+                if (BOT_TEMPLATE_KEYS.includes(key)) continue;
+                if (botSourceValues(key).map(normalizeBotMessageCommands).includes(normalized)) {
+                    return botText(key);
+                }
+            }
+            for (const key of BOT_TEMPLATE_KEYS) {
+                const vars = matchBotTemplate(key, normalized);
+                if (vars) return botText(key, vars);
+            }
+            return text;
+        }
 
         // Инициализируем E2E шифрование
         if (token && window.E2E) {
@@ -75,6 +454,10 @@
         }
 
         let activeChat = null;
+        let groupMembersForMentions = [];
+        let currentUserGroupOnline = false;
+        let mentionSuggestionsList = [];
+        let mentionSuggestionIndex = 0;
         let allChats = [];
         let chatUsers = {};
         let searchTimeout = null;
@@ -121,530 +504,147 @@
         let archivedChats = [];
         let pinnedChatIds = new Set();
 
-        const navigationController = window.CraneNavigationController.create({ tr, escapeHtml });
-        function openSideMenu() { return navigationController.openSideMenu(); }
-        function closeSideMenu() { return navigationController.closeSideMenu(); }
-        function openSettingsHub() { return navigationController.openSettingsHub(); }
-        function closeSettingsHub() { return navigationController.closeSettingsHub(); }
-        function openAboutHub() { return navigationController.openAboutHub(); }
-        function closeAboutHub() { return navigationController.closeAboutHub(); }
-        function switchSection(section) { return navigationController.switchSection(section); }
-
-        function updateSideMenuProfile() {
-            const nameEl = document.getElementById('sideMenuName');
-            const usernameEl = document.getElementById('sideMenuUsername');
-            const avatarEl = document.getElementById('sideMenuAvatar');
-            if (!nameEl || !usernameEl || !avatarEl) return;
-            
-            const displayName = ((user.firstName || '') + ' ' + (user.lastName || '')).trim() || user.username || tr('user', 'Пользователь');
-            nameEl.removeAttribute('data-i18n');
-            nameEl.textContent = displayName;
-            usernameEl.textContent = user.username ? '@' + user.username : '@username';
-
-            // Badge + Premium
-            const badgesHtml = renderBadges(user.badges || [], user.isBot, user.isPremium, user.isFake, user.isScam);
-            if (badgesHtml) {
-                nameEl.innerHTML = escapeHtml(displayName) + badgesHtml;
-            } else {
-                nameEl.textContent = displayName;
-            }
-            renderSideMenuAvatar(user.avatarUrl, displayName);
+        // ============================================
+        // SIDE MENU
+        // ============================================
+        function openSideMenu() {
+            document.getElementById('sideMenuOverlay').classList.add('active');
+            document.getElementById('sideMenu').classList.add('active');
         }
 
-        function renderSideMenuAvatar(url, name) {
-            const avatarEl = document.getElementById('sideMenuAvatar');
-            if (!avatarEl) return;
-            avatarEl.innerHTML = '';
-
-            if (url && (url.startsWith('data:image') || url.startsWith('http') || url.startsWith('/'))) {
-                const img = document.createElement('img');
-                img.src = url;
-                img.alt = '';
-                avatarEl.appendChild(img);
-                return;
-            }
-
-            const span = document.createElement('span');
-            span.textContent = ((name || user.firstName || user.username || '👤')[0] || '👤').toUpperCase();
-            avatarEl.appendChild(span);
+        function closeSideMenu() {
+            document.getElementById('sideMenuOverlay').classList.remove('active');
+            document.getElementById('sideMenu').classList.remove('active');
         }
 
-        function openSideMenuAvatarPicker() {
-            const input = document.getElementById('sideMenuAvatarInput');
-            if (input) input.click();
-        }
-
-        function readFileAsDataUrl(file) {
-            return new Promise(function(resolve, reject) {
-                const reader = new FileReader();
-                reader.onload = function(e) { resolve(e.target.result); };
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
-        }
-
-        async function handleSideMenuAvatarChange(input) {
-            const file = input.files && input.files[0];
-            input.value = '';
-            if (!file) return;
-
-            if (!file.type || !file.type.startsWith('image/')) {
-                showToast('error', tr('avatarImageOnly', 'Choose an image file'), '❌');
-                return;
-            }
-            if (file.size > 5 * 1024 * 1024) {
-                showToast('error', tr('fileTooLarge5', 'File is too large (max. 5 MB)'), '❌');
-                return;
-            }
-
-            const wrap = document.querySelector('.side-menu-avatar-wrap');
-            const previousAvatarUrl = user.avatarUrl || '';
-            if (wrap) wrap.classList.add('is-uploading');
-
-            try {
-                const avatarBase64 = await readFileAsDataUrl(file);
-                const displayName = ((user.firstName || '') + ' ' + (user.lastName || '')).trim() || user.username || tr('user', 'User');
-                renderSideMenuAvatar(avatarBase64, displayName);
-
-                const res = await fetch('/api/v1/users/avatar', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-                    body: JSON.stringify({ avatar: avatarBase64 })
-                });
-                const data = await res.json().catch(function() { return {}; });
-                if (!res.ok) throw new Error(data.error || tr('saveError', 'Save error'));
-
-                user = { ...user, avatarUrl: data.avatarUrl || avatarBase64 };
-                const cached = JSON.parse(localStorage.getItem('craneapp_user_data') || '{}');
-                localStorage.setItem('craneapp_user_data', JSON.stringify({ ...cached, ...user }));
-                updateSideMenuProfile();
-                showToast('success', tr('avatarUpdated', 'Profile photo updated'), '✓');
-            } catch (err) {
-                user.avatarUrl = previousAvatarUrl;
-                updateSideMenuProfile();
-                showToast('error', err.message || tr('avatarUpdateError', 'Could not update profile photo'), '❌');
-            } finally {
-                if (wrap) wrap.classList.remove('is-uploading');
-            }
-        }
-            
-        function logout() {
+        // ============================================
+        // SETTINGS / ABOUT HUBS
+        // ============================================
+        function openSettingsHub() {
             closeSideMenu();
-            if (confirm(window.i18n?.t('logoutConfirm') || 'Выйти из аккаунта?')) {
-                localStorage.removeItem('craneapp_auth_token');
-                localStorage.removeItem('craneapp_user_data');
-                window.location.href = '../auth/login.html';
+            const hub = document.getElementById('settingsHub');
+            if (hub) hub.classList.add('active');
+        }
+        function closeSettingsHub() {
+            const hub = document.getElementById('settingsHub');
+            if (hub) hub.classList.remove('active');
+        }
+        function openAboutHub() {
+            closeSideMenu();
+            const hub = document.getElementById('aboutHub');
+            if (hub) hub.classList.add('active');
+        }
+        function closeAboutHub() {
+            const hub = document.getElementById('aboutHub');
+            if (hub) hub.classList.remove('active');
+        }
+
+        // ESC закрывает хабы (на десктопе)
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeSettingsHub();
+                closeAboutHub();
             }
-        }
-
-        // ============================================
-        // MODALS
-        // ============================================
-        function openSearchModal() {
-            document.getElementById('searchModal').classList.add('active');
-            setTimeout(() => document.getElementById('modalSearchInput').focus(), 100);
-        }
-
-               function closeSearchModal() {
-            document.getElementById('searchModal').classList.remove('active');
-            document.getElementById('modalSearchInput').value = '';
-            document.getElementById('modalResults').innerHTML = '<div class="modal-empty"><div class="modal-empty-icon">👥</div><div>' + tr('writeUsernameForSearch', 'Введите юзернейм для поиска') + '</div></div>';
-            document.getElementById('modalStatus').classList.remove('visible');
-        }
-
-        function openCreateModal() {
-            document.getElementById('createModal').classList.add('active');
-        }
-
-        function closeCreateModal() {
-            document.getElementById('createModal').classList.remove('active');
-        }
-
-        document.getElementById('searchModal').addEventListener('click', function(e) { 
-            if (e.target.id === 'searchModal') closeSearchModal(); 
-        });
-        
-        document.getElementById('createModal').addEventListener('click', function(e) { 
-            if (e.target.id === 'createModal') closeCreateModal(); 
         });
 
         // ============================================
-        // USER PROFILE MODAL (Telegram-style)
+        // VIDEO CALLS (старт + входящие)
         // ============================================
-        function toggleProfileMenu() {
-            const menu = document.getElementById('profileMenu');
-            menu.classList.toggle('active');
-        }
-        
-        function switchProfileTab(tab) {
-            // Убираем active у всех табов
-            document.querySelectorAll('.profile-tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.profile-tab-pane').forEach(p => p.classList.remove('active'));
-            
-            // Добавляем active нужному табу
-            document.querySelector(`.profile-tab[data-tab="${tab}"]`).classList.add('active');
-            document.getElementById(`tab-${tab}`).classList.add('active');
-        }
-        
-        // Текущий пользователь профиля
-        let currentProfileUser = null;
+        let _incomingCall = null;
 
-        function toggleProfileNotifications() {
-            const checkbox = document.getElementById('profileNotifications');
-            if (!currentProfileUser) return;
-            
-            // Сохраняем в localStorage
-            const notifications = JSON.parse(localStorage.getItem('chatNotifications') || '{}');
-            notifications[currentProfileUser.id] = checkbox.checked;
-            localStorage.setItem('chatNotifications', JSON.stringify(notifications));
-            
-            showToast('success', checkbox.checked ? (window.i18n?.t('notificationsOn') || 'Уведомления включены') : (window.i18n?.t('notificationsOff') || 'Уведомления отключены'), '🔔');
-        }
-        
-        function reportUser() {
-            toggleProfileMenu();
-            if (!currentProfileUser) return;
-            
-            // Открываем модальное окно с формой жалобы
-            document.getElementById('reportReason').value = 'spam';
-            document.getElementById('reportDescription').value = '';
-            document.getElementById('reportModal').classList.add('active');
-        }
-        
-        function closeReportModal() {
-            document.getElementById('reportModal').classList.remove('active');
-        }
-        
-        async function submitReport() {
-            if (!currentProfileUser) return;
-            
-            const reason = document.getElementById('reportReason').value;
-            const description = document.getElementById('reportDescription').value;
-            
-            if (!reason) {
-                showToast('error', tr('chooseReason', 'Выберите причину'), '❌');
-                return;
-            }
-            
-            try {
-                const res = await fetch('/api/v1/reports', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-                    body: JSON.stringify({ 
-                        reportedUserId: currentProfileUser.id,
-                        reason,
-                        description
-                    })
-                });
-                
-                if (res.ok) {
-                    showToast('success', tr('reportSent', 'Жалоба отправлена'), '📮');
-                    closeReportModal();
-                } else {
-                    showToast('error', tr('sendError', 'Ошибка отправки'), '❌');
+        // Координация звонков между вкладками одного браузера
+        const _callTabChannel = (typeof BroadcastChannel !== 'undefined')
+            ? new BroadcastChannel('crane_calls') : null;
+        if (_callTabChannel) {
+            _callTabChannel.onmessage = (e) => {
+                if (!e.data) return;
+                if (e.data.type === 'call_tab_handled' && _incomingCall && _incomingCall.roomId === e.data.roomId) {
+                    try { _stopRingtone(); } catch(_) {}
+                    _hideIncomingCallBanner();
+                    _incomingCall = null;
                 }
-            } catch (err) {
-                showToast('error', tr('networkError', 'Ошибка сети'), '❌');
-            }
-        }
-        
-        function copyProfileUsername() {
-            if (!currentProfileUser) return;
-            const username = currentProfileUser.username || '';
-            if (!username) {
-                showToast('error', tr('noUsername', 'Нет юзернейма'), '❌');
-                return;
-            }
-            navigator.clipboard.writeText('@' + username).then(() => {
-                showToast('success', tr('usernameCopied', 'Юзернейм скопирован'), '📋');
-            }).catch(() => {
-                showToast('error', tr('copyError', 'Ошибка копирования'), '❌');
-            });
-        }
-        
-        async function openQrCodeModal() {
-            if (!currentProfileUser) return;
-            if (currentProfileUser.isBlocked) {
-                showToast('error', tr('blockedQrError', 'Нельзя открыть QR-код заблокированного пользователя'), '❌');
-                return;
-            }
-            const username = currentProfileUser.username || '';
-            if (!username) {
-                showToast('error', tr('noUsername', 'Нет юзернейма'), '❌');
-                return;
-            }
-            
-            const modal = document.getElementById('qrCodeModal');
-            const qrImage = document.getElementById('qrCodeImage');
-            const qrUsername = document.getElementById('qrCodeUsername');
-            
-            qrUsername.textContent = '@' + username;
-            qrImage.innerHTML = '<div style="width: 200px; height: 200px; background: var(--bg-tertiary); border-radius: 12px; display: flex; align-items: center; justify-content: center;"><span style="color: var(--text-muted);">' + tr('loading', 'Загрузка...') + '</span></div>';
-            modal.classList.add('active');
-            
-            try {
-                // Генерируем QR-код через API
-                const res = await fetch('/api/v1/users/qr-code?username=' + encodeURIComponent(username), {
-                    headers: { 'Authorization': 'Bearer ' + token }
-                });
-                const data = await res.json();
-                
-                if (data.qrCode) {
-                    qrImage.innerHTML = `<img src="${data.qrCode}" style="width: 200px; height: 200px; border-radius: 12px;">`;
-                } else {
-                    qrImage.innerHTML = '<div style="width: 200px; height: 200px; background: var(--bg-tertiary); border-radius: 12px; display: flex; align-items: center; justify-content: center;"><span style="color: var(--text-muted);">' + tr('error', 'Ошибка') + '</span></div>';
-                }
-            } catch (err) {
-                qrImage.innerHTML = '<div style="width: 200px; height: 200px; background: var(--bg-tertiary); border-radius: 12px; display: flex; align-items: center; justify-content: center;"><span style="color: var(--text-muted);">' + tr('networkError', 'Ошибка сети') + '</span></div>';
-            }
-        }
-        
-        function closeQrCodeModal() {
-            document.getElementById('qrCodeModal').classList.remove('active');
-        }
-        
-        async function archiveUser() {
-            toggleProfileMenu();
-            if (!currentProfileUser) return;
-            
-            // Ищем чат с пользователем
-            const chatWithUser = allChats.find(c => {
-                const cu = chatUsers[c.id];
-                return cu && cu.id === currentProfileUser.id;
-            });
-            
-            if (!chatWithUser) {
-                showToast('error', tr('chatNotFound', 'Чат не найден'), '❌');
-                return;
-            }
-            
-            // Архивируем через API
-            try {
-                const res = await fetch(`/api/v1/chats/${chatWithUser.id}/archive`, {
-                    method: 'POST',
-                    headers: { 
-                        'Authorization': 'Bearer ' + token,
-                        'Content-Type': 'application/json'
-                    }
-                });
-                
-                if (res.ok) {
-                    showToast('success', tr('chatArchived', 'Чат архивирован'), '📁');
-                    await loadArchivedChats();
-                    loadChats();
-                } else {
-                    showToast('error', tr('archiveError', 'Ошибка архивирования'), '❌');
-                }
-            } catch (err) {
-                showToast('error', tr('networkError', 'Ошибка сети'), '❌');
-            }
-        }
-        
-        // Переменная для хранения данных при добавлении в папку
-        let folderSelectChatId = null;
-        let folderSelectData = [];
-
-        function getFolderChatIds(folder) {
-            if (!folder) return [];
-            if (!Array.isArray(folder.chatIds)) {
-                folder.chatIds = Array.isArray(folder.chats) ? folder.chats : [];
-            }
-            return folder.chatIds;
+            };
         }
 
-        async function addToFolder() {
-            toggleProfileMenu();
-            if (!currentProfileUser) return;
-            
-            // Ищем чат с пользователем
-            const chatWithUser = allChats.find(c => {
-                const cu = chatUsers[c.id];
-                return cu && cu.id === currentProfileUser.id;
-            });
-            
-            if (!chatWithUser) {
-                showToast('error', tr('chatNotFound', 'Чат не найден'), '❌');
-                return;
-            }
-            
-            folderSelectChatId = chatWithUser.id;
-            await openFolderSelectModal();
+        function _genRoomId() { return 'rm_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
+
+        let _activeCallRoomId = null;
+        let _activeCallTitle = '';
+        let _activeCallTitleKey = '';
+
+        function _getActiveCallTitle() {
+            if (_activeCallTitleKey === 'audioCall') return tr('audioCall', 'Аудиозвонок');
+            if (_activeCallTitleKey === 'videoCall') return tr('videoCall', 'Видеозвонок');
+            return _activeCallTitle || tr('activeCallTitle', 'Звонок активен');
         }
 
-        async function openFolderSelectModal() {
-            const modal = document.getElementById('folderSelectModal');
-            const list = document.getElementById('folderSelectList');
-            
-            list.innerHTML = '<div class="folder-loading">' + tr('loadingFolders', 'Загрузка папок...') + '</div>';
-            modal.classList.add('active');
-            
-            try {
-                const res = await fetch('/api/v1/users/folders', {
-                    headers: { 'Authorization': 'Bearer ' + token }
-                });
-                const data = await res.json();
-                folderSelectData = data.folders || [];
-                
-                if (folderSelectData.length === 0) {
-                    list.innerHTML = '<div class="folder-empty">' + tr('noFoldersSettings', 'У вас нет папок.<br>Создайте их в настройках.') + '</div>';
-                    return;
-                }
-                
-                list.innerHTML = '';
-                folderSelectData.forEach((folder, index) => {
-                    const item = document.createElement('div');
-                    item.className = 'folder-item';
-                    item.onclick = () => selectFolder(index);
-                    const chatIds = getFolderChatIds(folder);
-                    const isInFolder = chatIds.includes(folderSelectChatId);
-                    item.innerHTML = `
-                        <div class="folder-item-icon">${folder.icon || '📂'}</div>
-                        <div class="folder-item-info">
-                            <div class="folder-item-name">${folder.name}</div>
-                            <div class="folder-item-count">${chatIds.length} чатов ${isInFolder ? '(уже в папке)' : ''}</div>
-                        </div>
-                        ${isInFolder ? '✓' : ''}
-                    `;
-                    list.appendChild(item);
-                });
-            } catch (err) {
-                list.innerHTML = '<div class="folder-empty">' + tr('folderLoadError', 'Ошибка загрузки папок') + '</div>';
+        function _renderActiveCallBar() {
+            const bar = document.getElementById('activeCallBar');
+            if (!bar) return;
+
+            const titleEl = document.getElementById('activeCallBarTitle');
+            const statusEl = bar.querySelector('.active-call-status');
+            const returnBtn = bar.querySelector('.active-call-return');
+            const endBtn = bar.querySelector('.active-call-end');
+
+            if (titleEl) titleEl.textContent = _getActiveCallTitle();
+            if (statusEl) statusEl.textContent = tr('callInProgress', 'Идёт звонок');
+            if (returnBtn) returnBtn.textContent = tr('returnToCall', 'Вернуться');
+            if (endBtn) endBtn.title = tr('endCall', 'Завершить звонок');
+        }
+
+        function _openCallWindow(roomId, type, title, kind) {
+            const url = '../calls/call.html?room=' + encodeURIComponent(roomId)
+                + '&type=' + encodeURIComponent(type || 'group')
+                + '&kind=' + encodeURIComponent(kind || 'video')
+                + (title ? '&title=' + encodeURIComponent(title) : '')
+                + '&embedded=1';
+            _activeCallRoomId = roomId;
+            _activeCallTitleKey = title ? '' : (kind === 'audio' ? 'audioCall' : 'videoCall');
+            _activeCallTitle = title || '';
+            document.getElementById('callFrame').src = url;
+            _showCallPanel();
+        }
+
+        function _showCallPanel() {
+            const _panel = document.getElementById('callPanel');
+            _panel.classList.remove('minimized');
+            _panel.style.display = 'flex';
+            document.getElementById('activeCallBar').style.display = 'none';
+            document.getElementById('noChat').style.display = 'none';
+            const sidebar = document.getElementById('sidebar');
+            if (sidebar) sidebar.classList.add('hidden');
+            const chatView = document.getElementById('chatView');
+            chatView.classList.remove('active');
+            document.body.classList.remove('chat-open');
+            document.body.classList.add('call-open');
+        }
+
+        function _hideCallPanel() {
+            document.body.classList.remove('call-open');
+            const _panel = document.getElementById('callPanel');
+            _panel.style.display = 'flex'; // iframe должен продолжать работать
+            _panel.classList.add('minimized');
+            if (_activeCallRoomId) {
+                const bar = document.getElementById('activeCallBar');
+                _renderActiveCallBar();
+                bar.style.display = 'flex';
+            }
+            const sidebar = document.getElementById('sidebar');
+            // Восстанавливаем предыдущий вид
+            if (typeof activeChat !== 'undefined' && activeChat) {
+                if (sidebar) sidebar.classList.add('hidden');
+                document.getElementById('chatView').classList.add('active');
+                document.body.classList.add('chat-open');
+            } else {
+                if (sidebar) sidebar.classList.remove('hidden');
+                document.getElementById('noChat').style.display = '';
             }
         }
 
-        async function selectFolder(index) {
-            if (!folderSelectChatId || index < 0 || index >= folderSelectData.length) return;
-            
-            const folder = folderSelectData[index];
-            const chatIds = getFolderChatIds(folder);
-            
-            if (chatIds.includes(folderSelectChatId)) {
-                showToast('info', tr('chatAlreadyInFolder', 'Чат уже в этой папке'), '📂');
-                closeFolderSelectModal();
-                return;
+        function _endCall(fromBar) {
+            document.body.classList.remove('call-open');
+            if (fromBar) {
+                // Команда завершить — передаём в iframe
+                try { document.getElementById('callFrame').contentWindow.postMessage({ type: 'crane_hangup' }, '*'); } catch(_) {}
             }
-            
-            chatIds.push(folderSelectChatId);
-            
-            try {
-                const saveRes = await fetch('/api/v1/users/folders', {
-                    method: 'PUT',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + token 
-                    },
-                    body: JSON.stringify({ folders: folderSelectData })
-                });
-                if (!saveRes.ok) throw new Error('folder save failed');
-                
-                showToast('success', `Чат добавлен в папку "${folder.name}"`, '📂');
-                localStorage.setItem('craneapp_folders', JSON.stringify(folderSelectData));
-                initFolderTabs();
-                renderChatList();
-                closeFolderSelectModal();
-            } catch (err) {
-                showToast('error', tr('saveError', 'Ошибка сохранения'), '❌');
-            }
-        }
-
-        function closeFolderSelectModal() {
-            document.getElementById('folderSelectModal').classList.remove('active');
-            folderSelectChatId = null;
-        }
-
-        function createNewFolder() {
-            closeFolderSelectModal();
-            showToast('info', tr('folderCreateInSettings', 'Создание папок в настройках'), '📂');
-        }
-        
-        // Загрузка данных для табов профиля
-        function loadProfileMedia(userId) {
-            const grid = document.getElementById('profileMediaGrid');
-            grid.innerHTML = '';
-            
-            // Ищем медиа в сообщениях с этим пользователем
-            const media = [];
-            Object.values(messagesData).forEach(msg => {
-                if ((msg.senderId === userId || msg.chatId === activeChat?.id) && 
-                    (msg.type === 'image' || msg.type === 'photo' || msg.type === 'video')) {
-                    media.push(msg);
-                }
-            });
-            
-            if (media.length === 0) {
-                grid.innerHTML = '<div class="profile-empty">' + tr('noMediaFiles', 'Нет медиафайлов') + '</div>';
-                return;
-            }
-            
-            media.slice(0, 20).forEach(m => {
-                const div = document.createElement('div');
-                div.className = 'profile-media-item';
-                if (m.mediaUrl || m.fileUrl) {
-                    div.innerHTML = `<img src="${m.mediaUrl || m.fileUrl}" loading="lazy">`;
-                    div.onclick = () => window.open(m.mediaUrl || m.fileUrl, '_blank');
-                }
-                grid.appendChild(div);
-            });
-        }
-        
-        function loadProfileFiles(userId) {
-            const list = document.getElementById('profileFilesList');
-            list.innerHTML = '';
-            
-            const files = Object.values(messagesData).filter(msg => 
-                (msg.senderId === userId || msg.chatId === activeChat?.id) && 
-                msg.type === 'file'
-            );
-            
-            if (files.length === 0) {
-                list.innerHTML = '<div class="profile-empty">' + tr('noFiles', 'Нет файлов') + '</div>';
-                return;
-            }
-            
-            files.slice(0, 20).forEach(f => {
-                const div = document.createElement('div');
-                div.className = 'profile-file-item';
-                div.innerHTML = `
-                    <div class="file-icon">📄</div>
-                    <div class="file-info">
-                        <div class="file-name">${f.fileName || tr('fileMedia', 'Файл')}</div>
-                        <div class="file-size">${f.fileSize || ''}</div>
-                    </div>
-                `;
-                if (f.fileUrl) {
-                    div.onclick = () => window.open(f.fileUrl, '_blank');
-                }
-                list.appendChild(div);
-            });
-        }
-        
-        function loadProfileLinks(userId) {
-            const list = document.getElementById('profileLinksList');
-            list.innerHTML = '';
-            
-            const links = [];
-            Object.values(messagesData).forEach(msg => {
-                if (msg.senderId === userId || msg.chatId === activeChat?.id) {
-                    const content = msg.content || msg.text || '';
-                    const urlRegex = /(https?:\/\/[^\s]+)/g;
-                    const matches = content.match(urlRegex);
-                    if (matches) links.push(...matches);
-                }
-            });
-            
-            if (links.length === 0) {
-                list.innerHTML = '<div class="profile-empty">' + tr('noLinks', 'Нет ссылок') + '</div>';
-                return;
-            }
-            
-            [...new Set(links)].slice(0, 20).forEach(url => {
-                const div = document.createElement('div');
-                div.className = 'profile-link-item';
-                div.innerHTML = `<div class="link-url">🔗 ${url.substring(0, 50)}${url.length > 50 ? '...' : ''}</div>`;
-                div.onclick = () => window.open(url, '_blank');
-                list.appendChild(div);
-            });
-        }
-        
-        function loadProfileGroups(userId) {
-            const list = document.getElementById('profileGroupsList');
