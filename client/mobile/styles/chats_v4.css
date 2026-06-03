@@ -1004,6 +1004,7 @@ body {
     align-items: center;
     flex-shrink: 0;
     position: relative;
+    overflow: visible;
 }
 
 .input-left-btns { display: flex; gap: 2px; }
@@ -1112,6 +1113,7 @@ body {
     flex: 1;
     position: relative;
     min-width: 0;
+    overflow: visible;
 }
 
 .mention-suggestions {
