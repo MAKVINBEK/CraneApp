@@ -2600,6 +2600,12 @@
                     displayContent = localizeBotMessageText(displayContent);
                 }
                 textSpan.innerHTML = renderFormattedText(displayContent);
+                
+                // Add spacer for time to prevent overlapping in shrink-to-fit layout
+                const spacer = document.createElement('span');
+                spacer.className = 'msg-time-spacer';
+                textSpan.appendChild(spacer);
+                
                 div.appendChild(textSpan);
             }
             

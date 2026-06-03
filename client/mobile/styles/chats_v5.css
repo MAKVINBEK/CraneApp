@@ -776,6 +776,24 @@ body {
     word-break: break-word;
 }
 
+.message.text-msg .msg-time-spacer {
+    display: inline-block;
+    height: 1px;
+    pointer-events: none;
+}
+
+.message.incoming.text-msg .msg-time-spacer {
+    width: 38px;
+}
+
+.message.incoming.bot-message.text-msg .msg-time-spacer {
+    width: 50px;
+}
+
+.message.outgoing.text-msg .msg-time-spacer {
+    width: 58px;
+}
+
 .message.text-msg .msg-time {
     display: inline-block;
     float: right;
