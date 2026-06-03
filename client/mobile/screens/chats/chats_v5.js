@@ -1925,7 +1925,6 @@
             } else {
                 // Закрываем другие панели
                 closeEmojiPicker();
-                closeMediaPanel();
                 panel.classList.add('active');
                 btn.classList.add('active');
             }
@@ -1963,33 +1962,7 @@
             showContactPicker();
         }
 
-        // ============================================
-        // MEDIA PANEL
-        // ============================================
-        function toggleMediaPanel() {
-            const panel = document.getElementById('mediaPanel');
-            const overlay = document.getElementById('mediaPanelOverlay');
-            const btn = document.getElementById('mediaBtn');
-            
-            if (panel.classList.contains('active')) {
-                closeMediaPanel();
-            } else {
-                panel.classList.add('active');
-                overlay.classList.add('active');
-                btn.classList.add('active');
-            }
-        }
 
-        function closeMediaPanel() {
-            document.getElementById('mediaPanel').classList.remove('active');
-            document.getElementById('mediaPanelOverlay').classList.remove('active');
-            document.getElementById('mediaBtn').classList.remove('active');
-        }
-
-        function openCamera() {
-            closeMediaPanel();
-            document.getElementById('cameraInput').click();
-        }
 
         function openGallery() {
             closeAttachmentPanel();
@@ -1998,7 +1971,6 @@
 
 
         function openStickerPicker() {
-            closeMediaPanel();
             document.getElementById('stickerModal').classList.add('active');
             loadStickerPacks();
         }
@@ -2658,7 +2630,6 @@
                 btn.classList.add('active');
 
                 // Закрываем другие панели
-                closeMediaPanel();
                 closeAttachmentPanel();
                 renderEmojiPicker();
             }
