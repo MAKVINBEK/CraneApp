@@ -523,6 +523,15 @@ body {
     text-align: right;
 }
 
+.chat-unread-indicators {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    margin-left: 4px;
+}
+
+.chat-item .mention-badge,
 .chat-item .unread-badge {
     display: inline-flex;
     align-items: center;
@@ -536,6 +545,11 @@ body {
     height: 22px;
     padding: 0 6px;
     flex-shrink: 0;
+}
+
+.chat-item .mention-badge {
+    font-size: 13px;
+    letter-spacing: -0.02em;
 }
 
 /* Chat Actions (pin/archive) */

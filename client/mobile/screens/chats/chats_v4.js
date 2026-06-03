@@ -4141,9 +4141,93 @@
             return localStorage.getItem(getMentionWaterlineKey(chatId)) || '';
         }
 
+        function getMentionPendingKey(chatId) {
+            return 'crane_mention_pending_' + user.id + '_' + chatId;
+        }
+
+        function markMentionPending(chatId, createdAt) {
+            if (!chatId) return;
+            const ts = createdAt ? new Date(createdAt).getTime() : Date.now();
+            if (Number.isNaN(ts)) return;
+            const iso = new Date(ts).toISOString();
+            const key = getMentionPendingKey(chatId);
+            const prev = localStorage.getItem(key);
+            if (!prev || ts > new Date(prev).getTime()) {
+                localStorage.setItem(key, iso);
+            }
+        }
+
+        function chatHasUnreadMention(chatId) {
+            if (!chatId) return false;
+            const pending = localStorage.getItem(getMentionPendingKey(chatId));
+            if (!pending) return false;
+            const pendingTime = new Date(pending).getTime();
+            if (Number.isNaN(pendingTime)) return false;
+            const waterline = getMentionWaterline(chatId);
+            const wlTime = waterline ? new Date(waterline).getTime() : 0;
+            return pendingTime > wlTime;
+        }
+
+        function syncMentionPendingAfterWaterline(chatId) {
+            if (!chatHasUnreadMention(chatId)) {
+                localStorage.removeItem(getMentionPendingKey(chatId));
+            }
+        }
+
+        function isGroupChatEntry(chat) {
+            return !!(chat && (chat.type === 'group' || chat.isGroup));
+        }
+
+        function doesMessageMentionUser(msg, chat) {
+            if (!msg || !isGroupChatEntry(chat)) return false;
+            const senderId = msg.senderId || msg.sender_id || (msg.sender && msg.sender.id);
+            if (senderId === user.id) return false;
+            if (Array.isArray(msg.mentionedUserIds) && msg.mentionedUserIds.includes(user.id)) {
+                return true;
+            }
+            const text = msg.contentPlain || msg.content_plain || msg.content || msg.text || '';
+            if (!text.includes('@')) return false;
+            const myUsername = (user.username || '').toLowerCase();
+            const regex = /@([a-zA-Z0-9_]+)/g;
+            let match;
+            while ((match = regex.exec(text)) !== null) {
+                const tag = match[1].toLowerCase();
+                if (tag === 'everyone') return true;
+                if (tag === 'here' && currentUserGroupOnline) return true;
+                if (tag === myUsername) return true;
+            }
+            return false;
+        }
+
+        function refreshMentionPendingFromLoadedMessages(chatId) {
+            const chat = allChats.find(function(c) { return c.id === chatId; });
+            if (!chat || !isGroupChatEntry(chat)) return;
+            const wlTime = getMentionWaterline(chatId) ? new Date(getMentionWaterline(chatId)).getTime() : 0;
+            let latestAt = null;
+            let latestTime = 0;
+            Object.keys(messagesData).forEach(function(id) {
+                const m = messagesData[id];
+                if (!m || String(m.id).startsWith('temp-')) return;
+                if (!doesMessageMentionUser(m, chat)) return;
+                const t = getMessageCreatedTime(m);
+                if (t <= wlTime) return;
+                if (t > latestTime) {
+                    latestTime = t;
+                    latestAt = m.createdAt || m.created_at || new Date(t).toISOString();
+                }
+            });
+            if (latestAt) {
+                markMentionPending(chatId, latestAt);
+            } else {
+                syncMentionPendingAfterWaterline(chatId);
+            }
+        }
+
         function setMentionWaterline(chatId, createdAt) {
             if (!chatId || !createdAt) return;
             localStorage.setItem(getMentionWaterlineKey(chatId), createdAt);
+            syncMentionPendingAfterWaterline(chatId);
+            renderChatList();
         }
 
         function getMessageCreatedTime(m) {
@@ -4758,6 +4842,16 @@
             return '<div class="unread-badge">' + (count > 99 ? '99+' : count) + '</div>';
         }
 
+        function renderChatUnreadIndicators(chat) {
+            const showMention = isGroupChatEntry(chat) && chatHasUnreadMention(chat.id);
+            const unreadHtml = renderUnreadBadge(chat);
+            if (!showMention && !unreadHtml) return '';
+            return '<div class="chat-unread-indicators">'
+                + (showMention ? '<div class="mention-badge" aria-label="' + tr('jumpToMention', 'К непрочитанному упоминанию') + '">@</div>' : '')
+                + unreadHtml
+                + '</div>';
+        }
+
         async function markChatAsRead(chatId, options = {}) {
             if (!chatId) return false;
 
@@ -4838,7 +4932,7 @@
                         '<div class="chat-info"><div class="chat-name">' + name + '</div>' +
                         '<div class="chat-last">' + (c.lastMessage || tr('noMessages', 'Нет сообщений')) + '</div></div>' +
                         '<div class="chat-time">' + (c.time || '') + '</div>' +
-                        renderUnreadBadge(c) +
+                        renderChatUnreadIndicators(c) +
                         '<div class="chat-actions"><button class="chat-action-icon" onclick="event.stopPropagation(); unarchiveChat(\'' + c.id + '\')" title="' + tr('restore', 'Восстановить') + '">📥</button></div>' +
                         '</div>';
                 }).join('');
@@ -4864,7 +4958,7 @@
                         '<div class="chat-last">' + (c.lastMessage || tr('noMessages', 'Нет сообщений')) + '</div>' +
                         '</div>' +
                         '<div class="chat-time">' + (c.time || '') + '</div>' +
-                        renderUnreadBadge(c) +
+                        renderChatUnreadIndicators(c) +
                         '<div class="chat-actions">' +
                         '<button class="chat-action-icon pinned" onclick="event.stopPropagation(); unpinChat(\'' + c.id + '\')" title="' + tr('unpin', 'Открепить') + '" style="color: var(--accent-color);">📌</button>' +
                         '<button class="chat-action-icon archived" onclick="event.stopPropagation(); archiveChat(\'' + c.id + '\')" title="' + tr('archiveChat', 'Архивировать') + '">📁</button>' +
@@ -4904,7 +4998,7 @@
                         '<div class="chat-last">' + (c.lastMessage || tr('noMessages', 'Нет сообщений')) + '</div>' +
                         '</div>' +
                         '<div class="chat-time">' + (c.time || '') + '</div>' +
-                        renderUnreadBadge(c) +
+                        renderChatUnreadIndicators(c) +
                         '<div class="chat-actions">' +
                         '<button class="chat-action-icon" onclick="event.stopPropagation(); pinChat(\'' + c.id + '\')" title="' + tr('pin', 'Закрепить') + '">📌</button>' +
                         '<button class="chat-action-icon archived" onclick="event.stopPropagation(); archiveChat(\'' + c.id + '\')" title="' + tr('archiveChat', 'Архивировать') + '">📁</button>' +
@@ -5301,6 +5395,8 @@
                 scrollToBottom();
                 refreshScrollBottomObserver();
                 updateMentionJumpButton();
+                refreshMentionPendingFromLoadedMessages(chatId);
+                renderChatList();
                 markChatAsRead(chatId, { silent: true }).catch(function(err) {
                     console.error('Mark chat as read error:', err);
                 });
@@ -6436,6 +6532,7 @@
             if (!msg.mentionedUserIds.includes(user.id)) return;
             if (msg.senderId === user.id) return;
             const cid = chatId || msg.chatId;
+            markMentionPending(cid, msg.createdAt || msg.created_at);
             const fromList = allChats.find(c => c.id === cid);
             const chatName = (activeChat && activeChat.id === cid ? activeChat.name : null)
                 || chatTitle
@@ -6443,6 +6540,9 @@
                 || tr('groupChat', 'Группа');
             const sender = msg.senderFirstName || msg.sender?.firstName || msg.senderName || tr('user', 'Пользователь');
             showToast('info', sender + ' ' + tr('mentionedYouIn', 'упомянул вас в') + ' ' + chatName, '@');
+            if (!activeChat || activeChat.id !== cid) {
+                renderChatList();
+            }
         }
 
         // ============================================
