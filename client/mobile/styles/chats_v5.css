@@ -2048,12 +2048,10 @@ body.chat-open .tab-bar  { display: none !important; }
 
 .media-options {
     padding: 20px 16px;
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
+    display: flex;
+    justify-content: center;
+    gap: 24px;
 }
-
-@media (max-width: 360px) { .media-options { grid-template-columns: repeat(2, 1fr); } }
 
 .media-option {
     display: flex;
@@ -2082,7 +2080,6 @@ body.chat-open .tab-bar  { display: none !important; }
 
 @media (min-width: 768px) {
     .media-option.camera { display: none; }
-    .media-options { grid-template-columns: repeat(3, 1fr); }
 }
 
 /* ============================================
