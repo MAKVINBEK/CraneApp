@@ -4223,7 +4223,7 @@
             if (msgTime <= wlTime) return;
             const pseudoMsg = {
                 senderId: chat.lastMessageSenderId,
-                content: chat.lastMessage || '',
+                content: chat.lastMessageRaw || chat.lastMessage || '',
                 createdAt: at
             };
             if (!doesMessageMentionUser(pseudoMsg, chat)) return;
@@ -4239,6 +4239,9 @@
             localStorage.setItem(getMentionWaterlineKey(chatId), createdAt);
             syncMentionPendingAfterWaterline(chatId);
             renderChatList();
+            if (activeChat && activeChat.id === chatId) {
+                updateMentionJumpButton();
+            }
         }
 
         function getMessageCreatedTime(m) {
@@ -4246,28 +4249,19 @@
             return raw ? new Date(raw).getTime() : 0;
         }
 
+        function getActiveGroupChatForMentions() {
+            if (!activeChat || activeChat.type !== 'group') return null;
+            return allChats.find(function(c) { return c.id === activeChat.id; }) || activeChat;
+        }
+
         function messageMentionsMe(msg) {
-            if (!msg || !activeChat || activeChat.type !== 'group') return false;
-            const senderId = msg.senderId || msg.sender_id || (msg.sender && msg.sender.id);
-            if (senderId === user.id) return false;
-
-            if (Array.isArray(msg.mentionedUserIds) && msg.mentionedUserIds.includes(user.id)) {
-                return true;
-            }
-
-            const text = msg.contentPlain || msg.content_plain || msg.content || msg.text || '';
-            if (!text.includes('@')) return false;
-
-            const regex = /@([a-zA-Z0-9_]+)/g;
-            let match;
-            while ((match = regex.exec(text)) !== null) {
-                if (isMentionRelevantToMe(match[1].toLowerCase())) return true;
-            }
-            return false;
+            const chat = getActiveGroupChatForMentions();
+            return doesMessageMentionUser(msg, chat);
         }
 
         function getUnreadMentionMessages() {
-            if (!activeChat || activeChat.type !== 'group') return [];
+            const chat = getActiveGroupChatForMentions();
+            if (!chat) return [];
             const waterline = getMentionWaterline(activeChat.id);
             const wlTime = waterline ? new Date(waterline).getTime() : 0;
             const unread = [];
@@ -4275,7 +4269,7 @@
             Object.keys(messagesData).forEach(function(id) {
                 const m = messagesData[id];
                 if (!m || String(m.id).startsWith('temp-')) return;
-                if (!messageMentionsMe(m)) return;
+                if (!doesMessageMentionUser(m, chat)) return;
                 if (getMessageCreatedTime(m) <= wlTime) return;
                 unread.push(m);
             });
@@ -4286,25 +4280,23 @@
             return unread;
         }
 
-        function getLatestUnreadMentionMessage() {
-            const list = getUnreadMentionMessages();
-            return list.length ? list[list.length - 1] : null;
-        }
-
         function getOldestUnreadMentionMessage() {
             const list = getUnreadMentionMessages();
             return list.length ? list[0] : null;
         }
 
-        function scrollToUnreadMentionOnOpen() {
-            const target = getOldestUnreadMentionMessage();
-            if (!target) return false;
-            requestAnimationFrame(function() {
-                scrollToMentionMessage(target.id, false);
-                refreshMentionJumpObserver();
-                refreshScrollBottomObserver();
-            });
-            return true;
+        function hasActiveUnreadMentionState() {
+            if (!activeChat || activeChat.type !== 'group') return false;
+            if (getUnreadMentionMessages().length > 0) return true;
+            return chatHasUnreadMention(activeChat.id);
+        }
+
+        /** Помечает упоминание просмотренным (только самое раннее непрочитанное). */
+        function acknowledgeMentionMessageSeen(msg) {
+            if (!msg || !activeChat) return;
+            const oldest = getOldestUnreadMentionMessage();
+            if (!oldest || oldest.id !== msg.id) return;
+            setMentionWaterline(activeChat.id, msg.createdAt || msg.created_at || new Date().toISOString());
         }
 
         let mentionJumpMsgObserver = null;
@@ -4319,7 +4311,7 @@
         function syncMentionJumpButtonVisible(isTargetFullyVisible) {
             const btn = document.getElementById('scrollMentionBtn');
             if (!btn || !btn.classList.contains('enabled')) return;
-            const hasUnread = !!getLatestUnreadMentionMessage();
+            const hasUnread = hasActiveUnreadMentionState();
             btn.classList.toggle('visible', hasUnread && !isTargetFullyVisible);
         }
 
@@ -4331,28 +4323,40 @@
                 if (btn) btn.classList.remove('visible');
                 return;
             }
-            const msg = getLatestUnreadMentionMessage();
-            if (!msg) {
+
+            if (!hasActiveUnreadMentionState()) {
                 btn.classList.remove('visible');
                 return;
             }
+
+            const msg = getOldestUnreadMentionMessage();
+            if (!msg) {
+                btn.classList.add('visible');
+                return;
+            }
+
             const el = document.querySelector('[data-message-id="' + msg.id + '"]');
             if (!el) {
                 btn.classList.add('visible');
                 return;
             }
+
             if (typeof IntersectionObserver === 'undefined') {
                 const cRect = container.getBoundingClientRect();
                 const rect = el.getBoundingClientRect();
                 const visibleHeight = Math.min(rect.bottom, cRect.bottom) - Math.max(rect.top, cRect.top);
                 const fullyVisible = visibleHeight >= rect.height * 0.98 && rect.height > 0;
+                if (fullyVisible) acknowledgeMentionMessageSeen(msg);
                 syncMentionJumpButtonVisible(fullyVisible);
                 return;
             }
+
             mentionJumpMsgObserver = new IntersectionObserver(function(entries) {
                 const entry = entries[0];
                 if (!entry) return;
-                syncMentionJumpButtonVisible(entry.intersectionRatio >= 0.98);
+                const fullyVisible = entry.intersectionRatio >= 0.98;
+                if (fullyVisible) acknowledgeMentionMessageSeen(msg);
+                syncMentionJumpButtonVisible(fullyVisible);
             }, {
                 root: container,
                 threshold: [0, 0.25, 0.5, 0.75, 0.98, 1],
@@ -4390,11 +4394,15 @@
         }
 
         function onMentionJumpClick() {
-            const msg = getLatestUnreadMentionMessage();
-            if (!msg || !activeChat) return;
-            scrollToMentionMessage(msg.id, true);
-            setMentionWaterline(activeChat.id, msg.createdAt || msg.created_at || new Date().toISOString());
-            updateMentionJumpButton();
+            if (!activeChat) return;
+            const msg = getOldestUnreadMentionMessage();
+            if (msg) {
+                scrollToMentionMessage(msg.id, true);
+                return;
+            }
+            if (chatHasUnreadMention(activeChat.id)) {
+                scrollToBottom(true);
+            }
         }
 
         window.onMentionJumpClick = onMentionJumpClick;
@@ -4604,6 +4612,9 @@
         // Подготавливает объект чата — сохраняет raw данные для расшифровки
         function prepareChatEntry(c, base) {
             const entry = Object.assign({}, base);
+            if (!c.lastMessageEncrypted && c.lastMessage) {
+                entry.lastMessageRaw = c.lastMessage;
+            }
             if (c.lastMessageEncrypted && c.lastMessageIv) {
                 entry._rawEncrypted = c.lastMessage;
                 entry._rawIv = c.lastMessageIv;
@@ -4783,6 +4794,7 @@
                             try {
                                 const plain = await window.E2E.decrypt(c._rawEncrypted, c._rawIv, c.id, token);
                                 const localizedPlain = isCraneAppBotLastMessage(c) ? localizeBotMessageText(plain) : plain;
+                                c.lastMessageRaw = localizedPlain;
                                 c.lastMessage = formatLastMessageType(c, localizedPlain);
                             } catch (_) {}
                             delete c._rawEncrypted;
@@ -5431,11 +5443,13 @@
                     messagesEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px;font-size:14px;">' + tr('noMessages', 'Нет сообщений') + '</div>';
                 }
                 refreshMentionPendingFromLoadedMessages(chatId);
-                if (!scrollToUnreadMentionOnOpen()) {
+                if (chatHasUnreadMention(chatId)) {
+                    updateMentionJumpButton();
+                    refreshScrollBottomObserver();
+                } else {
                     scrollToBottom();
                     refreshScrollBottomObserver();
                 }
-                updateMentionJumpButton();
                 renderChatList();
                 markChatAsRead(chatId, { silent: true }).catch(function(err) {
                     console.error('Mark chat as read error:', err);
@@ -6327,6 +6341,11 @@
                 groupMembersForMentions = [];
                 currentUserGroupOnline = false;
             }
+            if (activeChat && activeChat.id === chatId && Object.keys(messagesData).length > 0) {
+                refreshMentionPendingFromLoadedMessages(chatId);
+                updateMentionJumpButton();
+                renderChatList();
+            }
         }
 
         function hideMentionSuggestions() {
@@ -6574,6 +6593,9 @@
             const chat = fromList || (activeChat && activeChat.id === cid ? activeChat : { type: 'group' });
             if (!doesMessageMentionUser(msg, chat)) return;
             markMentionPending(cid, msg.createdAt || msg.created_at);
+            if (activeChat && activeChat.id === cid) {
+                updateMentionJumpButton();
+            }
             const chatName = (activeChat && activeChat.id === cid ? activeChat.name : null)
                 || chatTitle
                 || (fromList && fromList.name)
