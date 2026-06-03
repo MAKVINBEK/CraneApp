@@ -4180,14 +4180,14 @@
             }
         }
 
-        /** Сбрасывает @ в списке чатов после открытия группы (просмотр чата). */
+        /** Сбрасывает @ в списке чатов — только по явному действию (кнопка @ или «Пометить прочитанным»). */
         function acknowledgeChatMentionsOnOpen(chatId) {
             if (!chatId) return;
             const entry = allChats.find(function(c) { return c.id === chatId; });
             if (!isGroupChatEntry(entry)) return;
             const pending = localStorage.getItem(getMentionPendingKey(chatId));
-            const seenAt = pending || new Date().toISOString();
-            localStorage.setItem(getMentionWaterlineKey(chatId), seenAt);
+            if (!pending) return;
+            localStorage.setItem(getMentionWaterlineKey(chatId), pending);
             localStorage.removeItem(getMentionPendingKey(chatId));
         }
 
@@ -4295,6 +4295,22 @@
         function getLatestUnreadMentionMessage() {
             const list = getUnreadMentionMessages();
             return list.length ? list[list.length - 1] : null;
+        }
+
+        function getOldestUnreadMentionMessage() {
+            const list = getUnreadMentionMessages();
+            return list.length ? list[0] : null;
+        }
+
+        function scrollToUnreadMentionOnOpen() {
+            const target = getOldestUnreadMentionMessage();
+            if (!target) return false;
+            requestAnimationFrame(function() {
+                scrollToMentionMessage(target.id, false);
+                refreshMentionJumpObserver();
+                refreshScrollBottomObserver();
+            });
+            return true;
         }
 
         let mentionJumpMsgObserver = null;
@@ -4894,7 +4910,9 @@
                 const chat = list.find(c => c.id === chatId);
                 if (chat) chat.unreadCount = 0;
             });
-            acknowledgeChatMentionsOnOpen(chatId);
+            if (options.acknowledgeMentions) {
+                acknowledgeChatMentionsOnOpen(chatId);
+            }
             renderChatList();
 
             if (!options.silent) {
@@ -5188,7 +5206,6 @@
 
             if (activeChat.type === 'group') {
                 loadGroupMembersForMentions(id);
-                acknowledgeChatMentionsOnOpen(id);
             } else {
                 groupMembersForMentions = [];
                 currentUserGroupOnline = false;
@@ -5416,8 +5433,11 @@
                 } else {
                     messagesEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px;font-size:14px;">' + tr('noMessages', 'Нет сообщений') + '</div>';
                 }
-                scrollToBottom();
-                refreshScrollBottomObserver();
+                refreshMentionPendingFromLoadedMessages(chatId);
+                if (!scrollToUnreadMentionOnOpen()) {
+                    scrollToBottom();
+                    refreshScrollBottomObserver();
+                }
                 updateMentionJumpButton();
                 markChatAsRead(chatId, { silent: true }).catch(function(err) {
                     console.error('Mark chat as read error:', err);
@@ -6550,12 +6570,11 @@
         }
 
         function notifyIfMentioned(msg, chatId, chatTitle) {
-            if (!msg || !Array.isArray(msg.mentionedUserIds)) return;
-            if (!msg.mentionedUserIds.includes(user.id)) return;
-            if (msg.senderId === user.id) return;
+            if (!msg) return;
             const cid = chatId || msg.chatId;
-            markMentionPending(cid, msg.createdAt || msg.created_at);
-            const fromList = allChats.find(c => c.id === cid);
+            const fromList = allChats.find(function(c) { return c.id === cid; });
+            const chat = fromList || (activeChat && activeChat.id === cid ? activeChat : { type: 'group' });
+            if (!doesMessageMentionUser(msg, chat)) return;
             const chatName = (activeChat && activeChat.id === cid ? activeChat.name : null)
                 || chatTitle
                 || (fromList && fromList.name)
@@ -7013,7 +7032,7 @@
             if (!chatId) return;
 
             try {
-                await markChatAsRead(chatId);
+                await markChatAsRead(chatId, { acknowledgeMentions: true });
             } catch (err) {
                 showToast('error', tr('saveError', 'Ошибка сохранения'), '❌');
             }
