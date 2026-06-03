@@ -1025,24 +1025,33 @@
         }
 
         function updateSideMenuProfile() {
-            const nameEl = document.getElementById('sideMenuName');
-            const usernameEl = document.getElementById('sideMenuUsername');
-            const avatarEl = document.getElementById('sideMenuAvatar');
-            if (!nameEl || !usernameEl || !avatarEl) return;
-            
-            const displayName = ((user.firstName || '') + ' ' + (user.lastName || '')).trim() || user.username || tr('user', 'Пользователь');
-            nameEl.removeAttribute('data-i18n');
-            nameEl.textContent = displayName;
-            usernameEl.textContent = user.username ? '@' + user.username : '@username';
+            try {
+                const nameEl = document.getElementById('sideMenuName');
+                const usernameEl = document.getElementById('sideMenuUsername');
+                const avatarEl = document.getElementById('sideMenuAvatar');
+                if (!nameEl || !usernameEl || !avatarEl) return;
+                
+                const safeUser = user || {};
+                const fName = String(safeUser.firstName || '');
+                const lName = String(safeUser.lastName || '');
+                const uName = safeUser.username ? String(safeUser.username) : '';
+                
+                const displayName = (fName + ' ' + lName).trim() || uName || tr('user', 'Пользователь');
+                nameEl.removeAttribute('data-i18n');
+                
+                usernameEl.textContent = safeUser.username ? '@' + safeUser.username : '@username';
 
-            // Badge + Premium
-            const badgesHtml = renderBadges(user.badges || [], user.isBot, user.isPremium, user.isFake, user.isScam);
-            if (badgesHtml) {
-                nameEl.innerHTML = escapeHtml(displayName) + badgesHtml;
-            } else {
-                nameEl.textContent = displayName;
+                // Badge + Premium
+                const badgesHtml = renderBadges(safeUser.badges || [], safeUser.isBot, safeUser.isPremium, safeUser.isFake, safeUser.isScam);
+                if (badgesHtml) {
+                    nameEl.innerHTML = escapeHtml(String(displayName)) + badgesHtml;
+                } else {
+                    nameEl.textContent = displayName;
+                }
+                renderSideMenuAvatar(safeUser.avatarUrl, String(displayName));
+            } catch (e) {
+                console.error("Error in updateSideMenuProfile:", e);
             }
-            renderSideMenuAvatar(user.avatarUrl, displayName);
         }
 
         function renderSideMenuAvatar(url, name) {
