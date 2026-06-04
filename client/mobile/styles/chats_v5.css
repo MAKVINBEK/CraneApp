@@ -573,6 +573,7 @@ body {
     font-weight: 700;
     line-height: 22px;
     font-family: inherit;
+    transform: translateY(-1px);
 }
 
 .chat-item .unread-badge {
@@ -997,7 +998,7 @@ body {
     font-weight: 700;
     line-height: 1;
     font-family: inherit;
-    transform: translateY(-2px);
+    transform: translateY(-1px);
 }
 
 @media (min-width: 768px) {
@@ -1010,6 +1011,10 @@ body {
 
     .messages-area > .scroll-bottom-btn.scroll-mention-btn {
         bottom: calc(18px + 54px);
+    }
+
+    .scroll-mention-at {
+        transform: translateY(-2px);
     }
 }
 
