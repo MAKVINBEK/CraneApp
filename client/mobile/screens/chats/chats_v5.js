@@ -458,6 +458,8 @@
         let currentUserGroupOnline = false;
         let mentionSuggestionsList = [];
         let mentionSuggestionIndex = 0;
+        const mentionHelpers = window.mentionNotifications;
+        const mentionJumpCursorByChat = {};
         let allChats = [];
         let chatUsers = {};
         let searchTimeout = null;
@@ -3576,7 +3578,11 @@
                             lastMessageAt: new Date().toISOString(),
                             time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
                             isOnline: false, isPinned: false, lastMessageType: msg.type || 'text',
-                            lastMessageSenderId: msg.sender_id || msg.senderId || msg.sender?.id
+                            lastMessageSenderId: msg.sender_id || msg.senderId || msg.sender?.id,
+                            type: data.chatType || 'private',
+                            mentionCount: Array.isArray(msg.mentionedUserIds) && msg.mentionedUserIds.includes(user.id) ? 1 : 0,
+                            latestMentionAt: Array.isArray(msg.mentionedUserIds) && msg.mentionedUserIds.includes(user.id) ? (msg.createdAt || msg.created_at || new Date().toISOString()) : null,
+                            oldestMentionMessageId: Array.isArray(msg.mentionedUserIds) && msg.mentionedUserIds.includes(user.id) ? (msg.id || null) : null
                         });
                         renderChatList();
                     } else {
@@ -4188,27 +4194,9 @@
         }
 
         function refreshMentionPendingFromLoadedMessages(chatId) {
-            const chat = allChats.find(function(c) { return c.id === chatId; });
-            if (!chat || !isGroupChatEntry(chat)) return;
-            const wlTime = getMentionWaterline(chatId) ? new Date(getMentionWaterline(chatId)).getTime() : 0;
-            let latestAt = null;
-            let latestTime = 0;
-            Object.keys(messagesData).forEach(function(id) {
-                const m = messagesData[id];
-                if (!m || String(m.id).startsWith('temp-')) return;
-                if (!doesMessageMentionUser(m, chat)) return;
-                const t = getMessageCreatedTime(m);
-                if (t <= wlTime) return;
-                if (t > latestTime) {
-                    latestTime = t;
-                    latestAt = m.createdAt || m.created_at || new Date(t).toISOString();
-                }
-            });
-            if (latestAt) {
-                markMentionPending(chatId, latestAt);
-            } else {
-                syncMentionPendingAfterWaterline(chatId);
-            }
+            // Mentions are server-backed now. Loaded messages are used only for
+            // in-chat jump targets, not for reconstructing chat-list badges.
+            return chatId;
         }
 
         /** Восстанавливает @ в списке чатов по последнему сообщению (если есть непрочитанные). */
@@ -4268,22 +4256,12 @@
 
         function getUnreadMentionMessages() {
             if (!activeChat || activeChat.type !== 'group') return [];
-            const waterline = getMentionWaterline(activeChat.id);
-            const wlTime = waterline ? new Date(waterline).getTime() : 0;
-            const unread = [];
-
-            Object.keys(messagesData).forEach(function(id) {
-                const m = messagesData[id];
-                if (!m || String(m.id).startsWith('temp-')) return;
-                if (!messageMentionsMe(m)) return;
-                if (getMessageCreatedTime(m) <= wlTime) return;
-                unread.push(m);
+            const chat = allChats.find(function(c) { return c.id === activeChat.id; }) || activeChat;
+            const cursor = mentionJumpCursorByChat[activeChat.id];
+            return mentionHelpers.getUnreadMentionMessages(messagesData, {
+                userId: user.id,
+                mentionReadAt: cursor !== undefined ? cursor : (chat.mentionReadAt || activeChat.mentionReadAt || '')
             });
-
-            unread.sort(function(a, b) {
-                return getMessageCreatedTime(a) - getMessageCreatedTime(b);
-            });
-            return unread;
         }
 
         function getLatestUnreadMentionMessage() {
@@ -4319,8 +4297,8 @@
         function syncMentionJumpButtonVisible(isTargetFullyVisible) {
             const btn = document.getElementById('scrollMentionBtn');
             if (!btn || !btn.classList.contains('enabled')) return;
-            const hasUnread = !!getLatestUnreadMentionMessage();
-            btn.classList.toggle('visible', hasUnread && !isTargetFullyVisible);
+            const hasUnread = !!getOldestUnreadMentionMessage();
+            btn.classList.toggle('visible', hasUnread);
         }
 
         function refreshMentionJumpObserver() {
@@ -4331,7 +4309,7 @@
                 if (btn) btn.classList.remove('visible');
                 return;
             }
-            const msg = getLatestUnreadMentionMessage();
+            const msg = getOldestUnreadMentionMessage();
             if (!msg) {
                 btn.classList.remove('visible');
                 return;
@@ -4390,10 +4368,20 @@
         }
 
         function onMentionJumpClick() {
-            const msg = getLatestUnreadMentionMessage();
+            const msg = getOldestUnreadMentionMessage();
             if (!msg || !activeChat) return;
             scrollToMentionMessage(msg.id, true);
-            setMentionWaterline(activeChat.id, msg.createdAt || msg.created_at || new Date().toISOString());
+            mentionJumpCursorByChat[activeChat.id] = mentionHelpers.getMentionCursorAfterJump(
+                mentionJumpCursorByChat[activeChat.id],
+                msg
+            );
+            if (!getOldestUnreadMentionMessage()) {
+                [allChats, archivedChats].forEach(function(list) {
+                    const chat = list.find(c => c.id === activeChat.id);
+                    if (chat) Object.assign(chat, mentionHelpers.clearMentionState(chat));
+                });
+                renderChatList();
+            }
             updateMentionJumpButton();
         }
 
@@ -4604,6 +4592,10 @@
         // Подготавливает объект чата — сохраняет raw данные для расшифровки
         function prepareChatEntry(c, base) {
             const entry = Object.assign({}, base);
+            entry.mentionCount = Number(entry.mentionCount ?? c.mentionCount) || 0;
+            entry.latestMentionAt = entry.latestMentionAt || c.latestMentionAt || null;
+            entry.oldestMentionMessageId = entry.oldestMentionMessageId || c.oldestMentionMessageId || null;
+            entry.mentionReadAt = entry.mentionReadAt || c.mentionReadAt || null;
             if (c.lastMessageEncrypted && c.lastMessageIv) {
                 entry._rawEncrypted = c.lastMessage;
                 entry._rawIv = c.lastMessageIv;
@@ -4791,8 +4783,6 @@
                     }));
                 }
 
-                syncAllMentionPendingFromChatList();
-
                 // Рендерим после загрузки ВСЕХ данных включая архивированные
                 renderChatList();
                 initFolderTabs();
@@ -4873,7 +4863,7 @@
         }
 
         function renderChatUnreadIndicators(chat) {
-            const showMention = isGroupChatEntry(chat) && chatHasUnreadMention(chat.id);
+            const showMention = mentionHelpers.chatHasUnreadMention(chat);
             const unreadHtml = renderUnreadBadge(chat);
             if (!showMention && !unreadHtml) return '';
             return '<div class="chat-unread-indicators">'
@@ -4902,15 +4892,26 @@
                 body: JSON.stringify({})
             });
             if (!res.ok) throw new Error('mark read failed');
+            const data = await res.json().catch(function() { return {}; });
 
             [allChats, archivedChats].forEach(function(list) {
                 const chat = list.find(c => c.id === chatId);
-                if (chat) chat.unreadCount = 0;
+                if (chat) {
+                    chat.unreadCount = 0;
+                    Object.assign(chat, mentionHelpers.clearMentionState(chat));
+                    if (data.mentionReadAt) chat.mentionReadAt = data.mentionReadAt;
+                }
             });
+            if (activeChat && activeChat.id === chatId && data.mentionReadAt) {
+                activeChat.mentionReadAt = data.mentionReadAt;
+            }
             if (options.acknowledgeMentions) {
                 acknowledgeChatMentionsOnOpen(chatId);
             }
             renderChatList();
+            if (activeChat && activeChat.id === chatId) {
+                updateMentionJumpButton();
+            }
 
             if (!options.silent) {
                 showToast('success', tr('chatMarkedAsRead', 'Чат помечен прочитанным'), '✓');
@@ -5198,10 +5199,13 @@
                 name: name, 
                 type: chatInfo?.type || 'private',
                 ownerId: chatInfo?.ownerId,
-                role: chatInfo?.role
+                role: chatInfo?.role,
+                mentionReadAt: chatInfo?.mentionReadAt || null,
+                mentionCount: chatInfo?.mentionCount || 0
             };
 
             if (activeChat.type === 'group') {
+                mentionJumpCursorByChat[id] = chatInfo?.mentionReadAt || '';
                 loadGroupMembersForMentions(id);
             } else {
                 groupMembersForMentions = [];
@@ -5375,6 +5379,9 @@
         }
 
         function closeChat() {
+            if (activeChat) {
+                delete mentionJumpCursorByChat[activeChat.id];
+            }
             activeChat = null;
             setScrollBottomButtonEnabled(false);
             setMentionJumpButtonEnabled(false);
@@ -5431,10 +5438,8 @@
                     messagesEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px;font-size:14px;">' + tr('noMessages', 'Нет сообщений') + '</div>';
                 }
                 refreshMentionPendingFromLoadedMessages(chatId);
-                if (!scrollToUnreadMentionOnOpen()) {
-                    scrollToBottom();
-                    refreshScrollBottomObserver();
-                }
+                scrollToBottom();
+                refreshScrollBottomObserver();
                 updateMentionJumpButton();
                 renderChatList();
                 markChatAsRead(chatId, { silent: true }).catch(function(err) {
@@ -6573,7 +6578,15 @@
             const fromList = allChats.find(function(c) { return c.id === cid; });
             const chat = fromList || (activeChat && activeChat.id === cid ? activeChat : { type: 'group' });
             if (!doesMessageMentionUser(msg, chat)) return;
-            markMentionPending(cid, msg.createdAt || msg.created_at);
+            const isActiveMentionChat = !!(activeChat && activeChat.id === cid);
+            if (isActiveMentionChat && mentionJumpCursorByChat[cid] === undefined) {
+                mentionJumpCursorByChat[cid] = activeChat.mentionReadAt || '';
+            }
+            if (fromList && !isActiveMentionChat) {
+                fromList.mentionCount = (Number(fromList.mentionCount) || 0) + 1;
+                fromList.latestMentionAt = msg.createdAt || msg.created_at || new Date().toISOString();
+                fromList.oldestMentionMessageId = fromList.oldestMentionMessageId || msg.id || null;
+            }
             const chatName = (activeChat && activeChat.id === cid ? activeChat.name : null)
                 || chatTitle
                 || (fromList && fromList.name)
@@ -6917,8 +6930,9 @@
                         
                         let lastMsgText = formatLastMessage(c);
                         
-                        archivedChats.push({
+                        archivedChats.push(prepareChatEntry(c, {
                             id: c.id,
+                            type: c.type,
                             name: chatName,
                             title: chatName,
                             av: chatAv,
@@ -6926,7 +6940,7 @@
                             lastMessage: lastMsgText,
                             unreadCount: c.unreadCount || 0,
                             time: c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''
-                        });
+                        }));
                     }
                 }
                 

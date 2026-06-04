@@ -547,10 +547,12 @@ async function autoMigrate() {
                 is_archived BOOLEAN DEFAULT FALSE,
                 archived_at TIMESTAMP,
                 last_read_at TIMESTAMP,
+                mention_read_at TIMESTAMP,
                 PRIMARY KEY (user_id, chat_id)
             )
         `).catch(() => {});
         await query(`ALTER TABLE user_chat_settings ADD COLUMN IF NOT EXISTS last_read_at TIMESTAMP`).catch(() => {});
+        await query(`ALTER TABLE user_chat_settings ADD COLUMN IF NOT EXISTS mention_read_at TIMESTAMP`).catch(() => {});
         await query(`
             INSERT INTO user_chat_settings (user_id, chat_id, last_read_at)
             SELECT cm.user_id, cm.chat_id, COALESCE(MAX(m.created_at), NOW())
@@ -573,6 +575,11 @@ async function autoMigrate() {
               AND ucs.chat_id = latest.chat_id
               AND ucs.last_read_at IS NULL
         `).catch(() => {});
+        await query(`
+            UPDATE user_chat_settings
+            SET mention_read_at = last_read_at
+            WHERE mention_read_at IS NULL
+        `).catch(() => {});
         
         // Сообщения
         await query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN DEFAULT FALSE`);
@@ -586,6 +593,17 @@ async function autoMigrate() {
         await query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS voice_duration INTEGER DEFAULT 0`);
         // Убеждаемся что media_url — TEXT (неограниченный размер для base64)
         await query(`ALTER TABLE messages ALTER COLUMN media_url TYPE TEXT`);
+        await query(`
+            CREATE TABLE IF NOT EXISTS message_mentions (
+                message_id UUID REFERENCES messages(id) ON DELETE CASCADE,
+                chat_id UUID REFERENCES chats(id) ON DELETE CASCADE,
+                user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                created_at TIMESTAMP DEFAULT NOW(),
+                PRIMARY KEY (message_id, user_id)
+            )
+        `);
+        await query(`CREATE INDEX IF NOT EXISTS idx_message_mentions_user_chat_created ON message_mentions(user_id, chat_id, created_at)`);
+        await query(`CREATE INDEX IF NOT EXISTS idx_message_mentions_message ON message_mentions(message_id)`);
         
         // Пользователи
         await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name VARCHAR(64) NOT NULL DEFAULT ''`);
@@ -3604,7 +3622,11 @@ app.get('/api/v1/chats', authMiddleware, async (req, res) => {
                     lm.sender_id    AS last_message_sender_id,
                     lm.is_encrypted AS last_message_encrypted,
                     lm.encryption_iv AS last_message_iv,
-                    lm.created_at   AS last_message_at
+                    lm.created_at   AS last_message_at,
+                    ucs.mention_read_at AS mention_read_at,
+                    COALESCE(mentions.mention_count, 0) AS mention_count,
+                    mentions.latest_mention_at AS latest_mention_at,
+                    mentions.oldest_mention_message_id AS oldest_mention_message_id
              FROM chats c
              JOIN chat_members cm ON cm.chat_id = c.id AND cm.user_id = $1
              LEFT JOIN user_chat_settings ucs ON ucs.chat_id = c.id AND ucs.user_id = $1
@@ -3623,6 +3645,17 @@ app.get('/api/v1/chats', authMiddleware, async (req, res) => {
                    AND m.sender_id <> $1
                    AND (ucs.last_read_at IS NULL OR m.created_at > ucs.last_read_at)
              ) unread ON TRUE
+             LEFT JOIN LATERAL (
+                 SELECT COUNT(*)::int AS mention_count,
+                        MAX(mm.created_at) AS latest_mention_at,
+                        (ARRAY_AGG(mm.message_id ORDER BY mm.created_at ASC))[1] AS oldest_mention_message_id
+                 FROM message_mentions mm
+                 JOIN messages m ON m.id = mm.message_id AND m.is_deleted = FALSE
+                 WHERE mm.chat_id = c.id
+                   AND mm.user_id = $1
+                   AND c.type = 'group'
+                   AND (ucs.mention_read_at IS NULL OR mm.created_at > ucs.mention_read_at)
+             ) mentions ON TRUE
              WHERE COALESCE(ucs.is_archived, FALSE) = FALSE
              ORDER BY user_is_pinned DESC, user_pinned_at DESC NULLS LAST, lm.created_at DESC NULLS LAST`,
             [req.user.id]
@@ -3644,7 +3677,11 @@ app.get('/api/v1/chats', authMiddleware, async (req, res) => {
             lastMessageIv: c.last_message_iv || null,
             lastMessageType: c.last_message_type || 'text',
             lastMessageSenderId: c.last_message_sender_id,
-            unreadCount: c.unread_count || 0
+            unreadCount: c.unread_count || 0,
+            mentionCount: c.mention_count || 0,
+            latestMentionAt: c.latest_mention_at || null,
+            oldestMentionMessageId: c.oldest_mention_message_id || null,
+            mentionReadAt: c.mention_read_at || null
         }));
         
         res.json({ chats });
@@ -4053,20 +4090,23 @@ app.post('/api/v1/chats/:chatId/read', authMiddleware, async (req, res) => {
                 is_archived BOOLEAN DEFAULT FALSE,
                 archived_at TIMESTAMP,
                 last_read_at TIMESTAMP,
+                mention_read_at TIMESTAMP,
                 PRIMARY KEY (user_id, chat_id)
             )
         `).catch(() => {});
         await query('ALTER TABLE user_chat_settings ADD COLUMN IF NOT EXISTS last_read_at TIMESTAMP').catch(() => {});
+        await query('ALTER TABLE user_chat_settings ADD COLUMN IF NOT EXISTS mention_read_at TIMESTAMP').catch(() => {});
 
         const readResult = await query(`
-            INSERT INTO user_chat_settings (user_id, chat_id, last_read_at)
-            VALUES ($1, $2, NOW())
-            ON CONFLICT (user_id, chat_id) DO UPDATE SET last_read_at = NOW()
-            RETURNING last_read_at
+            INSERT INTO user_chat_settings (user_id, chat_id, last_read_at, mention_read_at)
+            VALUES ($1, $2, NOW(), NOW())
+            ON CONFLICT (user_id, chat_id) DO UPDATE SET last_read_at = NOW(), mention_read_at = NOW()
+            RETURNING last_read_at, mention_read_at
         `, [req.user.id, chatId]);
 
         const lastReadAt = readResult.rows[0]?.last_read_at || new Date();
-        res.json({ success: true, unreadCount: 0, lastReadAt });
+        const mentionReadAt = readResult.rows[0]?.mention_read_at || lastReadAt;
+        res.json({ success: true, unreadCount: 0, mentionCount: 0, lastReadAt, mentionReadAt });
     } catch (error) {
         logger.error('❌ Mark chat read error:', error);
         res.status(500).json({ error: error.message });
@@ -4084,6 +4124,10 @@ app.get('/api/v1/chats/archived', authMiddleware, async (req, res) => {
                     lm.encryption_iv AS last_message_iv,
                     lm.created_at   AS last_message_at,
                     COALESCE(unread.unread_count, 0) AS unread_count,
+                    ucs.mention_read_at AS mention_read_at,
+                    COALESCE(mentions.mention_count, 0) AS mention_count,
+                    mentions.latest_mention_at AS latest_mention_at,
+                    mentions.oldest_mention_message_id AS oldest_mention_message_id,
                     ucs.archived_at AS user_archived_at
              FROM chats c
              JOIN chat_members cm ON c.id = cm.chat_id AND cm.user_id = $1
@@ -4102,6 +4146,17 @@ app.get('/api/v1/chats/archived', authMiddleware, async (req, res) => {
                    AND m.sender_id <> $1
                    AND (ucs.last_read_at IS NULL OR m.created_at > ucs.last_read_at)
              ) unread ON TRUE
+             LEFT JOIN LATERAL (
+                 SELECT COUNT(*)::int AS mention_count,
+                        MAX(mm.created_at) AS latest_mention_at,
+                        (ARRAY_AGG(mm.message_id ORDER BY mm.created_at ASC))[1] AS oldest_mention_message_id
+                 FROM message_mentions mm
+                 JOIN messages m ON m.id = mm.message_id AND m.is_deleted = FALSE
+                 WHERE mm.chat_id = c.id
+                   AND mm.user_id = $1
+                   AND c.type = 'group'
+                   AND (ucs.mention_read_at IS NULL OR mm.created_at > ucs.mention_read_at)
+             ) mentions ON TRUE
              ORDER BY ucs.archived_at DESC`,
             [req.user.id]
         );
@@ -4120,6 +4175,10 @@ app.get('/api/v1/chats/archived', authMiddleware, async (req, res) => {
             lastMessageType: c.last_message_type || 'text',
             unreadCount: c.unread_count || 0,
             lastMessageAt: c.last_message_at,
+            mentionCount: c.mention_count || 0,
+            latestMentionAt: c.latest_mention_at || null,
+            oldestMentionMessageId: c.oldest_mention_message_id || null,
+            mentionReadAt: c.mention_read_at || null,
             archivedAt: c.user_archived_at
         }));
         
@@ -4160,7 +4219,8 @@ app.get('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
                 reply.is_encrypted as reply_to_encrypted,
                 reply.encryption_iv as reply_to_iv,
                 reply_user.first_name as reply_to_sender_first_name,
-                reply_user.username as reply_to_sender_username
+                reply_user.username as reply_to_sender_username,
+                COALESCE(mentions.mentioned_user_ids, ARRAY[]::uuid[]) AS mentioned_user_ids
              FROM messages m
              LEFT JOIN users u ON m.sender_id = u.id
              LEFT JOIN messages reply ON m.reply_to_message_id = reply.id
@@ -4175,6 +4235,11 @@ app.get('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
                   AND cm_readers.user_id <> m.sender_id
                   AND cm_readers.joined_at <= m.created_at
              ) read_state ON TRUE
+             LEFT JOIN LATERAL (
+                SELECT ARRAY_AGG(mm.user_id ORDER BY mm.user_id) AS mentioned_user_ids
+                FROM message_mentions mm
+                WHERE mm.message_id = m.id
+             ) mentions ON TRUE
              WHERE m.chat_id = $1 AND m.is_deleted = FALSE
              ORDER BY m.created_at DESC
              LIMIT $2 OFFSET $3`,
@@ -4207,6 +4272,7 @@ app.get('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
             isPinned: m.is_pinned,
             isEncrypted: m.is_encrypted || false,
             encryptionIv: m.encryption_iv || null,
+            mentionedUserIds: m.mentioned_user_ids || [],
             isRead: m.sender_id === req.user.id && !!m.is_read,
             createdAt: m.created_at
         }));
@@ -4367,6 +4433,15 @@ app.post('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
         const mentionedUserIds = chatType === 'group'
             ? await resolveGroupMentions(chatId, plainText, req.user.id)
             : [];
+
+        if (mentionedUserIds.length > 0) {
+            await query(
+                `INSERT INTO message_mentions (message_id, chat_id, user_id, created_at)
+                 SELECT $1, $2, unnest($3::uuid[]), NOW()
+                 ON CONFLICT (message_id, user_id) DO NOTHING`,
+                [messageId, chatId, mentionedUserIds]
+            );
+        }
 
         const message = {
             id: messageId, 
