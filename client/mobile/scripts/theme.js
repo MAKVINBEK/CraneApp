@@ -23,6 +23,12 @@
             const res = await _origFetch.apply(this, args);
             if (!isApi || _errShown) return res;
             if (res.status === 429 || res.status === 403) {
+                // Не перенаправляем на экран блокировки при обычных бизнес-ошибках доступа к чатам, участникам и звонкам
+                const isBusinessError = url.includes('/chats/') || url.includes('/members') || url.includes('/calls/');
+                if (res.status === 403 && isBusinessError) {
+                    return res;
+                }
+
                 const clone = res.clone();
                 clone.json().then(body => {
                     if (_errShown) return; _errShown = true;

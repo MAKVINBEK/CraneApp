@@ -1011,13 +1011,15 @@
                 // dms / chats — фильтруем уже отрендеренные элементы списка
                 restoreList();
                 const items = list.querySelectorAll('.chat-item');
+                let visibleCount = 0;
                 items.forEach(it => {
                     const type = (it.dataset.chatType || 'private').toLowerCase();
                     const isPrivate = type === 'private' || type === 'dm' || type === 'personal';
-                    if (section === 'dms') it.style.display = isPrivate ? '' : 'none';
-                    else if (section === 'chats') it.style.display = isPrivate ? 'none' : '';
+                    const show = (section === 'dms' && isPrivate) || (section === 'chats' && !isPrivate);
+                    it.style.display = show ? '' : 'none';
+                    if (show) visibleCount++;
                 });
-                if (items.length === 0) {
+                if (visibleCount === 0) {
                     showPlaceholder(section === 'dms' ? dmIcon : groupIcon,
                         section === 'dms' ? tr('directMessagesEmpty', 'Личных сообщений пока нет') : tr('groupChatsEmpty', 'Групповых чатов пока нет'),
                         'Создайте новый чат, нажав «+» в правом верхнем углу.');
@@ -1777,6 +1779,9 @@
                 }
             } catch (_) {}
 
+            const myMember = members.find(m => m.id === user.id);
+            const myRole = myMember ? myMember.role : 'member';
+
             const av = chat.avatarUrl && isImage(chat.avatarUrl)
                 ? '<img src="' + chat.avatarUrl + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">'
                 : '<span style="font-size:32px;">' + (chat.name[0] || '💬') + '</span>';
@@ -1794,12 +1799,16 @@
                 const clickAttr = clickable
                     ? `onclick="closeGroupInfoAndOpenProfile('${m.id}','${mName}','${m.username || ''}','${m.avatar_url || ''}',${!!m.is_online})"`
                     : '';
+                const deleteBtn = (myRole === 'owner' && !isMe && !isBot)
+                    ? `<button onclick="event.stopPropagation(); confirmKickGroupMember('${chatId}', '${m.id}', '${mName.replace(/'/g,"\\'")}')" style="background:transparent;border:none;color:#FF4B4B;cursor:pointer;padding:8px;font-size:16px;display:flex;align-items:center;justify-content:center;border-radius:50%;width:32px;height:32px;transition:background 0.2s;" onmouseover="this.style.background='rgba(255,75,75,0.1)'" onmouseout="this.style.background='transparent'">×</button>`
+                    : '';
                 return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border-color);cursor:${clickable ? 'pointer' : 'default'};" ${clickAttr}>
                     <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#FF007F,#9D00FF);display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;overflow:hidden;">${mAv}</div>
                     <div style="flex:1;min-width:0;">
                         <div style="font-size:15px;font-weight:600;display:flex;align-items:center;flex-wrap:wrap;gap:2px;">${mName}${roleLabel}${onlineDot}</div>
                         <div style="font-size:13px;color:var(--text-muted);">@${m.username || ''}</div>
                     </div>
+                    ${deleteBtn}
                 </div>`;
             }).join('');
 
@@ -1812,8 +1821,13 @@
                 document.body.appendChild(modal);
             }
 
+            const addMemberBtn = `<button onclick="openAddGroupMemberModal('${chatId}')" style="background:var(--accent-color);border:none;color:#fff;border-radius:8px;padding:6px 12px;font-family:Geologica,sans-serif;font-weight:600;font-size:12px;cursor:pointer;">+ ${window.i18n?.t('addMember') || 'Добавить'}</button>`;
+            const actionBtnText = myRole === 'owner' ? (window.i18n?.t('deleteGroup') || 'Удалить группу') : (window.i18n?.t('leaveGroup') || 'Выйти из группы');
+            const actionBtnStyle = "width:calc(100% - 24px);margin:0 12px 20px;height:46px;border-radius:12px;border:none;color:#fff;font-family:Geologica,sans-serif;font-weight:600;font-size:14px;cursor:pointer;background:linear-gradient(135deg,#FF4B4B,#CC0000);box-shadow:0 12px 24px rgba(204,0,0,0.25);";
+            const actionBtnHtml = `<button onclick="handleGroupLeaveOrDelete('${chatId}', ${myRole === 'owner'})" style="${actionBtnStyle}">${actionBtnText}</button>`;
+
             modal.innerHTML = `
-                <div style="background:var(--bg-secondary,#111);border-radius:24px 24px 0 0;width:100%;max-width:480px;max-height:85vh;overflow-y:auto;animation:slideUp 0.25s cubic-bezier(0.34,1.56,0.64,1);">
+                <div style="background:var(--bg-secondary,#111);border-radius:24px 24px 0 0;width:100%;max-width:480px;max-height:85vh;overflow-y:auto;animation:slideUp 0.25s cubic-bezier(0.34,1.56,0.64,1);display:flex;flex-direction:column;">
                     <div style="display:flex;align-items:center;justify-content:flex-end;padding:16px 20px 0;">
                         <button onclick="document.getElementById('groupInfoModal').remove()" style="background:rgba(255,255,255,0.08);border:none;color:var(--text-primary);width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;">×</button>
                     </div>
@@ -1823,12 +1837,172 @@
                         <div style="font-size:14px;color:var(--text-muted);margin-top:4px;">${members.length} ${pluralMembers(members.length)}</div>
                     </div>
                     <div style="margin:0 12px 20px;background:rgba(255,255,255,0.04);border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,0.06);">
-                        <div style="padding:10px 16px;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-muted);">${tr('members', 'Участники')}</div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 16px;">
+                            <span style="font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-muted);">${tr('members', 'Участники')}</span>
+                            ${addMemberBtn}
+                        </div>
                         ${membersHtml || '<div style="padding:16px;color:var(--text-muted);text-align:center;">' + tr('noMembers', 'Нет участников') + '</div>'}
                     </div>
+                    ${actionBtnHtml}
                 </div>`;
             modal.style.display = 'flex';
         }
+
+        async function handleGroupLeaveOrDelete(chatId, isOwner) {
+            const title = isOwner ? 'Удалить группу?' : 'Выйти из группы?';
+            const text = isOwner 
+                ? 'Группа и все сообщения будут удалены для всех участников.' 
+                : 'Вы больше не будете получать сообщения из этой группы.';
+            
+            document.getElementById('confirmTitle').textContent = title;
+            document.getElementById('confirmText').textContent = text;
+            document.getElementById('confirmBtn').onclick = async function() {
+                try {
+                    const res = await fetch('/api/v1/chats/' + chatId, {
+                        method: 'DELETE',
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                        closeConfirmModal();
+                        const modal = document.getElementById('groupInfoModal');
+                        if (modal) modal.remove();
+                        closeChat();
+                        loadChats();
+                        showToast('success', isOwner ? 'Группа удалена' : 'Вы вышли из группы', '✓');
+                    } else {
+                        showToast('error', data.error || 'Ошибка', '❌');
+                    }
+                } catch (err) {
+                    showToast('error', 'Ошибка сети', '❌');
+                }
+            };
+            document.getElementById('confirmModal').classList.add('active');
+        }
+
+        async function confirmKickGroupMember(chatId, userId, name) {
+            document.getElementById('confirmTitle').textContent = 'Исключить участника?';
+            document.getElementById('confirmText').textContent = `Вы действительно хотите исключить ${name} из группы?`;
+            document.getElementById('confirmBtn').onclick = async function() {
+                try {
+                    const res = await fetch(`/api/v1/chats/${chatId}/members/${userId}`, {
+                        method: 'DELETE',
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                        closeConfirmModal();
+                        showToast('success', `${name} исключен(а)`, '✓');
+                        openGroupInfoModal(chatId); // перерендерить инфо группы
+                    } else {
+                        showToast('error', data.error || 'Ошибка удаления', '❌');
+                    }
+                } catch (err) {
+                    showToast('error', 'Ошибка сети', '❌');
+                }
+            };
+            document.getElementById('confirmModal').classList.add('active');
+        }
+
+        function openAddGroupMemberModal(chatId) {
+            let addModal = document.getElementById('addGroupMemberModal');
+            if (!addModal) {
+                addModal = document.createElement('div');
+                addModal.id = 'addGroupMemberModal';
+                addModal.style.cssText = 'position:fixed;inset:0;z-index:9600;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);';
+                addModal.onclick = e => { if (e.target === addModal) closeAddGroupMemberModal(); };
+                document.body.appendChild(addModal);
+            }
+
+            addModal.innerHTML = `
+                <div style="background:var(--bg-secondary,#111);border-radius:20px;width:90%;max-width:400px;padding:20px;border:1px solid rgba(255,255,255,0.08);animation:scaleUp 0.2s ease-out;color:var(--text-primary,#fff);">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                        <span style="font-size:17px;font-weight:700;letter-spacing:-0.01em;">Добавить участника</span>
+                        <button onclick="closeAddGroupMemberModal()" style="background:transparent;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;">×</button>
+                    </div>
+                    <input type="text" id="addGroupMemberInput" placeholder="Введите имя или @username" style="width:100%;height:42px;border-radius:10px;border:1px solid var(--border-color);background:var(--bg-tertiary);color:var(--text-primary);padding:0 12px;font-size:14px;outline:none;margin-bottom:12px;" oninput="searchUsersForAddGroup('${chatId}', this.value)">
+                    <div id="addGroupMemberList" style="max-height:240px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;">
+                        <div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px;">Введите от 2 символов для поиска</div>
+                    </div>
+                </div>`;
+            addModal.style.display = 'flex';
+            setTimeout(() => document.getElementById('addGroupMemberInput').focus(), 50);
+        }
+
+        function closeAddGroupMemberModal() {
+            const addModal = document.getElementById('addGroupMemberModal');
+            if (addModal) addModal.remove();
+        }
+
+        let addGroupSearchTimeout = null;
+        function searchUsersForAddGroup(chatId, queryStr) {
+            if (addGroupSearchTimeout) clearTimeout(addGroupSearchTimeout);
+            const list = document.getElementById('addGroupMemberList');
+            if (!list) return;
+
+            const q = queryStr.trim().replace('@', '');
+            if (q.length < 2) {
+                list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px;">Введите от 2 символов для поиска</div>';
+                return;
+            }
+
+            list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px;">Поиск...</div>';
+
+            addGroupSearchTimeout = setTimeout(async () => {
+                try {
+                    const res = await fetch('/api/v1/users/search?q=' + encodeURIComponent(q), {
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+                    if (!res.ok) { list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px;">Ошибка поиска</div>'; return; }
+                    const data = await res.json();
+                    const users = (data.users || []).filter(u => u.id !== user.id);
+                    if (!users.length) {
+                        list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px;">Пользователи не найдены</div>';
+                        return;
+                    }
+                    list.innerHTML = users.map(u => {
+                        const name = ((u.firstName||'') + (u.lastName ? ' '+u.lastName : '')).trim() || u.username;
+                        const av = u.avatarUrl ? `<img src="${u.avatarUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : name[0].toUpperCase();
+                        return `<div onclick="submitAddGroupMember('${chatId}', '${u.id}', '${name.replace(/'/g,"\\'")}')" style="display:flex;align-items:center;gap:12px;padding:8px 10px;cursor:pointer;border-radius:10px;transition:background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.background='transparent'">
+                            <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#FF007F,#9D00FF);display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;flex-shrink:0;overflow:hidden;">${av}</div>
+                            <div style="flex:1;min-width:0;"><div style="font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${name}</div><div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">@${u.username}</div></div>
+                        </div>`;
+                    }).join('');
+                } catch (e) {
+                    list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px;">Ошибка поиска</div>';
+                }
+            }, 300);
+        }
+
+        async function submitAddGroupMember(chatId, targetUserId, name) {
+            try {
+                const res = await fetch(`/api/v1/chats/${chatId}/members`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    body: JSON.stringify({ userId: targetUserId })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    showToast('success', `${name} добавлен(а) в группу`, '✓');
+                    closeAddGroupMemberModal();
+                    openGroupInfoModal(chatId); // обновить модал группы
+                } else {
+                    showToast('error', data.error || 'Ошибка добавления', '❌');
+                }
+            } catch (err) {
+                showToast('error', 'Ошибка сети', '❌');
+            }
+        }
+
+        // Экспортируем функции в глобальную область, так как они вызываются из onclick атрибутов
+        window.openGroupInfoModal = openGroupInfoModal;
+        window.confirmKickGroupMember = confirmKickGroupMember;
+        window.openAddGroupMemberModal = openAddGroupMemberModal;
+        window.closeAddGroupMemberModal = closeAddGroupMemberModal;
+        window.searchUsersForAddGroup = searchUsersForAddGroup;
+        window.submitAddGroupMember = submitAddGroupMember;
+        window.handleGroupLeaveOrDelete = handleGroupLeaveOrDelete;
+        window.closeGroupInfoAndOpenProfile = closeGroupInfoAndOpenProfile;
 
         function closeGroupInfoAndOpenProfile(id, name, username, avatarUrl, isOnline) {
             const modal = document.getElementById('groupInfoModal');
@@ -3693,6 +3867,39 @@
                         });
                         renderChatList();
                     }
+                    break;
+
+                case 'member_joined':
+                    if (activeChat && data.chatId === activeChat.id) {
+                        if (data.message) addMessage(data.message);
+                        loadGroupMembersForMentions(activeChat.id);
+                        // Если открыта инфа группы, обновим её
+                        const modal = document.getElementById('groupInfoModal');
+                        if (modal && modal.style.display === 'flex') {
+                            openGroupInfoModal(activeChat.id);
+                        }
+                    }
+                    loadChats();
+                    break;
+
+                case 'member_left':
+                    if (data.userId === user.id) {
+                        if (activeChat && data.chatId === activeChat.id) {
+                            closeChat();
+                        }
+                        showToast('info', 'Вы вышли из группы или были исключены', 'ℹ️');
+                    } else {
+                        if (activeChat && data.chatId === activeChat.id) {
+                            if (data.message) addMessage(data.message);
+                            loadGroupMembersForMentions(activeChat.id);
+                            // Если открыта инфа группы, обновим её
+                            const modal = document.getElementById('groupInfoModal');
+                            if (modal && modal.style.display === 'flex') {
+                                openGroupInfoModal(activeChat.id);
+                            }
+                        }
+                    }
+                    loadChats();
                     break;
 
                 case 'reaction_updated':

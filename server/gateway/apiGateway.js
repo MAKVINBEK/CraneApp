@@ -181,7 +181,7 @@ function suspiciousUAMiddleware(req, res, next) {
 }
 
 // Очистка старых записей каждые 5 минут
-setInterval(() => {
+const cleanupInterval = setInterval(() => {
     const now = Date.now();
     for (const [ip, data] of ipRequestCounts) {
         if (now > data.resetAt + 60000) ipRequestCounts.delete(ip);
@@ -190,6 +190,7 @@ setInterval(() => {
         if (now > blockUntil) ipBlockList.delete(ip);
     }
 }, 5 * 60 * 1000);
+if (cleanupInterval.unref) cleanupInterval.unref();
 
 // Применяем middleware в правильном порядке
 app.use(ipBlockMiddleware);
@@ -330,8 +331,10 @@ async function _refreshMeteredTurn() {
 }
 
 // Обновляем при старте (с задержкой 3с чтобы не мешать запуску) и каждые 12 часов
-setTimeout(_refreshMeteredTurn, 3000);
-setInterval(_refreshMeteredTurn, 12 * 60 * 60 * 1000);
+const meteredTimeout = setTimeout(_refreshMeteredTurn, 3000);
+if (meteredTimeout.unref) meteredTimeout.unref();
+const meteredInterval = setInterval(_refreshMeteredTurn, 12 * 60 * 60 * 1000);
+if (meteredInterval.unref) meteredInterval.unref();
 
 function getIceServers() {
     const ice = [..._cachedIceServers];
@@ -3853,6 +3856,221 @@ app.get('/api/v1/chats/:chatId/members-online', authMiddleware, async (req, res)
     }
 });
 
+// ДОБАВЛЕНИЕ УЧАСТНИКА В ГРУППУ
+app.post('/api/v1/chats/:chatId/members', authMiddleware, async (req, res) => {
+    try {
+        const { chatId } = req.params;
+        const { userId } = req.body;
+
+        if (!userId) {
+            return res.status(400).json({ error: 'User ID is required' });
+        }
+
+        // Проверяем, что чат существует и является группой
+        const chatCheck = await query('SELECT type, title FROM chats WHERE id = $1', [chatId]);
+        if (chatCheck.rows.length === 0) {
+            return res.status(404).json({ error: 'Chat not found' });
+        }
+        if (chatCheck.rows[0].type !== 'group') {
+            return res.status(400).json({ error: 'Chat is not a group' });
+        }
+
+        // Проверяем, что текущий пользователь состоит в группе
+        const callerCheck = await query(
+            'SELECT 1 FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, req.user.id]
+        );
+        if (callerCheck.rows.length === 0) {
+            return res.status(403).json({ error: req.t('accessDenied') });
+        }
+
+        // Проверяем, существует ли целевой пользователь
+        const targetUserCheck = await query('SELECT id, first_name, username FROM users WHERE id = $1', [userId]);
+        if (targetUserCheck.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Проверяем, не состоит ли уже целевой пользователь в группе
+        const targetMemberCheck = await query(
+            'SELECT 1 FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, userId]
+        );
+        if (targetMemberCheck.rows.length > 0) {
+            return res.status(400).json({ error: 'User is already a member of this group' });
+        }
+
+        // Проверяем настройки конфиденциальности целевого пользователя
+        const privResult = await query(
+            'SELECT privacy_settings FROM user_settings WHERE user_id = $1',
+            [userId]
+        );
+        const privacy = privResult.rows[0]?.privacy_settings || {};
+        const groupsAdd = privacy.groupsAdd || 'all';
+
+        if (groupsAdd === 'none') {
+            const name = targetUserCheck.rows[0].first_name || targetUserCheck.rows[0].username || req.t('user');
+            return res.status(403).json({ error: req.t('groupAddPrivacyNone', { name }) || `Cannot add ${name} due to privacy settings` });
+        }
+
+        if (groupsAdd === 'contacts') {
+            // Проверяем наличие личного чата между приглашающим и приглашаемым
+            const contactCheck = await query(
+                `SELECT 1 FROM chats c
+                 JOIN chat_members cm1 ON c.id = cm1.chat_id AND cm1.user_id = $1
+                 JOIN chat_members cm2 ON c.id = cm2.chat_id AND cm2.user_id = $2
+                 WHERE c.type = 'private' LIMIT 1`,
+                [userId, req.user.id]
+            );
+            if (contactCheck.rows.length === 0) {
+                const name = targetUserCheck.rows[0].first_name || targetUserCheck.rows[0].username || req.t('user');
+                return res.status(403).json({ error: req.t('groupAddPrivacyContacts', { name }) || `Cannot add ${name} (contacts only)` });
+            }
+        }
+
+        // Добавляем в группу
+        await query(
+            "INSERT INTO chat_members (chat_id, user_id, role, joined_at) VALUES ($1, $2, 'member', NOW())",
+            [chatId, userId]
+        );
+
+        // Создаем системное сообщение
+        const botResult = await query("SELECT id FROM users WHERE username = 'craneapp_bot'");
+        const systemSenderId = botResult.rows.length ? botResult.rows[0].id : req.user.id;
+        
+        const callerName = req.user.first_name || req.user.username || req.t('user');
+        const targetName = targetUserCheck.rows[0].first_name || targetUserCheck.rows[0].username || req.t('user');
+        const systemMsgText = `${callerName} добавил(а) ${targetName}`;
+
+        const msgId = uuidv4();
+        await query(
+            `INSERT INTO messages (id, chat_id, sender_id, content, created_at) VALUES ($1, $2, $3, $4, NOW())`,
+            [msgId, chatId, systemSenderId, systemMsgText]
+        );
+
+        // WebSocket уведомление о новом сообщении
+        const systemMessage = {
+            id: msgId,
+            chatId,
+            senderId: systemSenderId,
+            senderUsername: botResult.rows.length ? 'craneapp_bot' : req.user.username,
+            senderFirstName: botResult.rows.length ? 'CraneApp Bot' : req.user.first_name,
+            content: systemMsgText,
+            type: 'text',
+            createdAt: new Date().toISOString()
+        };
+
+        // Отсылаем и событие добавления в чат, и новое сообщение
+        await broadcastToChat(chatId, {
+            type: 'member_joined',
+            chatId,
+            userId,
+            joinedUser: {
+                id: targetUserCheck.rows[0].id,
+                username: targetUserCheck.rows[0].username,
+                firstName: targetUserCheck.rows[0].first_name
+            },
+            message: systemMessage
+        }, null);
+
+        // Также отправляем new_chat добавляемому пользователю
+        const title = chatCheck.rows[0].title;
+        await broadcastToChat(chatId, {
+            type: 'new_chat',
+            chatId,
+            chatType: 'group',
+            title
+        }, null);
+
+        logger.info(`✅ User ${userId} added to group ${chatId} by ${req.user.id}`);
+        res.status(200).json({ success: true });
+    } catch (error) {
+        logger.error('❌ Add group member error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ИСКЛЮЧЕНИЕ УЧАСТНИКА ИЗ ГРУППЫ
+app.delete('/api/v1/chats/:chatId/members/:userId', authMiddleware, async (req, res) => {
+    try {
+        const { chatId, userId } = req.params;
+
+        // Проверяем, что чат существует и является группой
+        const chatCheck = await query('SELECT type, owner_id FROM chats WHERE id = $1', [chatId]);
+        if (chatCheck.rows.length === 0) {
+            return res.status(404).json({ error: 'Chat not found' });
+        }
+        if (chatCheck.rows[0].type !== 'group') {
+            return res.status(400).json({ error: 'Chat is not a group' });
+        }
+
+        // Проверяем права инициатора (только владелец группы может исключать участников)
+        const callerCheck = await query(
+            'SELECT role FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, req.user.id]
+        );
+        if (callerCheck.rows.length === 0 || callerCheck.rows[0].role !== 'owner') {
+            return res.status(403).json({ error: req.t('accessDenied') });
+        }
+
+        // Проверяем, состоит ли целевой пользователь в группе
+        const targetMemberCheck = await query(
+            'SELECT role FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, userId]
+        );
+        if (targetMemberCheck.rows.length === 0) {
+            return res.status(404).json({ error: 'User is not a member of this group' });
+        }
+
+        // Владелец не может исключить сам себя через этот эндпоинт
+        if (userId === req.user.id) {
+            return res.status(400).json({ error: 'Owner cannot kick themselves' });
+        }
+
+        // Удаляем из группы
+        await query('DELETE FROM chat_members WHERE chat_id = $1 AND user_id = $2', [chatId, userId]);
+
+        // Создаем системное сообщение
+        const botResult = await query("SELECT id FROM users WHERE username = 'craneapp_bot'");
+        const systemSenderId = botResult.rows.length ? botResult.rows[0].id : req.user.id;
+
+        const targetUserCheck = await query('SELECT first_name, username FROM users WHERE id = $1', [userId]);
+        const callerName = req.user.first_name || req.user.username || req.t('user');
+        const targetName = targetUserCheck.rows[0]?.first_name || targetUserCheck.rows[0]?.username || req.t('user');
+        const systemMsgText = `${callerName} исключил(а) ${targetName}`;
+
+        const msgId = uuidv4();
+        await query(
+            `INSERT INTO messages (id, chat_id, sender_id, content, created_at) VALUES ($1, $2, $3, $4, NOW())`,
+            [msgId, chatId, systemSenderId, systemMsgText]
+        );
+
+        const systemMessage = {
+            id: msgId,
+            chatId,
+            senderId: systemSenderId,
+            senderUsername: botResult.rows.length ? 'craneapp_bot' : req.user.username,
+            senderFirstName: botResult.rows.length ? 'CraneApp Bot' : req.user.first_name,
+            content: systemMsgText,
+            type: 'text',
+            createdAt: new Date().toISOString()
+        };
+
+        // Отсылаем WebSocket-событие об исключении
+        await broadcastToChat(chatId, {
+            type: 'member_left',
+            chatId,
+            userId,
+            message: systemMessage
+        }, null);
+
+        logger.info(`✅ User ${userId} kicked from group ${chatId} by owner ${req.user.id}`);
+        res.status(200).json({ success: true });
+    } catch (error) {
+        logger.error('❌ Kick group member error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // ИСПРАВЛЕННЫЙ РОУТ СОЗДАНИЯ ЧАТА
 app.post('/api/v1/chats/create', authMiddleware, async (req, res) => {
     const client = await pool.connect();
@@ -3982,7 +4200,40 @@ app.delete('/api/v1/chats/:chatId', authMiddleware, async (req, res) => {
                 await query('DELETE FROM chat_members WHERE chat_id = $1', [chatId]);
                 await query('DELETE FROM chats WHERE id = $1', [chatId]);
             } else {
+                // Обычный участник выходит из группы
+                const callerName = req.user.first_name || req.user.username || req.t('user');
+                const systemMsgText = `${callerName} покинул(а) группу`;
+
                 await query('DELETE FROM chat_members WHERE chat_id = $1 AND user_id = $2', [chatId, req.user.id]);
+
+                // Системное сообщение
+                const botResult = await query("SELECT id FROM users WHERE username = 'craneapp_bot'");
+                const systemSenderId = botResult.rows.length ? botResult.rows[0].id : req.user.id;
+
+                const msgId = uuidv4();
+                await query(
+                    `INSERT INTO messages (id, chat_id, sender_id, content, created_at) VALUES ($1, $2, $3, $4, NOW())`,
+                    [msgId, chatId, systemSenderId, systemMsgText]
+                );
+
+                const systemMessage = {
+                    id: msgId,
+                    chatId,
+                    senderId: systemSenderId,
+                    senderUsername: botResult.rows.length ? 'craneapp_bot' : req.user.username,
+                    senderFirstName: botResult.rows.length ? 'CraneApp Bot' : req.user.first_name,
+                    content: systemMsgText,
+                    type: 'text',
+                    createdAt: new Date().toISOString()
+                };
+
+                // Отправляем WebSocket уведомление оставшимся участникам
+                await broadcastToChat(chatId, {
+                    type: 'member_left',
+                    chatId,
+                    userId: req.user.id,
+                    message: systemMessage
+                }, null);
             }
         }
         
@@ -5926,7 +6177,9 @@ async function start() {
     }
 }
 
-start();
+if (require.main === module) {
+    start();
+}
 
 // ============================================
 // GRACEFUL SHUTDOWN
