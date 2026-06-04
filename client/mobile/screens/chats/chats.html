@@ -648,8 +648,12 @@
     <!-- Group Members Modal -->
     <div class="modal-overlay" id="groupMembersModal">
         <div class="modal" style="max-height:80vh;overflow-y:auto;">
-            <div class="modal-header">
+            <div class="modal-header" style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
                 <span class="modal-title" id="groupMembersTitle">Участники</span>
+                <div style="display: flex; gap: 8px; align-items: center; margin-left: auto; margin-right: 8px;">
+                    <button id="groupBansBtn" onclick="openBannedUsersModal()" style="display: none; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); padding: 4px 8px; border-radius: 6px; font-size: 12px; cursor: pointer;">Забаненные 🚫</button>
+                    <button id="groupInviteBtn" onclick="openGroupInviteModal()" style="display: none; background: var(--accent-gradient); border: none; color: white; padding: 4px 8px; border-radius: 6px; font-size: 12px; cursor: pointer;">+ Добавить</button>
+                </div>
                 <button class="modal-close" onclick="closeGroupMembers()">×</button>
             </div>
             <div id="groupMembersList" style="padding:8px 0;"></div>
@@ -1113,6 +1117,123 @@
         <div class="chat-context-divider"></div>
         <div class="chat-context-item danger" onclick="deleteChatFromMenu()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg><span data-i18n="deleteChat">Удалить</span>
+        </div>
+    </div>
+
+    <!-- Member Actions Modal -->
+    <div class="modal-overlay" id="memberActionsModal">
+        <div class="modal" style="width: 280px; padding: 16px;">
+            <div class="modal-header">
+                <span class="modal-title" id="memberActionsTitle">Действия</span>
+                <button class="modal-close" onclick="closeMemberActions()">×</button>
+            </div>
+            <div class="modal-body" style="display: flex; flex-direction: column; gap: 8px; padding-top: 12px;">
+                <button class="profile-action-btn" id="modPromoteBtn" onclick="openAdminPermissions()" style="background: var(--bg-tertiary); width: 100%;">
+                    <span>Promote to Admin</span>
+                </button>
+                <button class="profile-action-btn" id="modDemoteBtn" onclick="demoteAdmin()" style="background: var(--bg-tertiary); width: 100%; display: none;">
+                    <span>Demote Admin</span>
+                </button>
+                <button class="profile-action-btn" id="modMuteBtn" onclick="openGroupDurationModal('mute')" style="background: var(--bg-tertiary); width: 100%;">
+                    <span>Mute Member</span>
+                </button>
+                <button class="profile-action-btn" id="modUnmuteBtn" onclick="unmuteGroupMember()" style="background: var(--bg-tertiary); width: 100%; display: none;">
+                    <span>Unmute Member</span>
+                </button>
+                <button class="profile-action-btn" id="modKickBtn" onclick="kickGroupMember()" style="background: var(--bg-tertiary); width: 100%;">
+                    <span>Kick Member</span>
+                </button>
+                <button class="profile-action-btn" id="modBanBtn" onclick="openGroupDurationModal('ban')" style="background: linear-gradient(135deg,#FF4B4B,#CC0000); width: 100%;">
+                    <span>Ban Member</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Permissions Modal -->
+    <div class="modal-overlay" id="adminPermissionsModal">
+        <div class="modal" style="width: 320px; padding: 16px;">
+            <div class="modal-header">
+                <span class="modal-title">Права администратора</span>
+                <button class="modal-close" onclick="closeAdminPermissions()">×</button>
+            </div>
+            <div class="modal-body" style="padding-top: 12px; display: flex; flex-direction: column; gap: 12px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); font-size: 14px;">
+                    <input type="checkbox" id="permChangeInfo" checked>
+                    Изменение информации
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); font-size: 14px;">
+                    <input type="checkbox" id="permDeleteMessages" checked>
+                    Удаление сообщений
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); font-size: 14px;">
+                    <input type="checkbox" id="permBanUsers" checked>
+                    Блокировка пользователей
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); font-size: 14px;">
+                    <input type="checkbox" id="permInviteUsers" checked>
+                    Добавление участников
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); font-size: 14px;">
+                    <input type="checkbox" id="permPinMessages" checked>
+                    Закрепление сообщений
+                </label>
+                <div style="display: flex; gap: 8px; margin-top: 12px;">
+                    <button class="profile-action-btn" onclick="closeAdminPermissions()" style="background: var(--bg-tertiary); flex: 1;">Отмена</button>
+                    <button class="profile-action-btn" onclick="saveAdminPermissions()" style="background: var(--accent-gradient); color: white; flex: 1;">Сохранить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Group Duration & Reason Modal -->
+    <div class="modal-overlay" id="groupDurationModal">
+        <div class="modal" style="width: 320px; padding: 16px;">
+            <div class="modal-header">
+                <span class="modal-title" id="groupDurationTitle">Срок ограничения</span>
+                <button class="modal-close" onclick="closeGroupDurationModal()">×</button>
+            </div>
+            <div class="modal-body" style="padding-top: 12px; display: flex; flex-direction: column; gap: 12px;">
+                <div>
+                    <label style="display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">Причина</label>
+                    <input type="text" id="groupDurationReason" placeholder="Укажите причину..." style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-tertiary); color: var(--text-primary); font-size: 14px;">
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                    <button class="profile-action-btn" onclick="applyGroupDuration(3600)" style="background: var(--bg-tertiary);">1 час</button>
+                    <button class="profile-action-btn" onclick="applyGroupDuration(86400)" style="background: var(--bg-tertiary);">1 день</button>
+                    <button class="profile-action-btn" onclick="applyGroupDuration(604800)" style="background: var(--bg-tertiary);">1 неделя</button>
+                    <button class="profile-action-btn" onclick="applyGroupDuration(0)" style="background: linear-gradient(135deg,#FF4B4B,#CC0000); color: white;">Навсегда</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Banned Users Modal -->
+    <div class="modal-overlay" id="bannedUsersModal">
+        <div class="modal" style="width: 340px; max-height: 80vh; overflow-y: auto; padding: 16px;">
+            <div class="modal-header">
+                <span class="modal-title">Заблокированные</span>
+                <button class="modal-close" onclick="closeBannedUsersModal()">×</button>
+            </div>
+            <div class="modal-body" id="bannedUsersList" style="padding-top: 12px; display: flex; flex-direction: column; gap: 8px;">
+                <!-- Сюда вставляются забаненные -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Group Invite Modal -->
+    <div class="modal-overlay" id="groupInviteModal">
+        <div class="modal" style="width: 340px; max-height: 80vh; overflow-y: auto; padding: 16px;">
+            <div class="modal-header">
+                <span class="modal-title">Добавить участников</span>
+                <button class="modal-close" onclick="closeGroupInviteModal()">×</button>
+            </div>
+            <div class="modal-body" style="padding-top: 12px; display: flex; flex-direction: column; gap: 12px;">
+                <input type="text" id="groupInviteSearch" oninput="searchGroupInviteMembers(this.value)" placeholder="Поиск контактов..." style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-tertiary); color: var(--text-primary); font-size: 14px;">
+                <div id="groupInviteList" style="display: flex; flex-direction: column; gap: 8px; max-height: 40vh; overflow-y: auto;">
+                    <!-- Сюда вставляются результаты поиска -->
+                </div>
+            </div>
         </div>
     </div>
 

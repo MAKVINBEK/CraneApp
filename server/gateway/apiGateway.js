@@ -890,6 +890,33 @@ async function autoMigrate() {
         await query(`ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_type_check`).catch(() => {});
         await query(`ALTER TABLE messages ADD CONSTRAINT messages_type_check CHECK (type IN ('text','image','video','audio','voice','file','sticker','gif','contact','location','call'))`).catch(() => {});
 
+        // Group moderation migrations: permissions column and chat_bans table
+        await query(`
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name = 'chat_members' AND column_name = 'permissions'
+                ) THEN
+                    ALTER TABLE chat_members ADD COLUMN permissions JSONB DEFAULT '{}';
+                END IF;
+            END $$;
+        `).catch(() => {});
+
+        await query(`
+            CREATE TABLE IF NOT EXISTS chat_bans (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                chat_id UUID REFERENCES chats(id) ON DELETE CASCADE,
+                user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                banned_by UUID REFERENCES users(id) ON DELETE SET NULL,
+                reason TEXT,
+                banned_until TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(chat_id, user_id)
+            )
+        `).catch(() => {});
+        await query(`CREATE INDEX IF NOT EXISTS idx_chat_bans_chat ON chat_bans(chat_id)`).catch(() => {});
+
         logger.info('✅ Database migrations completed!');
         
     } catch (error) {
@@ -3616,6 +3643,7 @@ app.get('/api/v1/chats', authMiddleware, async (req, res) => {
         const result = await query(
             `SELECT c.*,
                     cm.role,
+                    cm.muted_until AS user_muted_until,
                     COALESCE(ucs.is_pinned, FALSE)   AS user_is_pinned,
                     ucs.pinned_at                     AS user_pinned_at,
                     COALESCE(ucs.is_archived, FALSE)  AS user_is_archived,
@@ -3671,6 +3699,7 @@ app.get('/api/v1/chats', authMiddleware, async (req, res) => {
             ownerId: c.owner_id,
             avatarUrl: c.avatar_url,
             role: c.role,
+            mutedUntil: c.user_muted_until || null,
             isPinned: c.user_is_pinned || false,
             isArchived: c.user_is_archived || false,
             pinnedAt: c.user_pinned_at,
@@ -3708,7 +3737,7 @@ app.get('/api/v1/chats/:chatId/members', authMiddleware, async (req, res) => {
         }
 
         const result = await query(
-            `SELECT u.id, u.username, u.first_name, u.last_name, u.avatar_url, u.last_seen, u.badge, u.badges, u.is_bot, u.is_premium, u.is_blocked, cm.role,
+            `SELECT u.id, u.username, u.first_name, u.last_name, u.avatar_url, u.last_seen, u.badge, u.badges, u.is_bot, u.is_premium, u.is_blocked, cm.role, cm.permissions, cm.muted_until,
                     CASE
                         WHEN u.last_seen > NOW() - INTERVAL '5 minutes' THEN TRUE
                         ELSE FALSE
@@ -3726,6 +3755,8 @@ app.get('/api/v1/chats/:chatId/members', authMiddleware, async (req, res) => {
                 last_name: m.last_name,
                 avatar_url: m.avatar_url,
                 role: m.role,
+                permissions: m.permissions || {},
+                muted_until: m.muted_until || null,
                 last_seen: m.last_seen,
                 is_online: m.is_online,
                 badge: m.badge || null,
@@ -3826,7 +3857,7 @@ app.get('/api/v1/chats/:chatId/members-online', authMiddleware, async (req, res)
     try {
         const { chatId } = req.params;
         const result = await query(
-            `SELECT u.id, u.username, u.first_name, u.last_name, u.avatar_url, u.is_bot, cm.role,
+            `SELECT u.id, u.username, u.first_name, u.last_name, u.avatar_url, u.is_bot, cm.role, cm.muted_until,
                     CASE WHEN u.is_bot = TRUE THEN FALSE
                          WHEN u.last_seen > NOW() - INTERVAL '5 minutes' THEN TRUE
                          ELSE FALSE END as is_online
@@ -3846,7 +3877,8 @@ app.get('/api/v1/chats/:chatId/members-online', authMiddleware, async (req, res)
                 avatarUrl: m.avatar_url,
                 role: m.role,
                 isBot: m.is_bot || false,
-                isOnline: m.is_online
+                isOnline: m.is_online,
+                mutedUntil: m.muted_until || null
             })),
             total: members.length,
             online: onlineCount
@@ -3875,19 +3907,36 @@ app.post('/api/v1/chats/:chatId/members', authMiddleware, async (req, res) => {
             return res.status(400).json({ error: 'Chat is not a group' });
         }
 
-        // Проверяем, что текущий пользователь состоит в группе
+        // Проверяем, что текущий пользователь состоит в группе и имеет права
         const callerCheck = await query(
-            'SELECT 1 FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            'SELECT role, permissions FROM chat_members WHERE chat_id = $1 AND user_id = $2',
             [chatId, req.user.id]
         );
         if (callerCheck.rows.length === 0) {
             return res.status(403).json({ error: req.t('accessDenied') });
         }
 
+        const caller = callerCheck.rows[0];
+        if (caller.role === 'admin') {
+            const perms = caller.permissions || {};
+            if (perms.can_invite_users === false || perms.can_invite_users === 'false') {
+                return res.status(403).json({ error: 'You do not have permission to invite users to this group' });
+            }
+        }
+
         // Проверяем, существует ли целевой пользователь
         const targetUserCheck = await query('SELECT id, first_name, username FROM users WHERE id = $1', [userId]);
         if (targetUserCheck.rows.length === 0) {
             return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Проверяем, не забанен ли пользователь
+        const banCheck = await query(
+            'SELECT 1 FROM chat_bans WHERE chat_id = $1 AND user_id = $2 AND (banned_until IS NULL OR banned_until > NOW())',
+            [chatId, userId]
+        );
+        if (banCheck.rows.length > 0) {
+            return res.status(400).json({ error: 'User is banned from this group' });
         }
 
         // Проверяем, не состоит ли уже целевой пользователь в группе
@@ -4003,15 +4052,6 @@ app.delete('/api/v1/chats/:chatId/members/:userId', authMiddleware, async (req, 
             return res.status(400).json({ error: 'Chat is not a group' });
         }
 
-        // Проверяем права инициатора (только владелец группы может исключать участников)
-        const callerCheck = await query(
-            'SELECT role FROM chat_members WHERE chat_id = $1 AND user_id = $2',
-            [chatId, req.user.id]
-        );
-        if (callerCheck.rows.length === 0 || callerCheck.rows[0].role !== 'owner') {
-            return res.status(403).json({ error: req.t('accessDenied') });
-        }
-
         // Проверяем, состоит ли целевой пользователь в группе
         const targetMemberCheck = await query(
             'SELECT role FROM chat_members WHERE chat_id = $1 AND user_id = $2',
@@ -4019,6 +4059,31 @@ app.delete('/api/v1/chats/:chatId/members/:userId', authMiddleware, async (req, 
         );
         if (targetMemberCheck.rows.length === 0) {
             return res.status(404).json({ error: 'User is not a member of this group' });
+        }
+        const targetRole = targetMemberCheck.rows[0].role;
+
+        // Проверяем права инициатора
+        const callerCheck = await query(
+            'SELECT role, permissions FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, req.user.id]
+        );
+        if (callerCheck.rows.length === 0) {
+            return res.status(403).json({ error: req.t('accessDenied') });
+        }
+
+        const caller = callerCheck.rows[0];
+        let canKick = false;
+        if (caller.role === 'owner') {
+            canKick = true;
+        } else if (caller.role === 'admin') {
+            const perms = caller.permissions || {};
+            if (targetRole === 'member' && (perms.can_ban_users === true || perms.can_ban_users === 'true')) {
+                canKick = true;
+            }
+        }
+
+        if (!canKick) {
+            return res.status(403).json({ error: req.t('accessDenied') });
         }
 
         // Владелец не может исключить сам себя через этот эндпоинт
@@ -4067,6 +4132,401 @@ app.delete('/api/v1/chats/:chatId/members/:userId', authMiddleware, async (req, 
         res.status(200).json({ success: true });
     } catch (error) {
         logger.error('❌ Kick group member error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+
+// ============================================
+// GROUP MODERATION ENDPOINTS
+// ============================================
+
+// Helper to check moderation permissions
+async function checkModeratorPermission(chatId, userId, requiredPermission) {
+    const callerCheck = await query(
+        'SELECT role, permissions FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+        [chatId, userId]
+    );
+    if (callerCheck.rows.length === 0) return false;
+    const caller = callerCheck.rows[0];
+    if (caller.role === 'owner') return true;
+    if (caller.role === 'admin') {
+        const perms = caller.permissions || {};
+        return perms[requiredPermission] === true || perms[requiredPermission] === 'true';
+    }
+    return false;
+}
+
+// 1. GET /api/v1/chats/:chatId/bans
+app.get('/api/v1/chats/:chatId/bans', authMiddleware, async (req, res) => {
+    try {
+        const { chatId } = req.params;
+        const isMod = await checkModeratorPermission(chatId, req.user.id, 'can_ban_users');
+        if (!isMod) {
+            return res.status(403).json({ error: req.t('accessDenied') });
+        }
+
+        const result = await query(
+            `SELECT cb.id, cb.reason, cb.banned_until, cb.created_at, cb.banned_by,
+                    u.id as user_id, u.username, u.first_name, u.last_name, u.avatar_url
+             FROM chat_bans cb
+             JOIN users u ON cb.user_id = u.id
+             WHERE cb.chat_id = $1 AND (cb.banned_until IS NULL OR cb.banned_until > NOW())`,
+            [chatId]
+        );
+
+        res.json({
+            bans: result.rows.map(row => ({
+                id: row.id,
+                reason: row.reason,
+                banned_until: row.banned_until,
+                created_at: row.created_at,
+                banned_by: row.banned_by,
+                user: {
+                    id: row.user_id,
+                    username: row.username,
+                    first_name: row.first_name,
+                    last_name: row.last_name,
+                    avatar_url: row.avatar_url
+                }
+            }))
+        });
+    } catch (error) {
+        logger.error('❌ Get group bans error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 2. POST /api/v1/chats/:chatId/members/:userId/role
+app.post('/api/v1/chats/:chatId/members/:userId/role', authMiddleware, async (req, res) => {
+    try {
+        const { chatId, userId } = req.params;
+        const { newRole, permissions } = req.body;
+        const role = newRole || req.body.role;
+
+        if (!['admin', 'member'].includes(role)) {
+            return res.status(400).json({ error: 'Invalid role' });
+        }
+
+        // Only owner can promote/demote
+        const callerCheck = await query(
+            'SELECT role FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, req.user.id]
+        );
+        if (callerCheck.rows.length === 0 || callerCheck.rows[0].role !== 'owner') {
+            return res.status(403).json({ error: req.t('accessDenied') });
+        }
+
+        // Check if target is a member of the group
+        const targetCheck = await query(
+            'SELECT role FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, userId]
+        );
+        if (targetCheck.rows.length === 0) {
+            return res.status(404).json({ error: 'Target user is not a member of the group' });
+        }
+
+        const newPermissions = role === 'admin' ? (permissions || {}) : {};
+
+        await query(
+            'UPDATE chat_members SET role = $1, permissions = $2 WHERE chat_id = $3 AND user_id = $4',
+            [role, JSON.stringify(newPermissions), chatId, userId]
+        );
+
+        // WebSocket notification
+        broadcastToChat(chatId, {
+            type: 'member_role_updated',
+            chatId,
+            userId,
+            role,
+            permissions: newPermissions
+        }, null);
+
+        logger.info(`✅ Role updated for user ${userId} in chat ${chatId} to ${role}`);
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('❌ Update member role error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Helper for duration text in system messages
+function getDurationText(durationSec) {
+    if (!durationSec) return 'навсегда';
+    const hrs = durationSec / 3600;
+    if (hrs === 1) return 'на 1 час';
+    if (hrs === 24) return 'на 1 день';
+    if (hrs === 168) return 'на 1 неделю';
+    return `на ${hrs} ч.`;
+}
+
+// 3. POST /api/v1/chats/:chatId/members/:userId/mute
+app.post('/api/v1/chats/:chatId/members/:userId/mute', authMiddleware, async (req, res) => {
+    try {
+        const { chatId, userId } = req.params;
+        const { duration, reason } = req.body;
+
+        const isMod = await checkModeratorPermission(chatId, req.user.id, 'can_ban_users');
+        if (!isMod) {
+            return res.status(403).json({ error: req.t('accessDenied') });
+        }
+
+        // Get target user role and info
+        const targetCheck = await query(
+            'SELECT role FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, userId]
+        );
+        if (targetCheck.rows.length === 0) {
+            return res.status(404).json({ error: 'User is not a member of the group' });
+        }
+        if (targetCheck.rows[0].role === 'owner') {
+            return res.status(400).json({ error: 'Cannot mute group owner' });
+        }
+
+        let mutedUntil = null;
+        if (duration && duration > 0) {
+            mutedUntil = new Date(Date.now() + duration * 1000);
+        }
+
+        await query(
+            'UPDATE chat_members SET muted_until = $1 WHERE chat_id = $2 AND user_id = $3',
+            [mutedUntil, chatId, userId]
+        );
+
+        // System message
+        const botResult = await query("SELECT id FROM users WHERE username = 'craneapp_bot'");
+        const systemSenderId = botResult.rows.length ? botResult.rows[0].id : req.user.id;
+        const callerName = req.user.first_name || req.user.username || req.t('user');
+        const targetUser = await query('SELECT first_name, username FROM users WHERE id = $1', [userId]);
+        const targetName = targetUser.rows[0]?.first_name || targetUser.rows[0]?.username || req.t('user');
+        
+        const durationText = getDurationText(duration);
+        const systemMsgText = `${callerName} ограничил(а) отправку сообщений для ${targetName} ${durationText}`;
+
+        const msgId = uuidv4();
+        await query(
+            `INSERT INTO messages (id, chat_id, sender_id, content, created_at) VALUES ($1, $2, $3, $4, NOW())`,
+            [msgId, chatId, systemSenderId, systemMsgText]
+        );
+
+        const systemMessage = {
+            id: msgId,
+            chatId,
+            senderId: systemSenderId,
+            senderUsername: botResult.rows.length ? 'craneapp_bot' : req.user.username,
+            senderFirstName: botResult.rows.length ? 'CraneApp Bot' : req.user.first_name,
+            content: systemMsgText,
+            type: 'text',
+            createdAt: new Date().toISOString()
+        };
+
+        broadcastToChat(chatId, {
+            type: 'member_muted',
+            chatId,
+            userId,
+            muted_until: mutedUntil ? mutedUntil.toISOString() : null,
+            muted_by: req.user.id,
+            reason,
+            message: systemMessage
+        }, null);
+
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('❌ Mute member error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 4. POST /api/v1/chats/:chatId/members/:userId/unmute
+app.post('/api/v1/chats/:chatId/members/:userId/unmute', authMiddleware, async (req, res) => {
+    try {
+        const { chatId, userId } = req.params;
+
+        const isMod = await checkModeratorPermission(chatId, req.user.id, 'can_ban_users');
+        if (!isMod) {
+            return res.status(403).json({ error: req.t('accessDenied') });
+        }
+
+        await query(
+            'UPDATE chat_members SET muted_until = NULL WHERE chat_id = $1 AND user_id = $2',
+            [chatId, userId]
+        );
+
+        // System message
+        const botResult = await query("SELECT id FROM users WHERE username = 'craneapp_bot'");
+        const systemSenderId = botResult.rows.length ? botResult.rows[0].id : req.user.id;
+        const callerName = req.user.first_name || req.user.username || req.t('user');
+        const targetUser = await query('SELECT first_name, username FROM users WHERE id = $1', [userId]);
+        const targetName = targetUser.rows[0]?.first_name || targetUser.rows[0]?.username || req.t('user');
+        
+        const systemMsgText = `${callerName} разрешил(а) отправку сообщений для ${targetName}`;
+
+        const msgId = uuidv4();
+        await query(
+            `INSERT INTO messages (id, chat_id, sender_id, content, created_at) VALUES ($1, $2, $3, $4, NOW())`,
+            [msgId, chatId, systemSenderId, systemMsgText]
+        );
+
+        const systemMessage = {
+            id: msgId,
+            chatId,
+            senderId: systemSenderId,
+            senderUsername: botResult.rows.length ? 'craneapp_bot' : req.user.username,
+            senderFirstName: botResult.rows.length ? 'CraneApp Bot' : req.user.first_name,
+            content: systemMsgText,
+            type: 'text',
+            createdAt: new Date().toISOString()
+        };
+
+        broadcastToChat(chatId, {
+            type: 'member_unmuted',
+            chatId,
+            userId,
+            message: systemMessage
+        }, null);
+
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('❌ Unmute member error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 5. POST /api/v1/chats/:chatId/members/:userId/ban
+app.post('/api/v1/chats/:chatId/members/:userId/ban', authMiddleware, async (req, res) => {
+    try {
+        const { chatId, userId } = req.params;
+        const { duration, reason } = req.body;
+
+        const isMod = await checkModeratorPermission(chatId, req.user.id, 'can_ban_users');
+        if (!isMod) {
+            return res.status(403).json({ error: req.t('accessDenied') });
+        }
+
+        // Get target role
+        const targetCheck = await query(
+            'SELECT role FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, userId]
+        );
+        if (targetCheck.rows.length > 0 && targetCheck.rows[0].role === 'owner') {
+            return res.status(400).json({ error: 'Cannot ban group owner' });
+        }
+
+        let bannedUntil = null;
+        if (duration && duration > 0) {
+            bannedUntil = new Date(Date.now() + duration * 1000);
+        }
+
+        // Add to bans
+        await query(
+            `INSERT INTO chat_bans (chat_id, user_id, banned_by, reason, banned_until, created_at)
+             VALUES ($1, $2, $3, $4, $5, NOW())
+             ON CONFLICT (chat_id, user_id)
+             DO UPDATE SET banned_by = EXCLUDED.banned_by, reason = EXCLUDED.reason, banned_until = EXCLUDED.banned_until, created_at = NOW()`,
+            [chatId, userId, req.user.id, reason || '', bannedUntil]
+        );
+
+        // Delete from chat members
+        await query(
+            'DELETE FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, userId]
+        );
+
+        // System message
+        const botResult = await query("SELECT id FROM users WHERE username = 'craneapp_bot'");
+        const systemSenderId = botResult.rows.length ? botResult.rows[0].id : req.user.id;
+        const callerName = req.user.first_name || req.user.username || req.t('user');
+        const targetUser = await query('SELECT first_name, username FROM users WHERE id = $1', [userId]);
+        const targetName = targetUser.rows[0]?.first_name || targetUser.rows[0]?.username || req.t('user');
+        
+        const durationText = getDurationText(duration);
+        const systemMsgText = `${callerName} забанил(а) ${targetName} ${durationText}`;
+
+        const msgId = uuidv4();
+        await query(
+            `INSERT INTO messages (id, chat_id, sender_id, content, created_at) VALUES ($1, $2, $3, $4, NOW())`,
+            [msgId, chatId, systemSenderId, systemMsgText]
+        );
+
+        const systemMessage = {
+            id: msgId,
+            chatId,
+            senderId: systemSenderId,
+            senderUsername: botResult.rows.length ? 'craneapp_bot' : req.user.username,
+            senderFirstName: botResult.rows.length ? 'CraneApp Bot' : req.user.first_name,
+            content: systemMsgText,
+            type: 'text',
+            createdAt: new Date().toISOString()
+        };
+
+        broadcastToChat(chatId, {
+            type: 'member_banned',
+            chatId,
+            userId,
+            banned_until: bannedUntil ? bannedUntil.toISOString() : null,
+            banned_by: req.user.id,
+            reason,
+            message: systemMessage
+        }, null);
+
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('❌ Ban member error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 6. POST /api/v1/chats/:chatId/members/:userId/unban
+app.post('/api/v1/chats/:chatId/members/:userId/unban', authMiddleware, async (req, res) => {
+    try {
+        const { chatId, userId } = req.params;
+
+        const isMod = await checkModeratorPermission(chatId, req.user.id, 'can_ban_users');
+        if (!isMod) {
+            return res.status(403).json({ error: req.t('accessDenied') });
+        }
+
+        await query(
+            'DELETE FROM chat_bans WHERE chat_id = $1 AND user_id = $2',
+            [chatId, userId]
+        );
+
+        // System message
+        const botResult = await query("SELECT id FROM users WHERE username = 'craneapp_bot'");
+        const systemSenderId = botResult.rows.length ? botResult.rows[0].id : req.user.id;
+        const callerName = req.user.first_name || req.user.username || req.t('user');
+        const targetUser = await query('SELECT first_name, username FROM users WHERE id = $1', [userId]);
+        const targetName = targetUser.rows[0]?.first_name || targetUser.rows[0]?.username || req.t('user');
+        
+        const systemMsgText = `${callerName} разбанил(а) ${targetName}`;
+
+        const msgId = uuidv4();
+        await query(
+            `INSERT INTO messages (id, chat_id, sender_id, content, created_at) VALUES ($1, $2, $3, $4, NOW())`,
+            [msgId, chatId, systemSenderId, systemMsgText]
+        );
+
+        const systemMessage = {
+            id: msgId,
+            chatId,
+            senderId: systemSenderId,
+            senderUsername: botResult.rows.length ? 'craneapp_bot' : req.user.username,
+            senderFirstName: botResult.rows.length ? 'CraneApp Bot' : req.user.first_name,
+            content: systemMsgText,
+            type: 'text',
+            createdAt: new Date().toISOString()
+        };
+
+        broadcastToChat(chatId, {
+            type: 'member_unbanned',
+            chatId,
+            userId,
+            message: systemMessage
+        }, null);
+
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('❌ Unban member error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -4619,12 +5079,17 @@ app.post('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
         }
 
         const memberCheck = await query(
-            'SELECT 1 FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            'SELECT role, muted_until FROM chat_members WHERE chat_id = $1 AND user_id = $2',
             [chatId, req.user.id]
         );
 
         if (memberCheck.rows.length === 0) {
             return res.status(403).json({ error: req.t('accessDenied') });
+        }
+
+        const member = memberCheck.rows[0];
+        if (member.muted_until && new Date(member.muted_until) > new Date()) {
+            return res.status(403).json({ error: 'Вы временно заглушены в этой группе', mutedUntil: member.muted_until });
         }
 
         if (replyTo) {
@@ -4811,8 +5276,27 @@ app.delete('/api/v1/messages/:messageId', authMiddleware, async (req, res) => {
         
         const message = msgCheck.rows[0];
         
-        if (forEveryone === 'true' && message.sender_id !== req.user.id) {
-            return res.status(403).json({ error: 'Only sender can delete for everyone' });
+        let canDelete = message.sender_id === req.user.id;
+        if (!canDelete && forEveryone === 'true') {
+            const callerCheck = await query(
+                'SELECT role, permissions FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+                [message.chat_id, req.user.id]
+            );
+            if (callerCheck.rows.length > 0) {
+                const caller = callerCheck.rows[0];
+                if (caller.role === 'owner') {
+                    canDelete = true;
+                } else if (caller.role === 'admin') {
+                    const perms = caller.permissions || {};
+                    if (perms.can_delete_messages === true || perms.can_delete_messages === 'true') {
+                        canDelete = true;
+                    }
+                }
+            }
+        }
+        
+        if (forEveryone === 'true' && !canDelete) {
+            return res.status(403).json({ error: 'Only sender or group admin can delete for everyone' });
         }
         
         await query(`UPDATE messages SET is_deleted = TRUE, is_pinned = FALSE, pinned_at = NULL WHERE id = $1`, [messageId]);
@@ -4844,7 +5328,7 @@ app.post('/api/v1/messages/:messageId/pin', authMiddleware, async (req, res) => 
         
         // Проверяем, является ли пользователь участником чата
         const memberCheck = await query(
-            'SELECT role FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            'SELECT role, permissions FROM chat_members WHERE chat_id = $1 AND user_id = $2',
             [chatId, req.user.id]
         );
 
@@ -4852,12 +5336,23 @@ app.post('/api/v1/messages/:messageId/pin', authMiddleware, async (req, res) => 
             return res.status(403).json({ error: req.t('accessDenied') });
         }
 
-        // В группах/каналах — только owner и admin могут закреплять
+        // В группах/каналах — только owner и admin с правами могут закреплять
         const chatType = await query('SELECT type FROM chats WHERE id = $1', [chatId]);
         const isGroup = chatType.rows[0]?.type === 'group' || chatType.rows[0]?.type === 'channel';
-        const role = memberCheck.rows[0].role;
-        if (isGroup && role !== 'owner') {
-            return res.status(403).json({ error: req.t('adminsPinOnly') || 'Only the creator can pin messages' });
+        const member = memberCheck.rows[0];
+        if (isGroup) {
+            let canPin = false;
+            if (member.role === 'owner') {
+                canPin = true;
+            } else if (member.role === 'admin') {
+                const perms = member.permissions || {};
+                if (perms.can_pin_messages === true || perms.can_pin_messages === 'true') {
+                    canPin = true;
+                }
+            }
+            if (!canPin) {
+                return res.status(403).json({ error: req.t('adminsPinOnly') || 'Only the creator or admin can pin messages' });
+            }
         }
 
         // Проверяем лимит закрепленных сообщений (макс 50)
@@ -4931,7 +5426,7 @@ app.delete('/api/v1/messages/:messageId/pin', authMiddleware, async (req, res) =
         
         // Проверяем, является ли пользователь участником чата
         const memberCheck = await query(
-            'SELECT role FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            'SELECT role, permissions FROM chat_members WHERE chat_id = $1 AND user_id = $2',
             [chatId, req.user.id]
         );
 
@@ -4939,12 +5434,23 @@ app.delete('/api/v1/messages/:messageId/pin', authMiddleware, async (req, res) =
             return res.status(403).json({ error: req.t('accessDenied') });
         }
 
-        // В группах/каналах — только owner может откреплять
+        // В группах/каналах — только owner и admin с правами могут откреплять
         const chatType = await query('SELECT type FROM chats WHERE id = $1', [chatId]);
         const isGroup = chatType.rows[0]?.type === 'group' || chatType.rows[0]?.type === 'channel';
-        const role = memberCheck.rows[0].role;
-        if (isGroup && role !== 'owner') {
-            return res.status(403).json({ error: req.t('adminsPinOnly') || 'Only the creator can unpin messages' });
+        const member = memberCheck.rows[0];
+        if (isGroup) {
+            let canPin = false;
+            if (member.role === 'owner') {
+                canPin = true;
+            } else if (member.role === 'admin') {
+                const perms = member.permissions || {};
+                if (perms.can_pin_messages === true || perms.can_pin_messages === 'true') {
+                    canPin = true;
+                }
+            }
+            if (!canPin) {
+                return res.status(403).json({ error: req.t('adminsPinOnly') || 'Only the creator or admin can unpin messages' });
+            }
         }
 
         await query(

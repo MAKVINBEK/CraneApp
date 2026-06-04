@@ -127,6 +127,7 @@ async function ensureTablesExist() {
         chat_id UUID REFERENCES chats(id) ON DELETE CASCADE,
         user_id UUID REFERENCES users(id) ON DELETE CASCADE,
         role VARCHAR(20) DEFAULT 'member' CHECK (role IN ('owner', 'admin', 'member')),
+        permissions JSONB DEFAULT '{}',
         joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         muted_until TIMESTAMP,
         pinned BOOLEAN DEFAULT FALSE,
@@ -134,6 +135,30 @@ async function ensureTablesExist() {
     );
     CREATE INDEX IF NOT EXISTS idx_chat_members_chat ON chat_members(chat_id);
     CREATE INDEX IF NOT EXISTS idx_chat_members_user ON chat_members(user_id);
+
+    -- Add permissions column if it doesn't exist (for existing tables)
+    DO $$
+    BEGIN
+        IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'chat_members' AND column_name = 'permissions'
+        ) THEN
+            ALTER TABLE chat_members ADD COLUMN permissions JSONB DEFAULT '{}';
+        END IF;
+    END $$;
+
+    -- Chat bans table
+    CREATE TABLE IF NOT EXISTS chat_bans (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        chat_id UUID REFERENCES chats(id) ON DELETE CASCADE,
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        banned_by UUID REFERENCES users(id) ON DELETE SET NULL,
+        reason TEXT,
+        banned_until TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(chat_id, user_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_chat_bans_chat ON chat_bans(chat_id);
 
     -- Per-user chat settings
     CREATE TABLE IF NOT EXISTS user_chat_settings (
