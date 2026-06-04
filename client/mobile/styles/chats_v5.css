@@ -987,15 +987,17 @@ body {
 .messages-area > .scroll-bottom-btn:active { transform: translateY(0) scale(0.92); }
 .messages-area > .scroll-bottom-btn.enabled.visible:active { transform: translateY(0) scale(0.92); }
 
-.scroll-mention-btn {
+.messages-area > .scroll-bottom-btn.scroll-mention-btn {
     bottom: calc(max(14px, env(safe-area-inset-bottom, 0px)) + 52px);
 }
 
 .scroll-mention-at {
+    display: block;
     font-size: 20px;
     font-weight: 700;
     line-height: 1;
     font-family: inherit;
+    transform: translateY(-2px);
 }
 
 @media (min-width: 768px) {
@@ -1006,7 +1008,7 @@ body {
         right: 18px;
     }
 
-    .scroll-mention-btn {
+    .messages-area > .scroll-bottom-btn.scroll-mention-btn {
         bottom: calc(18px + 54px);
     }
 }
