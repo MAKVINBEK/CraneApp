@@ -5009,8 +5009,18 @@ async function buildPollPayload(messageId, userId) {
         }
     }
 
+    return formatPollPayload(
+        poll,
+        optionsResult.rows,
+        voteCounts,
+        myVotes,
+        voterIds.size,
+        votersByOption
+    );
+}
+
+function formatPollPayload(poll, options, voteCounts, myVotes, totalVoters, votersByOption) {
     const hasVoted = myVotes.length > 0;
-    const totalVoters = voterIds.size;
 
     return {
         id: poll.id,
@@ -5020,7 +5030,7 @@ async function buildPollPayload(messageId, userId) {
         hasVoted,
         myVotes,
         totalVoters,
-        options: optionsResult.rows.map(opt => ({
+        options: options.map(opt => ({
             id: opt.id,
             text: opt.text,
             voteCount: voteCounts[opt.id] || 0,
@@ -5033,9 +5043,109 @@ async function attachPollsToMessages(messages, userId) {
     const pollMessages = messages.filter(m => m.type === 'poll');
     if (!pollMessages.length) return;
 
-    await Promise.all(pollMessages.map(async (m) => {
-        m.poll = await buildPollPayload(m.id, userId);
-    }));
+    const messageIds = pollMessages.map(m => m.id);
+
+    const pollsResult = await query(
+        `SELECT id, message_id, question, is_anonymous, allow_multiple
+         FROM polls WHERE message_id = ANY($1)`,
+        [messageIds]
+    );
+    if (!pollsResult.rows.length) return;
+
+    const pollByMessageId = new Map();
+    const pollIds = [];
+    for (const row of pollsResult.rows) {
+        pollByMessageId.set(row.message_id, row);
+        pollIds.push(row.id);
+    }
+
+    const [optionsResult, votesAggResult, votersCountResult, myVotesResult] = await Promise.all([
+        query(
+            `SELECT id, poll_id, text, position FROM poll_options
+             WHERE poll_id = ANY($1) ORDER BY poll_id, position ASC`,
+            [pollIds]
+        ),
+        query(
+            `SELECT option_id, COUNT(*)::int AS vote_count
+             FROM poll_votes
+             WHERE poll_id = ANY($1)
+             GROUP BY option_id`,
+            [pollIds]
+        ),
+        query(
+            `SELECT poll_id, COUNT(DISTINCT user_id)::int AS total_voters
+             FROM poll_votes
+             WHERE poll_id = ANY($1)
+             GROUP BY poll_id`,
+            [pollIds]
+        ),
+        query(
+            `SELECT poll_id, option_id FROM poll_votes
+             WHERE poll_id = ANY($1) AND user_id = $2`,
+            [pollIds, userId]
+        )
+    ]);
+
+    const optionsByPollId = new Map();
+    for (const opt of optionsResult.rows) {
+        if (!optionsByPollId.has(opt.poll_id)) optionsByPollId.set(opt.poll_id, []);
+        optionsByPollId.get(opt.poll_id).push(opt);
+    }
+
+    const voteCounts = {};
+    for (const row of votesAggResult.rows) {
+        voteCounts[row.option_id] = row.vote_count;
+    }
+
+    const totalVotersByPoll = {};
+    for (const row of votersCountResult.rows) {
+        totalVotersByPoll[row.poll_id] = row.total_voters;
+    }
+
+    const myVotesByPoll = new Map();
+    for (const row of myVotesResult.rows) {
+        if (!myVotesByPoll.has(row.poll_id)) myVotesByPoll.set(row.poll_id, []);
+        myVotesByPoll.get(row.poll_id).push(row.option_id);
+    }
+
+    const voterPollIds = pollsResult.rows
+        .filter(p => !p.is_anonymous && (myVotesByPoll.get(p.id) || []).length > 0)
+        .map(p => p.id);
+
+    const votersByOption = {};
+    if (voterPollIds.length > 0) {
+        const votersResult = await query(
+            `SELECT pv.option_id, pv.user_id,
+                    u.first_name, u.username, u.avatar_url
+             FROM poll_votes pv
+             JOIN users u ON pv.user_id = u.id
+             WHERE pv.poll_id = ANY($1)`,
+            [voterPollIds]
+        );
+        for (const vote of votersResult.rows) {
+            if (!votersByOption[vote.option_id]) votersByOption[vote.option_id] = [];
+            votersByOption[vote.option_id].push({
+                id: vote.user_id,
+                firstName: vote.first_name || vote.username || 'User',
+                avatarUrl: vote.avatar_url || null
+            });
+        }
+    }
+
+    for (const m of pollMessages) {
+        const poll = pollByMessageId.get(m.id);
+        if (!poll) continue;
+
+        const myVotes = myVotesByPoll.get(poll.id) || [];
+        m.poll = formatPollPayload(
+            poll,
+            optionsByPollId.get(poll.id) || [],
+            voteCounts,
+            myVotes,
+            totalVotersByPoll[poll.id] || 0,
+            votersByOption
+        );
+    }
 }
 
 app.get('/api/v1/polls/:messageId', authMiddleware, async (req, res) => {

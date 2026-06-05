@@ -3721,7 +3721,7 @@ body.chat-open .tab-bar  { display: none !important; }
     z-index: 0;
     pointer-events: none;
     border-radius: inherit;
-    background: rgba(255, 0, 127, 0.2);
+    background: color-mix(in srgb, var(--rd-accent-2, #9b5cff) 22%, transparent);
     transform: scaleX(0);
     transform-origin: left center;
     will-change: transform;
@@ -3749,7 +3749,7 @@ body.chat-open .tab-bar  { display: none !important; }
     z-index: 0;
     pointer-events: none;
     border-radius: inherit;
-    background: rgba(255, 0, 127, 0.2);
+    background: color-mix(in srgb, var(--rd-accent-2, #9b5cff) 22%, transparent);
     transform: scaleX(1);
 }
 .message.outgoing .poll-option.poll-option-voted::after {
@@ -3820,7 +3820,7 @@ body.chat-open .tab-bar  { display: none !important; }
     left: 0;
     top: 0;
     bottom: 0;
-    background: rgba(255,0,127,0.1);
+    background: var(--rd-rail-active-bg, rgba(155, 130, 255, 0.12));
     border-radius: 11px 0 0 11px;
     pointer-events: none;
     transition: width 0.35s ease;
@@ -3880,8 +3880,8 @@ body.chat-open .tab-bar  { display: none !important; }
 .message.outgoing .poll-view-votes-link {
     color: rgba(255,255,255,0.95);
 }
-.poll-view-votes-link:hover {
-    background: rgba(255,0,127,0.08);
+.message.incoming .poll-view-votes-link:hover {
+    background: var(--rd-rail-active-bg, rgba(155, 130, 255, 0.1));
 }
 .message.outgoing .poll-view-votes-link:hover {
     background: rgba(255,255,255,0.12);
