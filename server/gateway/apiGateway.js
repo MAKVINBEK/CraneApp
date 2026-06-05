@@ -4344,42 +4344,27 @@ app.get('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
     }
 });
 
+app.get('/api/v1/polls/batch', authMiddleware, async (req, res) => {
+    try {
+        const idsParam = req.query.ids;
+        const messageIds = typeof idsParam === 'string' && idsParam.length
+            ? idsParam.split(',').filter(Boolean)
+            : [];
+        const polls = await loadPollsBatch(messageIds, req.user.id);
+        res.json({ polls });
+    } catch (error) {
+        logger.error('❌ Batch polls error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 app.post('/api/v1/polls/batch', authMiddleware, async (req, res) => {
     try {
         const { messageIds } = req.body || {};
         if (!Array.isArray(messageIds) || messageIds.length === 0) {
             return res.json({ polls: {} });
         }
-
-        const uniqueIds = [...new Set(messageIds.filter(Boolean))];
-        const msgResult = await query(
-            `SELECT id, chat_id, type FROM messages
-             WHERE id = ANY($1) AND is_deleted = FALSE`,
-            [uniqueIds]
-        );
-        if (!msgResult.rows.length) {
-            return res.json({ polls: {} });
-        }
-
-        const chatIds = [...new Set(msgResult.rows.map(r => r.chat_id))];
-        const memberResult = await query(
-            `SELECT chat_id FROM chat_members
-             WHERE user_id = $1 AND chat_id = ANY($2)`,
-            [req.user.id, chatIds]
-        );
-        const allowedChats = new Set(memberResult.rows.map(r => r.chat_id));
-
-        const pollMessages = msgResult.rows
-            .filter(r => r.type === 'poll' && allowedChats.has(r.chat_id))
-            .map(r => ({ id: r.id, type: 'poll' }));
-
-        await attachPollsToMessages(pollMessages, req.user.id);
-
-        const polls = {};
-        for (const m of pollMessages) {
-            if (m.poll) polls[m.id] = m.poll;
-        }
-
+        const polls = await loadPollsBatch(messageIds, req.user.id);
         res.json({ polls });
     } catch (error) {
         logger.error('❌ Batch polls error:', error);
@@ -5085,86 +5070,112 @@ function formatPollPayload(poll, options, voteCounts, myVotes, totalVoters, vote
     };
 }
 
+async function loadPollsBatch(messageIds, userId) {
+    const uniqueIds = [...new Set((messageIds || []).filter(Boolean))];
+    if (!uniqueIds.length) return {};
+
+    const msgResult = await query(
+        `SELECT id, chat_id, type FROM messages
+         WHERE id = ANY($1) AND is_deleted = FALSE`,
+        [uniqueIds]
+    );
+    if (!msgResult.rows.length) return {};
+
+    const chatIds = [...new Set(msgResult.rows.map(r => r.chat_id))];
+    const memberResult = await query(
+        `SELECT chat_id FROM chat_members
+         WHERE user_id = $1 AND chat_id = ANY($2)`,
+        [userId, chatIds]
+    );
+    const allowedChats = new Set(memberResult.rows.map(r => r.chat_id));
+
+    const pollMessages = msgResult.rows
+        .filter(r => r.type === 'poll' && allowedChats.has(r.chat_id))
+        .map(r => ({ id: r.id, type: 'poll' }));
+
+    await attachPollsToMessages(pollMessages, userId);
+
+    const polls = {};
+    for (const m of pollMessages) {
+        if (m.poll) polls[m.id] = m.poll;
+    }
+    return polls;
+}
+
 async function attachPollsToMessages(messages, userId) {
     const pollMessages = messages.filter(m => m.type === 'poll');
     if (!pollMessages.length) return;
 
     const messageIds = pollMessages.map(m => m.id);
 
-    const pollsResult = await query(
-        `SELECT id, message_id, question, is_anonymous, allow_multiple
-         FROM polls WHERE message_id = ANY($1)`,
-        [messageIds]
+    const result = await query(
+        `SELECT
+            p.message_id,
+            p.id AS poll_id,
+            p.question,
+            p.is_anonymous,
+            p.allow_multiple,
+            COALESCE(vt.total_voters, 0)::int AS total_voters,
+            COALESCE(my_votes.option_ids, ARRAY[]::uuid[]) AS my_votes,
+            COALESCE(opts.options_json, '[]'::json) AS options_json
+         FROM polls p
+         LEFT JOIN LATERAL (
+            SELECT COUNT(DISTINCT user_id)::int AS total_voters
+            FROM poll_votes pv WHERE pv.poll_id = p.id
+         ) vt ON TRUE
+         LEFT JOIN LATERAL (
+            SELECT ARRAY_AGG(pv.option_id) AS option_ids
+            FROM poll_votes pv
+            WHERE pv.poll_id = p.id AND pv.user_id = $2
+         ) my_votes ON TRUE
+         LEFT JOIN LATERAL (
+            SELECT JSON_AGG(
+                JSON_BUILD_OBJECT(
+                    'id', po.id,
+                    'text', po.text,
+                    'position', po.position,
+                    'voteCount', COALESCE(vc.cnt, 0)
+                ) ORDER BY po.position
+            ) AS options_json
+            FROM poll_options po
+            LEFT JOIN LATERAL (
+                SELECT COUNT(*)::int AS cnt FROM poll_votes pv2 WHERE pv2.option_id = po.id
+            ) vc ON TRUE
+            WHERE po.poll_id = p.id
+         ) opts ON TRUE
+         WHERE p.message_id = ANY($1::uuid[])`,
+        [messageIds, userId]
     );
-    if (!pollsResult.rows.length) return;
+    if (!result.rows.length) return;
 
-    const pollByMessageId = new Map();
-    const pollIds = [];
-    for (const row of pollsResult.rows) {
-        pollByMessageId.set(row.message_id, row);
-        pollIds.push(row.id);
-    }
-
-    const [optionsResult, votesAggResult, votersCountResult, myVotesResult] = await Promise.all([
-        query(
-            `SELECT id, poll_id, text, position FROM poll_options
-             WHERE poll_id = ANY($1) ORDER BY poll_id, position ASC`,
-            [pollIds]
-        ),
-        query(
-            `SELECT option_id, COUNT(*)::int AS vote_count
-             FROM poll_votes
-             WHERE poll_id = ANY($1)
-             GROUP BY option_id`,
-            [pollIds]
-        ),
-        query(
-            `SELECT poll_id, COUNT(DISTINCT user_id)::int AS total_voters
-             FROM poll_votes
-             WHERE poll_id = ANY($1)
-             GROUP BY poll_id`,
-            [pollIds]
-        ),
-        query(
-            `SELECT poll_id, option_id FROM poll_votes
-             WHERE poll_id = ANY($1) AND user_id = $2`,
-            [pollIds, userId]
-        )
-    ]);
-
-    const optionsByPollId = new Map();
-    for (const opt of optionsResult.rows) {
-        if (!optionsByPollId.has(opt.poll_id)) optionsByPollId.set(opt.poll_id, []);
-        optionsByPollId.get(opt.poll_id).push(opt);
-    }
-
-    const voteCounts = {};
-    for (const row of votesAggResult.rows) {
-        voteCounts[row.option_id] = row.vote_count;
-    }
-
-    const totalVotersByPoll = {};
-    for (const row of votersCountResult.rows) {
-        totalVotersByPoll[row.poll_id] = row.total_voters;
-    }
-
-    const myVotesByPoll = new Map();
-    for (const row of myVotesResult.rows) {
-        if (!myVotesByPoll.has(row.poll_id)) myVotesByPoll.set(row.poll_id, []);
-        myVotesByPoll.get(row.poll_id).push(row.option_id);
-    }
+    const pollByMessageId = new Map(result.rows.map(row => [row.message_id, row]));
 
     for (const m of pollMessages) {
-        const poll = pollByMessageId.get(m.id);
-        if (!poll) continue;
+        const row = pollByMessageId.get(m.id);
+        if (!row) continue;
 
-        const myVotes = myVotesByPoll.get(poll.id) || [];
+        const rawOptions = Array.isArray(row.options_json) ? row.options_json : [];
+        const options = rawOptions.map(opt => ({
+            id: opt.id,
+            text: opt.text,
+            position: opt.position
+        }));
+        const voteCounts = {};
+        for (const opt of rawOptions) {
+            voteCounts[opt.id] = opt.voteCount || 0;
+        }
+
         m.poll = formatPollPayload(
-            poll,
-            optionsByPollId.get(poll.id) || [],
+            {
+                id: row.poll_id,
+                question: row.question,
+                is_anonymous: row.is_anonymous,
+                allow_multiple: row.allow_multiple
+            },
+            options,
             voteCounts,
-            myVotes,
-            totalVotersByPoll[poll.id] || 0,
+            row.my_votes || [],
+            row.total_voters,
             {},
             false
         );

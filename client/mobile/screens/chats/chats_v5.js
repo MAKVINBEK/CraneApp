@@ -448,6 +448,13 @@
                 if (ok) console.log('🔐 E2E encryption ready');
             });
         }
+
+        // Прогрев маршрута опросов (первый POST на мобильном часто ждёт preflight)
+        if (token) {
+            fetch('/api/v1/polls/batch?ids=', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            }).catch(function() {});
+        }
         
         if (!token) {
             window.location.href = '../auth/login.html';
@@ -1960,6 +1967,7 @@
         }
 
         const _pollPendingSelections = {};
+        const _pollPayloadCache = new Map();
 
         function updatePollButtonVisibility() {
             const btn = document.getElementById('pollAttachBtn');
@@ -2383,37 +2391,58 @@
             return container;
         }
 
+        function rememberPollPayload(messageId, poll) {
+            if (messageId && poll) _pollPayloadCache.set(messageId, poll);
+        }
+
         async function hydratePollsInChat(chatId, messages) {
             const pollIds = messages
                 .filter(function(m) { return m.type === 'poll' && !m.poll; })
                 .map(function(m) { return m.id; });
             if (!pollIds.length) return;
 
+            const missing = pollIds.filter(function(id) { return !_pollPayloadCache.has(id); });
             try {
-                const res = await fetch('/api/v1/polls/batch', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + token
-                    },
-                    body: JSON.stringify({ messageIds: pollIds })
-                });
-                const data = await res.json();
-                if (!activeChat || activeChat.id !== chatId || !res.ok || !data.polls) return;
+                if (missing.length) {
+                    const res = await fetch('/api/v1/polls/batch?ids=' + encodeURIComponent(missing.join(',')), {
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+                    const data = await res.json();
+                    if (!res.ok || !data.polls) return;
+                    Object.keys(data.polls).forEach(function(messageId) {
+                        rememberPollPayload(messageId, data.polls[messageId]);
+                    });
+                }
+                if (!activeChat || activeChat.id !== chatId) return;
 
                 beginMessagesLayoutBatch();
                 for (let i = 0; i < pollIds.length; i++) {
                     const messageId = pollIds[i];
-                    const poll = data.polls[messageId];
+                    const poll = _pollPayloadCache.get(messageId);
                     if (!poll || !messagesData[messageId]) continue;
                     messagesData[messageId].poll = poll;
                     refreshPollElement(messageId);
                 }
-                endMessagesLayoutBatch(true);
+                endMessagesLayoutBatch(false);
             } catch (err) {
                 console.error('Hydrate polls error:', err);
-                endMessagesLayoutBatch(true);
+                endMessagesLayoutBatch(false);
             }
+        }
+
+        function decryptMessagesInBackground(chatId, messages) {
+            if (!window.E2E || !messages.length) return;
+            messages.forEach(function(m) {
+                if (m.type === 'poll' || !m.isEncrypted || !m.encryptionIv || m._isDecrypted) return;
+                window.E2E.decrypt(m.content, m.encryptionIv, chatId, token).then(function(plain) {
+                    if (!plain || plain === '🔒 [зашифровано]' || !messagesData[m.id]) return;
+                    m.content = plain;
+                    m._isDecrypted = true;
+                    const el = document.querySelector('[data-message-id="' + m.id + '"]');
+                    const textEl = el && el.querySelector('.message-text');
+                    if (textEl) textEl.innerHTML = renderFormattedText(plain);
+                }).catch(function() {});
+            });
         }
 
         function createPollElement(messageId, poll) {
@@ -6066,44 +6095,35 @@
             messagesEl.innerHTML = '';
             
             try {
-                const res = await fetch('/api/v1/messages/' + chatId + '?includePolls=0', {
+                const res = await fetch('/api/v1/messages/' + chatId, {
                     headers: { 'Authorization': 'Bearer ' + token }
                 });
                 const data = await res.json();
                 if (!activeChat || activeChat.id !== chatId) return;
                 
                 if (data.messages && data.messages.length > 0) {
-                    // Расшифровываем сообщения если E2E включён (опросы не шифруются)
-                    const decrypted = await Promise.all(data.messages.map(async m => {
-                        if (m.type !== 'poll' && m.isEncrypted && m.encryptionIv && window.E2E) {
-                            try {
-                                m.content = await window.E2E.decrypt(m.content, m.encryptionIv, activeChat.id, token);
-                            } catch (_) {}
-                        }
-                        if (m.replyToEncrypted && m.replyToIv && window.E2E) {
-                            try {
-                                m.replyToContent = await window.E2E.decrypt(m.replyToContent, m.replyToIv, activeChat.id, token);
-                            } catch (_) {}
-                        }
-                        return m;
-                    }));
-                    decrypted.forEach(function(m) {
+                    const messages = data.messages;
+                    messages.forEach(function(m) {
                         messagesData[m.id] = m;
+                        if (m.type === 'poll' && m.poll) {
+                            rememberPollPayload(m.id, m.poll);
+                        }
                     });
 
-                    const useChunkedRender = decrypted.length > 30;
+                    const useChunkedRender = messages.length > 30;
                     beginMessagesLayoutBatch();
                     if (useChunkedRender) {
-                        await renderMessagesChunked(decrypted, messagesEl, 15);
+                        await renderMessagesChunked(messages, messagesEl, 15);
                     } else {
                         const frag = document.createDocumentFragment();
-                        decrypted.forEach(function(m) {
+                        messages.forEach(function(m) {
                             frag.appendChild(createMessageElement(m));
                         });
                         messagesEl.appendChild(frag);
                     }
                     endMessagesLayoutBatch(true);
-                    hydratePollsInChat(chatId, decrypted);
+                    decryptMessagesInBackground(chatId, messages);
+                    hydratePollsInChat(chatId, messages);
                 } else {
                     messagesEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px;font-size:14px;">' + tr('noMessages', 'Нет сообщений') + '</div>';
                 }

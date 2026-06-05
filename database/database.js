@@ -39,20 +39,17 @@ const databaseUrl = normalizeConnectionString(process.env.DATABASE_URL);
 const pool = new Pool({
     connectionString: databaseUrl,
     ssl: shouldUseSsl(databaseUrl) ? { rejectUnauthorized: false } : false,
-    max: 10,
+    max: 20,
     connectionTimeoutMillis: 5000,
     idleTimeoutMillis: 30000,
 });
 
-async function query(text, params, timeoutMs = 12000) {
-    const client = await pool.connect();
-    try {
-        await client.query(`SET statement_timeout = ${timeoutMs}`);
-        const res = await client.query(text, params);
-        return res;
-    } finally {
-        client.release();
-    }
+pool.on('connect', (client) => {
+    client.query('SET statement_timeout = 12000').catch(() => {});
+});
+
+async function query(text, params) {
+    return pool.query(text, params);
 }
 
 async function initDatabase() {
