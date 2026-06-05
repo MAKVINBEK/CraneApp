@@ -482,11 +482,6 @@
             } catch (_) {
                 cameraAvailable = false;
             }
-            // Если камеры нет — скрываем кнопку кружка навсегда
-            if (!cameraAvailable) {
-                const btn = document.getElementById('videoNoteBtn');
-                if (btn) btn.style.display = 'none';
-            }
         })();
         
         let stickerPacks = [];
@@ -1964,7 +1959,523 @@
             showContactPicker();
         }
 
+        const _pollPendingSelections = {};
 
+        function updatePollButtonVisibility() {
+            const btn = document.getElementById('pollAttachBtn');
+            if (!btn) return;
+            btn.style.display = (activeChat && activeChat.type === 'group') ? 'flex' : 'none';
+        }
+
+        function _resetPollCreatorFields() {
+            const list = document.getElementById('pollOptionsList');
+            if (!list) return;
+            document.getElementById('pollQuestionInput').value = '';
+            document.getElementById('pollAnonymous').checked = false;
+            document.getElementById('pollMultiple').checked = false;
+            list.innerHTML = '';
+            addPollOptionField();
+            addPollOptionField();
+        }
+
+        function addPollOptionField(value) {
+            const list = document.getElementById('pollOptionsList');
+            if (!list || list.children.length >= 10) return;
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;gap:8px;align-items:center;';
+            row.innerHTML = '<input type="text" class="poll-option-input" maxlength="100" placeholder="' + tr('pollOptionPlaceholder', 'Вариант ответа') + '" value="' + (value ? String(value).replace(/"/g, '&quot;') : '') + '">'
+                + '<button type="button" onclick="removePollOptionField(this)" style="background:none;border:none;color:var(--text-muted);font-size:18px;cursor:pointer;padding:4px;">×</button>';
+            list.appendChild(row);
+        }
+
+        function removePollOptionField(btn) {
+            const list = document.getElementById('pollOptionsList');
+            if (!list || list.children.length <= 2) {
+                showToast('error', tr('pollMinOptions', 'Минимум 2 варианта'), '❌');
+                return;
+            }
+            btn.parentElement.remove();
+        }
+
+        function openPollCreator() {
+            if (!activeChat || activeChat.type !== 'group') {
+                showToast('error', tr('pollGroupOnly', 'Опросы доступны только в группах'), '❌');
+                return;
+            }
+            closeAttachmentPanel();
+            _resetPollCreatorFields();
+            document.getElementById('pollModal').classList.add('active');
+        }
+
+        function closePollModal() {
+            document.getElementById('pollModal').classList.remove('active');
+        }
+
+        async function sendPoll() {
+            if (!activeChat) return;
+            const question = (document.getElementById('pollQuestionInput').value || '').trim();
+            const optionInputs = Array.from(document.querySelectorAll('#pollOptionsList .poll-option-input'));
+            const options = optionInputs.map(function(inp) { return (inp.value || '').trim(); }).filter(Boolean);
+            const isAnonymous = document.getElementById('pollAnonymous').checked;
+            const allowMultiple = document.getElementById('pollMultiple').checked;
+
+            if (!question) {
+                showToast('error', tr('pollQuestionRequired', 'Введите вопрос'), '❌');
+                return;
+            }
+            if (options.length < 2) {
+                showToast('error', tr('pollMinOptions', 'Минимум 2 варианта'), '❌');
+                return;
+            }
+
+            closePollModal();
+
+            try {
+                const res = await fetch('/api/v1/messages/' + activeChat.id, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify({
+                        type: 'poll',
+                        question: question,
+                        options: options,
+                        isAnonymous: isAnonymous,
+                        allowMultiple: allowMultiple
+                    })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    showToast('error', data.error || tr('sendError', 'Ошибка отправки'), '❌');
+                    return;
+                }
+                if (data.message) {
+                    addMessage(data.message);
+                    markChatAsRead(activeChat.id, { silent: true }).catch(function() {});
+                }
+            } catch (err) {
+                console.error('Send poll error:', err);
+                showToast('error', tr('sendError', 'Ошибка отправки'), '❌');
+            }
+        }
+
+        function _escapePollText(text) {
+            return String(text || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function _getPollPendingSelection(messageId) {
+            if (!_pollPendingSelections[messageId]) {
+                _pollPendingSelections[messageId] = new Set();
+            }
+            return _pollPendingSelections[messageId];
+        }
+
+        const POLL_VOTE_ANIM_MS = 750;
+        const _pollVoteAnimLocks = {};
+
+        function _clearPollVoteActivateClasses(messageId) {
+            const msgEl = document.querySelector('[data-message-id="' + messageId + '"]');
+            if (!msgEl) return;
+            msgEl.querySelectorAll('.poll-option.poll-option-vote-activate').forEach(function(optEl) {
+                optEl.classList.remove('poll-option-vote-activate');
+            });
+        }
+
+        function _queuePollUpdateDuringVoteAnimation(messageId, poll) {
+            const lock = _pollVoteAnimLocks[messageId];
+            if (!lock) return false;
+            lock.pendingPoll = poll;
+            if (messagesData[messageId]) {
+                messagesData[messageId].poll = poll;
+            }
+            return true;
+        }
+
+        function _finishPollVoteAnimation(messageId) {
+            const lock = _pollVoteAnimLocks[messageId];
+            if (!lock) return;
+            delete _pollVoteAnimLocks[messageId];
+
+            if (lock.pendingPoll) {
+                refreshPollElement(messageId);
+            }
+
+            lock.resolve();
+        }
+
+        function _cancelPollVoteAnimation(messageId) {
+            const lock = _pollVoteAnimLocks[messageId];
+            if (!lock) return;
+            delete _pollVoteAnimLocks[messageId];
+            _clearPollVoteActivateClasses(messageId);
+            lock.resolve();
+        }
+
+        function beginPollVoteAnimation(messageId, optionIds) {
+            return new Promise(function(resolve) {
+                if (!optionIds || !optionIds.length) {
+                    resolve();
+                    return;
+                }
+
+                _pollVoteAnimLocks[messageId] = { resolve: resolve, pendingPoll: null };
+
+                const msgEl = document.querySelector('[data-message-id="' + messageId + '"]');
+                const selectedIds = new Set(optionIds.map(String));
+                let activated = 0;
+
+                if (msgEl) {
+                    msgEl.querySelectorAll('.poll-option').forEach(function(optEl) {
+                        if (!selectedIds.has(String(optEl.dataset.optionId))) return;
+                        optEl.classList.remove('poll-option-vote-activate');
+                        void optEl.offsetWidth;
+                        optEl.classList.add('poll-option-vote-activate');
+                        activated++;
+                    });
+                }
+
+                if (!activated) {
+                    delete _pollVoteAnimLocks[messageId];
+                    resolve();
+                    return;
+                }
+
+                setTimeout(function() {
+                    _finishPollVoteAnimation(messageId);
+                }, POLL_VOTE_ANIM_MS);
+            });
+        }
+
+        async function submitPollVote(messageId, optionIds) {
+            if (!optionIds || !optionIds.length) return;
+
+            const animationPromise = beginPollVoteAnimation(messageId, optionIds);
+
+            try {
+                const res = await fetch('/api/v1/polls/' + messageId + '/vote', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify({ optionIds: optionIds })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    _cancelPollVoteAnimation(messageId);
+                    showToast('error', data.error || tr('pollVoteError', 'Не удалось проголосовать'), '❌');
+                    return;
+                }
+                delete _pollPendingSelections[messageId];
+                if (data.poll) {
+                    _queuePollUpdateDuringVoteAnimation(messageId, data.poll);
+                }
+                await animationPromise;
+                if (data.poll) {
+                    const msgEl = document.querySelector('[data-message-id="' + messageId + '"]');
+                    if (msgEl && msgEl.querySelector('.poll-option:not(:disabled)')) {
+                        updatePollInMessage(messageId, data.poll);
+                    }
+                }
+            } catch (err) {
+                console.error('Poll vote error:', err);
+                _cancelPollVoteAnimation(messageId);
+                showToast('error', tr('pollVoteError', 'Не удалось проголосовать'), '❌');
+            }
+        }
+
+        function handlePollOptionClick(messageId, optionId, poll) {
+            if (poll.hasVoted) return;
+            if (poll.allowMultiple) {
+                const selected = _getPollPendingSelection(messageId);
+                if (selected.has(optionId)) selected.delete(optionId);
+                else selected.add(optionId);
+                refreshPollElement(messageId);
+                return;
+            }
+            submitPollVote(messageId, [optionId]);
+        }
+
+        function submitPendingPollVotes(messageId) {
+            const selected = Array.from(_getPollPendingSelection(messageId));
+            if (!selected.length) {
+                showToast('error', tr('pollSelectOption', 'Выберите вариант'), '❌');
+                return;
+            }
+            submitPollVote(messageId, selected);
+        }
+
+        function updatePollInMessage(messageId, poll) {
+            if (_queuePollUpdateDuringVoteAnimation(messageId, poll)) return;
+            if (messagesData[messageId]) {
+                messagesData[messageId].poll = poll;
+            }
+            refreshPollElement(messageId);
+        }
+
+        async function refreshPollFromServer(messageId) {
+            if (!messagesData[messageId] || messagesData[messageId].type !== 'poll') return;
+            try {
+                const res = await fetch('/api/v1/polls/' + messageId, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const data = await res.json();
+                if (res.ok && data.poll) {
+                    updatePollInMessage(messageId, data.poll);
+                }
+            } catch (err) {
+                console.error('Refresh poll error:', err);
+            }
+        }
+
+        function refreshPollElement(messageId) {
+            const msgEl = document.querySelector('[data-message-id="' + messageId + '"]');
+            if (!msgEl) return;
+            const msg = messagesData[messageId];
+            if (!msg || !msg.poll) return;
+            const existing = msgEl.querySelector('.poll-message');
+            if (existing) {
+                const replacement = createPollElement(messageId, msg.poll);
+                existing.replaceWith(replacement);
+            }
+        }
+
+        function _createPollCheckbox(checked) {
+            const box = document.createElement('span');
+            box.className = 'poll-checkbox' + (checked ? ' checked' : '');
+            box.setAttribute('aria-hidden', 'true');
+            return box;
+        }
+
+        function openPollVotersModal(messageId) {
+            const msg = messagesData[messageId];
+            const poll = msg && msg.poll;
+            if (!poll || poll.isAnonymous) return;
+
+            const modal = document.getElementById('pollVotersModal');
+            const body = document.getElementById('pollVotersModalBody');
+            if (!modal || !body) return;
+
+            body.innerHTML = '';
+            poll.options.forEach(function(opt) {
+                const block = document.createElement('div');
+                block.className = 'poll-voters-option-block';
+
+                const title = document.createElement('div');
+                title.className = 'poll-voters-option-title';
+                title.textContent = opt.text;
+                block.appendChild(title);
+
+                const voters = opt.voters || [];
+                const meta = document.createElement('div');
+                meta.className = 'poll-voters-option-meta';
+                meta.textContent = tc('pollVotes', voters.length, voters.length + ' ' + tr('pollVotes', 'голосов'));
+                block.appendChild(meta);
+
+                if (voters.length) {
+                    const list = document.createElement('div');
+                    list.className = 'poll-voters-list';
+                    voters.forEach(function(v) {
+                        const person = document.createElement('div');
+                        person.className = 'poll-voters-person';
+                        const av = document.createElement('div');
+                        av.className = 'poll-voters-avatar';
+                        if (v.avatarUrl) {
+                            av.innerHTML = '<img src="' + v.avatarUrl + '" alt="">';
+                        } else {
+                            av.textContent = (v.firstName || '?')[0].toUpperCase();
+                        }
+                        const name = document.createElement('div');
+                        name.className = 'poll-voters-name';
+                        name.textContent = v.firstName || tr('user', 'Пользователь');
+                        person.appendChild(av);
+                        person.appendChild(name);
+                        list.appendChild(person);
+                    });
+                    block.appendChild(list);
+                } else {
+                    const empty = document.createElement('div');
+                    empty.className = 'poll-voters-empty';
+                    empty.textContent = tr('pollVotesOptionEmpty', 'Пока никто не голосовал');
+                    block.appendChild(empty);
+                }
+
+                body.appendChild(block);
+            });
+
+            modal.classList.add('active');
+            if (window.i18n && window.i18n.translatePage) window.i18n.translatePage(modal);
+        }
+
+        function closePollVotersModal() {
+            const modal = document.getElementById('pollVotersModal');
+            if (modal) modal.classList.remove('active');
+        }
+
+        async function retractPollVote(messageId) {
+            try {
+                const res = await fetch('/api/v1/polls/' + messageId + '/vote', {
+                    method: 'DELETE',
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    showToast('error', data.error || tr('pollRetractError', 'Не удалось отменить голос'), '❌');
+                    return;
+                }
+                delete _pollPendingSelections[messageId];
+                if (data.poll) {
+                    updatePollInMessage(messageId, data.poll);
+                }
+                showToast('success', tr('pollVoteRetracted', 'Голос отменён'), '✓');
+            } catch (err) {
+                console.error('Poll retract error:', err);
+                showToast('error', tr('pollRetractError', 'Не удалось отменить голос'), '❌');
+            }
+        }
+
+        function createPollElement(messageId, poll) {
+            const container = document.createElement('div');
+            container.className = 'poll-message';
+
+            const header = document.createElement('div');
+            header.className = 'poll-header';
+
+            const headerText = document.createElement('div');
+            headerText.className = 'poll-header-text';
+
+            const question = document.createElement('div');
+            question.className = 'poll-question';
+            question.textContent = poll.question;
+            headerText.appendChild(question);
+
+            header.appendChild(headerText);
+
+            if (poll.hasVoted) {
+                const retractBtn = document.createElement('button');
+                retractBtn.type = 'button';
+                retractBtn.className = 'poll-retract-btn';
+                retractBtn.setAttribute('data-tip', tr('pollRetractVote', 'Отменить голос'));
+                retractBtn.setAttribute('aria-label', tr('pollRetractVote', 'Отменить голос'));
+                retractBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10h13a4 4 0 0 1 0 8H7"/><path d="M7 6L3 10l4 4"/></svg>';
+                retractBtn.onclick = function(e) {
+                    e.stopPropagation();
+                    retractPollVote(messageId);
+                };
+                header.appendChild(retractBtn);
+            }
+
+            container.appendChild(header);
+
+            const optionsWrap = document.createElement('div');
+            optionsWrap.className = 'poll-options';
+            const showResults = !!poll.hasVoted;
+            const totalVoters = poll.totalVoters || 0;
+            const pending = _getPollPendingSelection(messageId);
+            const showCheckboxes = poll.allowMultiple && !showResults;
+
+            const myVoteIds = new Set((poll.myVotes || []).map(String));
+
+            poll.options.forEach(function(opt) {
+                const isSelected = showResults
+                    ? myVoteIds.has(String(opt.id))
+                    : pending.has(opt.id);
+
+                const optBtn = document.createElement('button');
+                optBtn.type = 'button';
+                optBtn.className = 'poll-option' + (isSelected ? ' selected' : '');
+                if (showResults && isSelected) {
+                    optBtn.classList.add('poll-option-voted');
+                }
+                optBtn.dataset.optionId = opt.id;
+                optBtn.disabled = showResults;
+
+                if (showResults) {
+                    const pct = totalVoters > 0 ? Math.round((opt.voteCount / totalVoters) * 100) : 0;
+                    const bar = document.createElement('div');
+                    bar.className = 'poll-option-bar';
+                    bar.style.width = pct + '%';
+                    optBtn.appendChild(bar);
+
+                    if (poll.allowMultiple) {
+                        optBtn.appendChild(_createPollCheckbox(isSelected));
+                    }
+
+                    const row = document.createElement('div');
+                    row.className = 'poll-option-row';
+                    const text = document.createElement('span');
+                    text.className = 'poll-option-text';
+                    text.textContent = opt.text;
+                    const pctEl = document.createElement('span');
+                    pctEl.className = 'poll-option-pct';
+                    pctEl.textContent = pct + '%';
+                    row.appendChild(text);
+                    row.appendChild(pctEl);
+                    optBtn.appendChild(row);
+                } else {
+                    if (showCheckboxes) {
+                        optBtn.appendChild(_createPollCheckbox(isSelected));
+                    }
+                    const label = document.createElement('span');
+                    label.className = 'poll-option-label';
+                    label.textContent = opt.text;
+                    optBtn.appendChild(label);
+                    optBtn.onclick = function(e) {
+                        e.stopPropagation();
+                        handlePollOptionClick(messageId, opt.id, poll);
+                    };
+                }
+
+                optionsWrap.appendChild(optBtn);
+            });
+            container.appendChild(optionsWrap);
+
+            if (!showResults && poll.allowMultiple) {
+                const voteActions = document.createElement('div');
+                voteActions.className = 'poll-vote-actions';
+                const voteBtn = document.createElement('button');
+                voteBtn.type = 'button';
+                voteBtn.className = 'poll-vote-btn';
+                voteBtn.textContent = tr('pollVote', 'Проголосовать');
+                voteBtn.onclick = function(e) {
+                    e.stopPropagation();
+                    submitPendingPollVotes(messageId);
+                };
+                voteActions.appendChild(voteBtn);
+                container.appendChild(voteActions);
+            }
+
+            if (showResults) {
+                const footer = document.createElement('div');
+                footer.className = 'poll-footer';
+
+                if (!poll.isAnonymous && totalVoters > 0) {
+                    const viewBtn = document.createElement('button');
+                    viewBtn.type = 'button';
+                    viewBtn.className = 'poll-view-votes-link';
+                    viewBtn.textContent = tr('pollViewVotes', 'Посмотреть голоса ({count})', { count: totalVoters });
+                    viewBtn.onclick = function(e) {
+                        e.stopPropagation();
+                        openPollVotersModal(messageId);
+                    };
+                    footer.appendChild(viewBtn);
+                } else {
+                    const summary = document.createElement('span');
+                    summary.className = 'poll-votes-summary';
+                    summary.textContent = tc('pollVotes', totalVoters, totalVoters + ' ' + tr('pollVotes', 'голосов'));
+                    footer.appendChild(summary);
+                }
+
+                container.appendChild(footer);
+            }
+
+            return container;
+        }
 
         function openGallery() {
             closeAttachmentPanel();
@@ -1999,6 +2510,10 @@
         
         document.getElementById('createPackModal').addEventListener('click', function(e) { 
             if (e.target.id === 'createPackModal') closeCreatePackModal(); 
+        });
+
+        document.getElementById('pollModal').addEventListener('click', function(e) {
+            if (e.target.id === 'pollModal') closePollModal();
         });
 
         // ============================================
@@ -2331,7 +2846,9 @@
             if (m.pending) div.classList.add('pending');
             if (isBotMessage) div.classList.add('bot-message');
             if (m.isPinned) div.classList.add('pinned');
-            if (!m.type || m.type === 'text') {
+            if (m.type === 'poll') {
+                div.classList.add('poll-msg', 'text-msg');
+            } else if (!m.type || m.type === 'text') {
                 div.classList.add('text-msg');
             } else {
                 div.classList.add('media-msg');
@@ -2525,6 +3042,8 @@
             } else if (m.type === 'video_note') {
                 const noteEl = createVideoNoteElement(m.mediaUrl, m.voiceDuration || 0);
                 div.appendChild(noteEl);
+            } else if (m.type === 'poll' && m.poll) {
+                div.appendChild(createPollElement(m.id, m.poll));
             } else if (m.type === 'call') {
                 let callData = {};
                 try { callData = JSON.parse(m.content || '{}'); } catch(_) {}
@@ -3609,6 +4128,12 @@
                     }
                     break;
                     
+                case 'poll_updated':
+                    if (activeChat && data.chatId === activeChat.id && data.messageId) {
+                        refreshPollFromServer(data.messageId);
+                    }
+                    break;
+
                 case 'message_edited':
                     updateMessage(data.messageId, data.content);
                     break;
@@ -3856,6 +4381,8 @@
                 if (message.mediaUrl) {
                     icon = message.mediaUrl;
                 }
+            } else if (message.type === 'poll') {
+                body = '📊 ' + (message.poll?.question || message.content || tr('pollMessage', 'Опрос'));
             } else if (message.type === 'gif') {
                 body = '🎬 GIF';
                 if (message.mediaUrl) {
@@ -4558,6 +5085,7 @@
             if (c.lastMessageType === 'sticker') return '🎨 ' + tr('stickerMessage', 'Стикер');
             if (c.lastMessageType === 'video_note') return '⭕ ' + tr('videoNoteMessage', 'Кружок');
             if (c.lastMessageType === 'call' || c.type === 'call') return formatCallLastMessage(c, text);
+            if (c.lastMessageType === 'poll') return '📊 ' + tr('pollMessage', 'Опрос');
             return text || '';
         }
 
@@ -5215,6 +5743,7 @@
             // Показываем кнопку участников только для групп
             const membersBtn = document.getElementById('membersBtn');
             if (membersBtn) membersBtn.style.display = activeChat.type === 'group' ? 'flex' : 'none';
+            updatePollButtonVisibility();
             setScrollBottomButtonEnabled(true);
             setMentionJumpButtonEnabled(activeChat.type === 'group');
 
@@ -7065,7 +7594,6 @@
         // ============================================
         // VIDEO NOTES (кружки)
         // ============================================
-        let videoNoteMode = false; // false = голосовое, true = кружок
         let videoNoteRecorder = null;
         let videoNoteChunks = [];
         let videoNoteTimer = null;
@@ -7073,53 +7601,6 @@
         let videoNoteStream = null;
         let videoNoteRecording = false;
         const VIDEO_NOTE_MAX = 60; // 1 минута
-
-        function switchToVideoNote() {
-            if (!cameraAvailable) return; // нет камеры — не переключаем
-            videoNoteMode = true;
-            document.getElementById('videoNoteBtn').style.display = 'flex';
-        }
-
-        let videoNoteHoldTimer = null;
-        const VIDEO_NOTE_HOLD_DELAY = 300; // мс до начала записи
-
-        function videoNoteMouseDown(e) {
-            e.preventDefault();
-            videoNoteHoldTimer = setTimeout(() => {
-                videoNoteHoldTimer = null;
-                startVideoNoteHold(e);
-            }, VIDEO_NOTE_HOLD_DELAY);
-        }
-
-        function videoNoteMouseUp(e) {
-            if (videoNoteHoldTimer) {
-                // Короткий клик — скрываем кнопку видео
-                clearTimeout(videoNoteHoldTimer);
-                videoNoteHoldTimer = null;
-                document.getElementById('videoNoteBtn').style.display = 'none';
-            } else {
-                // Удержание — останавливаем запись
-                stopVideoNoteHold(e);
-            }
-        }
-
-        function videoNoteTouchStart(e) {
-            e.preventDefault();
-            videoNoteHoldTimer = setTimeout(() => {
-                videoNoteHoldTimer = null;
-                startVideoNoteHold(e);
-            }, VIDEO_NOTE_HOLD_DELAY);
-        }
-
-        function videoNoteTouchEnd(e) {
-            if (videoNoteHoldTimer) {
-                clearTimeout(videoNoteHoldTimer);
-                videoNoteHoldTimer = null;
-                document.getElementById('videoNoteBtn').style.display = 'none';
-            } else {
-                stopVideoNoteHold(e);
-            }
-        }
 
         // Обновляем переключение кнопок при вводе текста
         function getInputText() {
@@ -7129,16 +7610,6 @@
         function updateSendButton() {
             const hasText = getInputText().length > 0;
             document.getElementById('sendBtn').style.display = hasText ? 'flex' : 'none';
-            if (hasText) {
-                document.getElementById('videoNoteBtn').style.display = 'none';
-            } else {
-                if (videoNoteMode && cameraAvailable) {
-                    document.getElementById('videoNoteBtn').style.display = 'flex';
-                } else {
-                    document.getElementById('videoNoteBtn').style.display = 'none';
-                    if (!cameraAvailable) videoNoteMode = false;
-                }
-            }
         }
         const _origInputHandler = document.getElementById('msgInput').oninput;
         document.getElementById('msgInput').addEventListener('input', updateSendButton);
@@ -7706,7 +8177,6 @@
                     const attachmentPanel = document.getElementById('attachmentPanel');
                     const msgInput = document.getElementById('msgInput');
                     const sendBtn = document.getElementById('sendBtn');
-                    const videoNoteBtn = document.getElementById('videoNoteBtn');
                     const emojiPicker = document.getElementById('emojiPicker');
                     const mutePanelText = document.getElementById('mutePanelText');
 
@@ -7715,7 +8185,6 @@
                         inputLeftBtns.style.display = 'none';
                         msgInput.style.display = 'none';
                         sendBtn.style.display = 'none';
-                        videoNoteBtn.style.display = 'none';
 
                         if (userData.mutedUntil) {
                             const mutedUntil = new Date(userData.mutedUntil);
@@ -7743,7 +8212,6 @@
                         inputLeftBtns.style.display = 'flex';
                         msgInput.style.display = 'block';
                         sendBtn.style.display = 'none';
-                        videoNoteBtn.style.display = 'none';
                     }
                 }
             } catch (err) {

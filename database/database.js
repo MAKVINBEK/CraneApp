@@ -153,7 +153,7 @@ async function ensureTablesExist() {
         chat_id UUID REFERENCES chats(id) ON DELETE CASCADE,
         sender_id UUID REFERENCES users(id),
         content TEXT,
-        type VARCHAR(20) DEFAULT 'text' CHECK (type IN ('text', 'image', 'video', 'audio', 'voice', 'file', 'sticker', 'gif', 'contact', 'location', 'call')),
+        type VARCHAR(20) DEFAULT 'text' CHECK (type IN ('text', 'image', 'video', 'audio', 'voice', 'file', 'sticker', 'gif', 'contact', 'location', 'call', 'poll')),
         media_url TEXT,
         media_type VARCHAR(50),
         reply_to_message_id UUID,
