@@ -3721,10 +3721,9 @@ body.chat-open .tab-bar  { display: none !important; }
     z-index: 0;
     pointer-events: none;
     border-radius: inherit;
-    background: color-mix(in srgb, var(--rd-accent-2, #9b5cff) 22%, transparent);
+    background: rgba(155, 92, 255, 0.22);
     transform: scaleX(0);
     transform-origin: left center;
-    will-change: transform;
     animation: pollVoteColorSweep 0.75s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 .message.outgoing .poll-option.poll-option-vote-activate::after {
@@ -3749,7 +3748,7 @@ body.chat-open .tab-bar  { display: none !important; }
     z-index: 0;
     pointer-events: none;
     border-radius: inherit;
-    background: color-mix(in srgb, var(--rd-accent-2, #9b5cff) 22%, transparent);
+    background: rgba(155, 92, 255, 0.22);
     transform: scaleX(1);
 }
 .message.outgoing .poll-option.poll-option-voted::after {

@@ -2252,14 +2252,9 @@
             return box;
         }
 
-        function openPollVotersModal(messageId) {
-            const msg = messagesData[messageId];
-            const poll = msg && msg.poll;
-            if (!poll || poll.isAnonymous) return;
-
-            const modal = document.getElementById('pollVotersModal');
+        function _renderPollVotersModalBody(poll) {
             const body = document.getElementById('pollVotersModalBody');
-            if (!modal || !body) return;
+            if (!body) return;
 
             body.innerHTML = '';
             poll.options.forEach(function(opt) {
@@ -2307,7 +2302,43 @@
 
                 body.appendChild(block);
             });
+        }
 
+        async function openPollVotersModal(messageId) {
+            const msg = messagesData[messageId];
+            const poll = msg && msg.poll;
+            if (!poll || poll.isAnonymous) return;
+
+            const modal = document.getElementById('pollVotersModal');
+            const body = document.getElementById('pollVotersModalBody');
+            if (!modal || !body) return;
+
+            const hasVoters = poll.options.some(function(opt) {
+                return Array.isArray(opt.voters) && opt.voters.length > 0;
+            });
+            if (!hasVoters) {
+                body.innerHTML = '<div class="poll-voters-loading" style="padding:24px;text-align:center;color:var(--text-muted);font-size:14px;">' + tr('loading', 'Загрузка...') + '</div>';
+                modal.classList.add('active');
+                try {
+                    const res = await fetch('/api/v1/polls/' + messageId, {
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.poll) {
+                        messagesData[messageId].poll = data.poll;
+                        _renderPollVotersModalBody(data.poll);
+                    } else {
+                        body.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:14px;">' + tr('pollVoteError', 'Не удалось загрузить') + '</div>';
+                    }
+                } catch (err) {
+                    console.error('Load poll voters error:', err);
+                    body.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:14px;">' + tr('pollVoteError', 'Не удалось загрузить') + '</div>';
+                }
+                if (window.i18n && window.i18n.translatePage) window.i18n.translatePage(modal);
+                return;
+            }
+
+            _renderPollVotersModalBody(poll);
             modal.classList.add('active');
             if (window.i18n && window.i18n.translatePage) window.i18n.translatePage(modal);
         }
@@ -5924,6 +5955,30 @@
             cancelReply();
         }
 
+        function renderMessagesChunked(messages, container, chunkSize) {
+            return new Promise(function(resolve) {
+                let index = 0;
+                function appendChunk() {
+                    if (!activeChat || index >= messages.length) {
+                        resolve();
+                        return;
+                    }
+                    const frag = document.createDocumentFragment();
+                    const end = Math.min(index + chunkSize, messages.length);
+                    for (; index < end; index++) {
+                        frag.appendChild(createMessageElement(messages[index]));
+                    }
+                    container.appendChild(frag);
+                    if (index < messages.length) {
+                        requestAnimationFrame(appendChunk);
+                    } else {
+                        resolve();
+                    }
+                }
+                requestAnimationFrame(appendChunk);
+            });
+        }
+
         // ============================================
         // MESSAGES
         // ============================================
@@ -5942,14 +5997,13 @@
                 if (!activeChat || activeChat.id !== chatId) return;
                 
                 if (data.messages && data.messages.length > 0) {
-                    // Расшифровываем сообщения если E2E включён
+                    // Расшифровываем сообщения если E2E включён (опросы не шифруются)
                     const decrypted = await Promise.all(data.messages.map(async m => {
-                        if (m.isEncrypted && m.encryptionIv && window.E2E) {
+                        if (m.type !== 'poll' && m.isEncrypted && m.encryptionIv && window.E2E) {
                             try {
                                 m.content = await window.E2E.decrypt(m.content, m.encryptionIv, activeChat.id, token);
                             } catch (_) {}
                         }
-                        // Расшифровываем replyToContent
                         if (m.replyToEncrypted && m.replyToIv && window.E2E) {
                             try {
                                 m.replyToContent = await window.E2E.decrypt(m.replyToContent, m.replyToIv, activeChat.id, token);
@@ -5960,9 +6014,18 @@
                     decrypted.forEach(function(m) {
                         messagesData[m.id] = m;
                     });
-                    decrypted.forEach(function(m) {
-                        messagesEl.appendChild(createMessageElement(m));
-                    });
+
+                    const pollCount = decrypted.filter(function(m) { return m.type === 'poll'; }).length;
+                    const useChunkedRender = decrypted.length > 20 || pollCount > 2;
+                    if (useChunkedRender) {
+                        await renderMessagesChunked(decrypted, messagesEl, 12);
+                    } else {
+                        const frag = document.createDocumentFragment();
+                        decrypted.forEach(function(m) {
+                            frag.appendChild(createMessageElement(m));
+                        });
+                        messagesEl.appendChild(frag);
+                    }
                 } else {
                     messagesEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px;font-size:14px;">' + tr('noMessages', 'Нет сообщений') + '</div>';
                 }

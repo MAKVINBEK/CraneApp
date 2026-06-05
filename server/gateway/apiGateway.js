@@ -5019,8 +5019,9 @@ async function buildPollPayload(messageId, userId) {
     );
 }
 
-function formatPollPayload(poll, options, voteCounts, myVotes, totalVoters, votersByOption) {
+function formatPollPayload(poll, options, voteCounts, myVotes, totalVoters, votersByOption, includeVoters = true) {
     const hasVoted = myVotes.length > 0;
+    const attachVoters = includeVoters && hasVoted && !poll.is_anonymous;
 
     return {
         id: poll.id,
@@ -5034,7 +5035,7 @@ function formatPollPayload(poll, options, voteCounts, myVotes, totalVoters, vote
             id: opt.id,
             text: opt.text,
             voteCount: voteCounts[opt.id] || 0,
-            voters: hasVoted && !poll.is_anonymous ? (votersByOption[opt.id] || []) : []
+            voters: attachVoters ? (votersByOption[opt.id] || []) : []
         }))
     };
 }
@@ -5108,30 +5109,6 @@ async function attachPollsToMessages(messages, userId) {
         myVotesByPoll.get(row.poll_id).push(row.option_id);
     }
 
-    const voterPollIds = pollsResult.rows
-        .filter(p => !p.is_anonymous && (myVotesByPoll.get(p.id) || []).length > 0)
-        .map(p => p.id);
-
-    const votersByOption = {};
-    if (voterPollIds.length > 0) {
-        const votersResult = await query(
-            `SELECT pv.option_id, pv.user_id,
-                    u.first_name, u.username, u.avatar_url
-             FROM poll_votes pv
-             JOIN users u ON pv.user_id = u.id
-             WHERE pv.poll_id = ANY($1)`,
-            [voterPollIds]
-        );
-        for (const vote of votersResult.rows) {
-            if (!votersByOption[vote.option_id]) votersByOption[vote.option_id] = [];
-            votersByOption[vote.option_id].push({
-                id: vote.user_id,
-                firstName: vote.first_name || vote.username || 'User',
-                avatarUrl: vote.avatar_url || null
-            });
-        }
-    }
-
     for (const m of pollMessages) {
         const poll = pollByMessageId.get(m.id);
         if (!poll) continue;
@@ -5143,7 +5120,8 @@ async function attachPollsToMessages(messages, userId) {
             voteCounts,
             myVotes,
             totalVotersByPoll[poll.id] || 0,
-            votersByOption
+            {},
+            false
         );
     }
 }
