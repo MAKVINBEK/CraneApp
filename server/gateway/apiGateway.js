@@ -252,6 +252,10 @@ app.use('/client/mobile/screens/calls/call.html', (req, res, next) => {
     next();
 });
 
+app.get('/join/:code', (req, res) => {
+    res.redirect(`/client/mobile/screens/chats/chats.html?join=${req.params.code}`);
+});
+
 app.use('/client', express.static(path.join(__dirname, '../../client')));
 app.use('/uploads', express.static(uploadsDir, {
     setHeaders: (res, filePath) => {
@@ -3699,6 +3703,7 @@ app.get('/api/v1/chats', authMiddleware, async (req, res) => {
             ownerId: c.owner_id,
             avatarUrl: c.avatar_url,
             role: c.role,
+            isSupergroup: c.is_supergroup || false,
             mutedUntil: c.user_muted_until || null,
             isPinned: c.user_is_pinned || false,
             isArchived: c.user_is_archived || false,
@@ -3726,6 +3731,9 @@ app.get('/api/v1/chats', authMiddleware, async (req, res) => {
 app.get('/api/v1/chats/:chatId/members', authMiddleware, async (req, res) => {
     try {
         const { chatId } = req.params;
+        const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+        const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+        const search = req.query.search ? req.query.search.trim() : '';
         
         const memberCheck = await query(
             'SELECT 1 FROM chat_members WHERE chat_id = $1 AND user_id = $2',
@@ -3736,16 +3744,35 @@ app.get('/api/v1/chats/:chatId/members', authMiddleware, async (req, res) => {
             return res.status(403).json({ error: req.t('accessDenied') });
         }
 
-        const result = await query(
-            `SELECT u.id, u.username, u.first_name, u.last_name, u.avatar_url, u.last_seen, u.badge, u.badges, u.is_bot, u.is_premium, u.is_blocked, cm.role, cm.permissions, cm.muted_until,
+        const chatRes = await query('SELECT is_supergroup FROM chats WHERE id = $1', [chatId]);
+        const isSuper = chatRes.rows[0]?.is_supergroup || false;
+
+        let queryStr = `
+            SELECT u.id, u.username, u.first_name, u.last_name, u.avatar_url, u.last_seen, u.badge, u.badges, u.is_bot, u.is_premium, u.is_blocked, cm.role, cm.permissions, cm.muted_until,
                     CASE
                         WHEN u.last_seen > NOW() - INTERVAL '5 minutes' THEN TRUE
                         ELSE FALSE
                     END as is_online
              FROM chat_members cm JOIN users u ON cm.user_id = u.id
-             WHERE cm.chat_id = $1`,
-            [chatId]
-        );
+             WHERE cm.chat_id = $1
+        `;
+        const params = [chatId];
+        let paramIdx = 2;
+
+        if (search) {
+            queryStr += ` AND (u.username ILIKE $${paramIdx} OR u.first_name ILIKE $${paramIdx} OR u.last_name ILIKE $${paramIdx})`;
+            params.push(`%${search}%`);
+            paramIdx++;
+        }
+
+        if (isSuper || req.query.limit || req.query.offset) {
+            queryStr += ` ORDER BY cm.joined_at ASC LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`;
+            params.push(limit, offset);
+        } else {
+            queryStr += ` ORDER BY cm.joined_at ASC`;
+        }
+
+        const result = await query(queryStr, params);
         
         res.json({
             members: result.rows.map(m => ({
@@ -3832,6 +3859,7 @@ app.post('/api/v1/chats/create-group', authMiddleware, async (req, res) => {
             `INSERT INTO chat_members (chat_id, user_id, role, joined_at) VALUES ${memberValues}`,
             [chatId, ...allMembers]
         );
+        await checkAndUpgradeToSupergroup(chatId);
 
         // Системное сообщение
         const botResult = await query("SELECT id FROM users WHERE username = 'craneapp_bot'");
@@ -3981,6 +4009,7 @@ app.post('/api/v1/chats/:chatId/members', authMiddleware, async (req, res) => {
             "INSERT INTO chat_members (chat_id, user_id, role, joined_at) VALUES ($1, $2, 'member', NOW())",
             [chatId, userId]
         );
+        await checkAndUpgradeToSupergroup(chatId);
 
         // Создаем системное сообщение
         const botResult = await query("SELECT id FROM users WHERE username = 'craneapp_bot'");
@@ -4531,6 +4560,482 @@ app.post('/api/v1/chats/:chatId/members/:userId/unban', authMiddleware, async (r
     }
 });
 
+// ============================================
+// CHAT INVITE LINKS & JOIN REQUESTS
+// ============================================
+
+// 1. Создать пригласительную ссылку (Owner или Admin)
+app.post('/api/v1/chats/:chatId/invite-links', authMiddleware, async (req, res) => {
+    try {
+        const { chatId } = req.params;
+        const { expireAt, usageLimit, requestToJoin = false } = req.body;
+
+        // Проверяем, что чат существует и является группой
+        const chatCheck = await query('SELECT type FROM chats WHERE id = $1', [chatId]);
+        if (chatCheck.rows.length === 0) {
+            return res.status(404).json({ error: 'Чат не найден' });
+        }
+        if (chatCheck.rows[0].type !== 'group') {
+            return res.status(400).json({ error: 'Чат не является группой' });
+        }
+
+        // Проверяем роль пользователя в чате
+        const callerCheck = await query(
+            'SELECT role, permissions FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, req.user.id]
+        );
+        if (callerCheck.rows.length === 0) {
+            return res.status(403).json({ error: 'Доступ запрещен' });
+        }
+
+        const caller = callerCheck.rows[0];
+        if (caller.role !== 'owner' && caller.role !== 'admin') {
+            return res.status(403).json({ error: 'Только администраторы могут создавать ссылки' });
+        }
+
+        if (caller.role === 'admin') {
+            const perms = caller.permissions || {};
+            if (perms.can_invite_users === false || perms.can_invite_users === 'false') {
+                return res.status(403).json({ error: 'У вас нет прав на приглашение пользователей' });
+            }
+        }
+
+        // Генерируем уникальный код ссылки
+        const linkCode = uuidv4().replace(/-/g, '').substring(0, 12);
+
+        const newLink = await query(
+            `INSERT INTO chat_invite_links (chat_id, creator_id, link_code, expire_at, usage_limit, request_to_join)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             RETURNING *`,
+            [chatId, req.user.id, linkCode, expireAt || null, usageLimit || null, requestToJoin]
+        );
+
+        logger.info(`✅ Invite link created: ${linkCode} for chat ${chatId}`);
+        res.status(201).json({ inviteLink: newLink.rows[0] });
+    } catch (error) {
+        logger.error('❌ Create invite link error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 2. Получить список активных пригласительных ссылок (Owner или Admin)
+app.get('/api/v1/chats/:chatId/invite-links', authMiddleware, async (req, res) => {
+    try {
+        const { chatId } = req.params;
+
+        // Проверяем роль пользователя в чате
+        const callerCheck = await query(
+            'SELECT role FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, req.user.id]
+        );
+        if (callerCheck.rows.length === 0) {
+            return res.status(403).json({ error: 'Доступ запрещен' });
+        }
+
+        const caller = callerCheck.rows[0];
+        if (caller.role !== 'owner' && caller.role !== 'admin') {
+            return res.status(403).json({ error: 'Только администраторы могут просматривать ссылки' });
+        }
+
+        const linksResult = await query(
+            `SELECT cil.*, u.first_name as creator_first_name, u.username as creator_username
+             FROM chat_invite_links cil
+             LEFT JOIN users u ON cil.creator_id = u.id
+             WHERE cil.chat_id = $1 AND cil.is_revoked = FALSE
+             ORDER BY cil.created_at DESC`,
+            [chatId]
+        );
+
+        res.json({ inviteLinks: linksResult.rows });
+    } catch (error) {
+        logger.error('❌ Get invite links error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 2.1. Отозвать пригласительную ссылку (Owner или Admin)
+app.delete('/api/v1/chats/:chatId/invite-links/:linkId', authMiddleware, async (req, res) => {
+    try {
+        const { chatId, linkId } = req.params;
+
+        // Проверяем роль пользователя в чате
+        const callerCheck = await query(
+            'SELECT role FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, req.user.id]
+        );
+        if (callerCheck.rows.length === 0) {
+            return res.status(403).json({ error: 'Доступ запрещен' });
+        }
+
+        const caller = callerCheck.rows[0];
+        if (caller.role !== 'owner' && caller.role !== 'admin') {
+            return res.status(403).json({ error: 'Только администраторы могут отзывать ссылки' });
+        }
+
+        const updateResult = await query(
+            `UPDATE chat_invite_links SET is_revoked = TRUE 
+             WHERE id = $1 AND chat_id = $2`,
+            [linkId, chatId]
+        );
+
+        if (updateResult.rowCount === 0) {
+            return res.status(404).json({ error: 'Ссылка не найдена' });
+        }
+
+        logger.info(`✅ Invite link ${linkId} revoked by user ${req.user.id}`);
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('❌ Revoke invite link error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 3. Вступить в чат по пригласительной ссылке
+app.post('/api/v1/chats/join-link/:code', authMiddleware, async (req, res) => {
+    try {
+        const { code } = req.params;
+
+        // Находим ссылку
+        const linkResult = await query(
+            `SELECT * FROM chat_invite_links 
+             WHERE link_code = $1 AND is_revoked = FALSE`,
+            [code]
+        );
+        if (linkResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Неверная или недействительная ссылка' });
+        }
+
+        const link = linkResult.rows[0];
+
+        // Проверяем срок действия
+        if (link.expire_at && new Date(link.expire_at) < new Date()) {
+            return res.status(400).json({ error: 'Срок действия ссылки истек' });
+        }
+
+        // Проверяем лимит использования
+        if (link.usage_limit && link.usage_count >= link.usage_limit) {
+            return res.status(400).json({ error: 'Ссылка превысила лимит использований' });
+        }
+
+        const chatId = link.chat_id;
+
+        // Проверяем чат
+        const chatCheck = await query('SELECT type, title, join_approval_required FROM chats WHERE id = $1', [chatId]);
+        if (chatCheck.rows.length === 0) {
+            return res.status(404).json({ error: 'Чат не найден' });
+        }
+        const chat = chatCheck.rows[0];
+
+        // Проверяем, не забанен ли пользователь
+        const banCheck = await query(
+            'SELECT 1 FROM chat_bans WHERE chat_id = $1 AND user_id = $2 AND (banned_until IS NULL OR banned_until > NOW())',
+            [chatId, req.user.id]
+        );
+        if (banCheck.rows.length > 0) {
+            return res.status(400).json({ error: 'Вы забанены в этой группе' });
+        }
+
+        // Проверяем, состоит ли пользователь уже в чате
+        const memberCheck = await query(
+            'SELECT role FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, req.user.id]
+        );
+        if (memberCheck.rows.length > 0) {
+            return res.status(200).json({ chatId, alreadyMember: true });
+        }
+
+        // Если требуется одобрение заявки
+        if (link.request_to_join || chat.join_approval_required) {
+            // Проверяем, нет ли уже ожидающей заявки
+            const requestCheck = await query(
+                `SELECT id, status FROM chat_join_requests 
+                 WHERE chat_id = $1 AND user_id = $2 AND status = 'pending'`,
+                [chatId, req.user.id]
+            );
+            if (requestCheck.rows.length > 0) {
+                return res.status(200).json({ chatId, joined: false, approvalRequired: true, status: 'pending' });
+            }
+
+            const requestId = uuidv4();
+            await query(
+                `INSERT INTO chat_join_requests (id, chat_id, user_id, status)
+                 VALUES ($1, $2, $3, 'pending')`,
+                [requestId, chatId, req.user.id]
+            );
+
+            logger.info(`📝 Join request submitted for user ${req.user.id} in chat ${chatId}`);
+            return res.status(200).json({ chatId, joined: false, approvalRequired: true, status: 'pending' });
+        }
+
+        // Прямое вступление в группу
+        await query(
+            "INSERT INTO chat_members (chat_id, user_id, role, joined_at) VALUES ($1, $2, 'member', NOW())",
+            [chatId, req.user.id]
+        );
+        await checkAndUpgradeToSupergroup(chatId);
+
+        // Обновляем счетчик использований ссылки
+        await query(
+            'UPDATE chat_invite_links SET usage_count = usage_count + 1 WHERE id = $1',
+            [link.id]
+        );
+
+        // Создаем системное сообщение
+        const botResult = await query("SELECT id FROM users WHERE username = 'craneapp_bot'");
+        const systemSenderId = botResult.rows.length ? botResult.rows[0].id : req.user.id;
+        const userName = req.user.first_name || req.user.username || 'Пользователь';
+        const systemMsgText = `${userName} вступил(а) в группу по пригласительной ссылке`;
+
+        const msgId = uuidv4();
+        await query(
+            `INSERT INTO messages (id, chat_id, sender_id, content, created_at) VALUES ($1, $2, $3, $4, NOW())`,
+            [msgId, chatId, systemSenderId, systemMsgText]
+        );
+
+        const systemMessage = {
+            id: msgId,
+            chatId,
+            senderId: systemSenderId,
+            senderUsername: botResult.rows.length ? 'craneapp_bot' : req.user.username,
+            senderFirstName: botResult.rows.length ? 'CraneApp Bot' : req.user.first_name,
+            content: systemMsgText,
+            type: 'text',
+            createdAt: new Date().toISOString()
+        };
+
+        // Отсылаем и событие добавления в чат, и новое сообщение
+        await broadcastToChat(chatId, {
+            type: 'member_joined',
+            chatId,
+            userId: req.user.id,
+            joinedUser: {
+                id: req.user.id,
+                username: req.user.username,
+                firstName: req.user.first_name
+            },
+            message: systemMessage
+        }, null);
+
+        // Также отправляем new_chat добавляемому пользователю
+        await broadcastToChat(chatId, {
+            type: 'new_chat',
+            chatId,
+            chatType: 'group',
+            title: chat.title
+        }, null);
+
+        logger.info(`✅ User ${req.user.id} joined chat ${chatId} via invite link`);
+        res.status(200).json({ chatId, joined: true });
+    } catch (error) {
+        logger.error('❌ Join link error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 4. Получить список заявок на вступление (Owner или Admin)
+app.get('/api/v1/chats/:chatId/join-requests', authMiddleware, async (req, res) => {
+    try {
+        const { chatId } = req.params;
+
+        // Проверяем роль пользователя в чате
+        const callerCheck = await query(
+            'SELECT role FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, req.user.id]
+        );
+        if (callerCheck.rows.length === 0) {
+            return res.status(403).json({ error: 'Доступ запрещен' });
+        }
+
+        const caller = callerCheck.rows[0];
+        if (caller.role !== 'owner' && caller.role !== 'admin') {
+            return res.status(403).json({ error: 'Только администраторы могут просматривать заявки' });
+        }
+
+        const requestsResult = await query(
+            `SELECT jr.*, u.first_name, u.last_name, u.username, u.avatar_url 
+             FROM chat_join_requests jr
+             JOIN users u ON jr.user_id = u.id
+             WHERE jr.chat_id = $1 AND jr.status = 'pending'
+             ORDER BY jr.created_at DESC`,
+            [chatId]
+        );
+
+        res.json({ joinRequests: requestsResult.rows });
+    } catch (error) {
+        logger.error('❌ Get join requests error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 5. Одобрить заявку на вступление (Owner или Admin)
+app.post('/api/v1/chats/:chatId/join-requests/:requestId/approve', authMiddleware, async (req, res) => {
+    try {
+        const { chatId, requestId } = req.params;
+
+        // Проверяем роль пользователя в чате
+        const callerCheck = await query(
+            'SELECT role FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, req.user.id]
+        );
+        if (callerCheck.rows.length === 0) {
+            return res.status(403).json({ error: 'Доступ запрещен' });
+        }
+
+        const caller = callerCheck.rows[0];
+        if (caller.role !== 'owner' && caller.role !== 'admin') {
+            return res.status(403).json({ error: 'Только администраторы могут одобрять заявки' });
+        }
+
+        // Получаем заявку
+        const requestCheck = await query(
+            'SELECT * FROM chat_join_requests WHERE id = $1 AND chat_id = $2 AND status = \'pending\'',
+            [requestId, chatId]
+        );
+        if (requestCheck.rows.length === 0) {
+            return res.status(404).json({ error: 'Заявка не найдена или уже обработана' });
+        }
+
+        const targetUserId = requestCheck.rows[0].user_id;
+
+        // Проверяем, не забанен ли пользователь
+        const banCheck = await query(
+            'SELECT 1 FROM chat_bans WHERE chat_id = $1 AND user_id = $2 AND (banned_until IS NULL OR banned_until > NOW())',
+            [chatId, targetUserId]
+        );
+        if (banCheck.rows.length > 0) {
+            return res.status(400).json({ error: 'Пользователь забанен в этой группе' });
+        }
+
+        // Проверяем, не состоит ли уже в чате
+        const memberCheck = await query(
+            'SELECT 1 FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, targetUserId]
+        );
+        if (memberCheck.rows.length > 0) {
+            // Обновляем статус заявки как approved
+            await query(
+                `UPDATE chat_join_requests 
+                 SET status = 'approved', decided_by = $1, decided_at = NOW() 
+                 WHERE id = $2`,
+                [req.user.id, requestId]
+            );
+            return res.json({ success: true, message: 'Пользователь уже является участником' });
+        }
+
+        // Обновляем заявку
+        await query(
+            `UPDATE chat_join_requests 
+             SET status = 'approved', decided_by = $1, decided_at = NOW() 
+             WHERE id = $2`,
+            [req.user.id, requestId]
+        );
+
+        // Добавляем в chat_members
+        await query(
+            "INSERT INTO chat_members (chat_id, user_id, role, joined_at) VALUES ($1, $2, 'member', NOW())",
+            [chatId, targetUserId]
+        );
+        await checkAndUpgradeToSupergroup(chatId);
+
+        // Получаем инфо о целевом пользователе
+        const targetUserCheck = await query('SELECT id, first_name, username FROM users WHERE id = $1', [targetUserId]);
+        const targetUser = targetUserCheck.rows[0];
+
+        // Получаем инфо о чате
+        const chatCheck = await query('SELECT title FROM chats WHERE id = $1', [chatId]);
+        const chatTitle = chatCheck.rows[0]?.title || 'Группа';
+
+        // Создаем системное сообщение
+        const botResult = await query("SELECT id FROM users WHERE username = 'craneapp_bot'");
+        const systemSenderId = botResult.rows.length ? botResult.rows[0].id : req.user.id;
+        const userName = targetUser.first_name || targetUser.username || 'Пользователь';
+        const systemMsgText = `${userName} принят(а) в группу по заявке`;
+
+        const msgId = uuidv4();
+        await query(
+            `INSERT INTO messages (id, chat_id, sender_id, content, created_at) VALUES ($1, $2, $3, $4, NOW())`,
+            [msgId, chatId, systemSenderId, systemMsgText]
+        );
+
+        const systemMessage = {
+            id: msgId,
+            chatId,
+            senderId: systemSenderId,
+            senderUsername: botResult.rows.length ? 'craneapp_bot' : req.user.username,
+            senderFirstName: botResult.rows.length ? 'CraneApp Bot' : req.user.first_name,
+            content: systemMsgText,
+            type: 'text',
+            createdAt: new Date().toISOString()
+        };
+
+        // Отсылаем и событие добавления в чат, и новое сообщение
+        await broadcastToChat(chatId, {
+            type: 'member_joined',
+            chatId,
+            userId: targetUserId,
+            joinedUser: {
+                id: targetUserId,
+                username: targetUser.username,
+                firstName: targetUser.first_name
+            },
+            message: systemMessage
+        }, null);
+
+        // Также отправляем new_chat добавляемому пользователю
+        await broadcastToChat(chatId, {
+            type: 'new_chat',
+            chatId,
+            chatType: 'group',
+            title: chatTitle
+        }, null);
+
+        logger.info(`✅ Join request ${requestId} approved by ${req.user.id}. User ${targetUserId} added.`);
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('❌ Approve join request error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 6. Отклонить заявку на вступление (Owner или Admin)
+app.post('/api/v1/chats/:chatId/join-requests/:requestId/decline', authMiddleware, async (req, res) => {
+    try {
+        const { chatId, requestId } = req.params;
+
+        // Проверяем роль пользователя в чате
+        const callerCheck = await query(
+            'SELECT role FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, req.user.id]
+        );
+        if (callerCheck.rows.length === 0) {
+            return res.status(403).json({ error: 'Доступ запрещен' });
+        }
+
+        const caller = callerCheck.rows[0];
+        if (caller.role !== 'owner' && caller.role !== 'admin') {
+            return res.status(403).json({ error: 'Только администраторы могут отклонять заявки' });
+        }
+
+        // Обновляем заявку
+        const updateResult = await query(
+            `UPDATE chat_join_requests 
+             SET status = 'declined', decided_by = $1, decided_at = NOW() 
+             WHERE id = $2 AND chat_id = $3 AND status = 'pending'`,
+            [req.user.id, requestId, chatId]
+        );
+
+        if (updateResult.rowCount === 0) {
+            return res.status(404).json({ error: 'Заявка не найдена или уже обработана' });
+        }
+
+        logger.info(`✅ Join request ${requestId} declined by ${req.user.id}`);
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('❌ Decline join request error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // ИСПРАВЛЕННЫЙ РОУТ СОЗДАНИЯ ЧАТА
 app.post('/api/v1/chats/create', authMiddleware, async (req, res) => {
     const client = await pool.connect();
@@ -4628,6 +5133,235 @@ app.post('/api/v1/chats/create', authMiddleware, async (req, res) => {
         res.status(500).json({ error: error.message });
     } finally {
         client.release();
+    }
+});
+
+// ============================================
+// TOPICS & SETTINGS ROUTES
+// ============================================
+
+// 1. GET /api/v1/chats/:chatId/topics - Получить список тем
+app.get('/api/v1/chats/:chatId/topics', authMiddleware, async (req, res) => {
+    try {
+        const { chatId } = req.params;
+        const memberCheck = await query(
+            'SELECT role FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, req.user.id]
+        );
+        if (memberCheck.rows.length === 0) {
+            return res.status(403).json({ error: 'Доступ запрещен' });
+        }
+
+        const topicsRes = await query(
+            `SELECT ct.*, 
+                    (SELECT COUNT(*) FROM messages m WHERE m.chat_id = ct.chat_id AND m.topic_id = ct.id AND m.is_deleted = FALSE) as message_count
+             FROM chat_topics ct
+             WHERE ct.chat_id = $1 AND ct.is_hidden = FALSE
+             ORDER BY ct.created_at ASC`,
+            [chatId]
+        );
+
+        const topics = topicsRes.rows;
+        const chatRes = await query('SELECT is_supergroup FROM chats WHERE id = $1', [chatId]);
+        const chat = chatRes.rows[0];
+        
+        if (chat && chat.is_supergroup) {
+            const generalCountRes = await query(
+                `SELECT COUNT(*) as count FROM messages 
+                 WHERE chat_id = $1 AND topic_id IS NULL AND is_deleted = FALSE`,
+                [chatId]
+            );
+            
+            topics.unshift({
+                id: null,
+                chat_id: chatId,
+                title: 'Общий',
+                icon_color: '#9d00ff',
+                icon_emoji: '💬',
+                creator_id: null,
+                is_closed: false,
+                is_hidden: false,
+                created_at: new Date(0).toISOString(),
+                message_count: parseInt(generalCountRes.rows[0].count)
+            });
+        }
+
+        res.json({ topics });
+    } catch (error) {
+        logger.error('❌ Get topics error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 2. POST /api/v1/chats/:chatId/topics - Создать тему
+app.post('/api/v1/chats/:chatId/topics', authMiddleware, async (req, res) => {
+    try {
+        const { chatId } = req.params;
+        const { title, iconColor, iconEmoji } = req.body;
+
+        if (!title || title.trim().length === 0) {
+            return res.status(400).json({ error: 'Название темы не может быть пустым' });
+        }
+
+        const memberCheck = await query(
+            'SELECT role FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, req.user.id]
+        );
+        if (memberCheck.rows.length === 0) {
+            return res.status(403).json({ error: 'Доступ запрещен' });
+        }
+
+        const chatRes = await query('SELECT is_supergroup FROM chats WHERE id = $1', [chatId]);
+        const chat = chatRes.rows[0];
+        if (!chat || !chat.is_supergroup) {
+            return res.status(400).json({ error: 'Темы поддерживаются только в супергруппах' });
+        }
+
+        const topicId = uuidv4();
+        const newTopic = await query(
+            `INSERT INTO chat_topics (id, chat_id, title, icon_color, icon_emoji, creator_id)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             RETURNING *`,
+            [topicId, chatId, title.trim().substring(0, 100), iconColor || '#00E676', iconEmoji || '📁', req.user.id]
+        );
+
+        logger.info(`✅ Topic created: ${title} in chat ${chatId}`);
+        res.status(201).json({ topic: newTopic.rows[0] });
+    } catch (error) {
+        logger.error('❌ Create topic error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 3. POST /api/v1/chats/:chatId/topics/:topicId/close - Закрыть тему
+app.post('/api/v1/chats/:chatId/topics/:topicId/close', authMiddleware, async (req, res) => {
+    try {
+        const { chatId, topicId } = req.params;
+        const memberCheck = await query(
+            'SELECT role FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, req.user.id]
+        );
+        if (memberCheck.rows.length === 0) {
+            return res.status(403).json({ error: 'Доступ запрещен' });
+        }
+        const myRole = memberCheck.rows[0].role;
+        if (myRole !== 'owner' && myRole !== 'admin') {
+            return res.status(403).json({ error: 'Недостаточно прав для закрытия темы' });
+        }
+
+        await query(
+            'UPDATE chat_topics SET is_closed = TRUE WHERE id = $1 AND chat_id = $2',
+            [topicId, chatId]
+        );
+
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('❌ Close topic error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 4. POST /api/v1/chats/:chatId/topics/:topicId/reopen - Открыть тему заново
+app.post('/api/v1/chats/:chatId/topics/:topicId/reopen', authMiddleware, async (req, res) => {
+    try {
+        const { chatId, topicId } = req.params;
+        const memberCheck = await query(
+            'SELECT role FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, req.user.id]
+        );
+        if (memberCheck.rows.length === 0) {
+            return res.status(403).json({ error: 'Доступ запрещен' });
+        }
+        const myRole = memberCheck.rows[0].role;
+        if (myRole !== 'owner' && myRole !== 'admin') {
+            return res.status(403).json({ error: 'Недостаточно прав для открытия темы' });
+        }
+
+        await query(
+            'UPDATE chat_topics SET is_closed = FALSE WHERE id = $1 AND chat_id = $2',
+            [topicId, chatId]
+        );
+
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('❌ Reopen topic error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 5. DELETE /api/v1/chats/:chatId/topics/:topicId - Удалить тему
+app.delete('/api/v1/chats/:chatId/topics/:topicId', authMiddleware, async (req, res) => {
+    try {
+        const { chatId, topicId } = req.params;
+        const memberCheck = await query(
+            'SELECT role FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, req.user.id]
+        );
+        if (memberCheck.rows.length === 0) {
+            return res.status(403).json({ error: 'Доступ запрещен' });
+        }
+        const myRole = memberCheck.rows[0].role;
+        if (myRole !== 'owner' && myRole !== 'admin') {
+            return res.status(403).json({ error: 'Недостаточно прав для удаления темы' });
+        }
+
+        await query('DELETE FROM messages WHERE chat_id = $1 AND topic_id = $2', [chatId, topicId]);
+        await query('DELETE FROM chat_topics WHERE id = $1 AND chat_id = $2', [topicId, chatId]);
+
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('❌ Delete topic error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 6. POST /api/v1/chats/:chatId/settings - Изменить настройки группы (супергруппа, медленный режим, одобрение)
+app.post('/api/v1/chats/:chatId/settings', authMiddleware, async (req, res) => {
+    try {
+        const { chatId } = req.params;
+        const { isSupergroup, joinApprovalRequired, slowModeSeconds } = req.body;
+
+        const memberCheck = await query(
+            'SELECT role FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, req.user.id]
+        );
+        if (memberCheck.rows.length === 0) {
+            return res.status(403).json({ error: 'Доступ запрещен' });
+        }
+        const myRole = memberCheck.rows[0].role;
+        if (myRole !== 'owner' && myRole !== 'admin') {
+            return res.status(403).json({ error: 'Недостаточно прав для изменения настроек' });
+        }
+
+        const updates = [];
+        const values = [];
+        let paramIdx = 1;
+
+        if (isSupergroup !== undefined) {
+            updates.push(`is_supergroup = $${paramIdx++}`);
+            values.push(isSupergroup);
+        }
+        if (joinApprovalRequired !== undefined) {
+            updates.push(`join_approval_required = $${paramIdx++}`);
+            values.push(joinApprovalRequired);
+        }
+        if (slowModeSeconds !== undefined) {
+            updates.push(`slow_mode_seconds = $${paramIdx++}`);
+            values.push(slowModeSeconds);
+        }
+
+        if (updates.length > 0) {
+            values.push(chatId);
+            await query(
+                `UPDATE chats SET ${updates.join(', ')} WHERE id = $${paramIdx}`,
+                values
+            );
+        }
+
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('❌ Update settings error:', error);
+        res.status(500).json({ error: error.message });
     }
 });
 
@@ -4878,6 +5612,7 @@ app.get('/api/v1/chats/archived', authMiddleware, async (req, res) => {
             title: c.title,
             ownerId: c.owner_id,
             avatarUrl: c.avatar_url,
+            isSupergroup: c.is_supergroup || false,
             isPinned: false,
             isArchived: true,
             lastMessage: c.last_message_content || '',
@@ -4907,7 +5642,7 @@ app.get('/api/v1/chats/archived', authMiddleware, async (req, res) => {
 app.get('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
     try {
         const { chatId } = req.params;
-        const { limit = 50, offset = 0 } = req.query;
+        const { limit = 50, offset = 0, topicId } = req.query;
 
         const memberCheck = await query(
             'SELECT 1 FROM chat_members WHERE chat_id = $1 AND user_id = $2',
@@ -4918,8 +5653,10 @@ app.get('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
             return res.status(403).json({ error: req.t('accessDenied') });
         }
 
-        const result = await query(
-            `SELECT 
+        const chatRes = await query('SELECT is_supergroup FROM chats WHERE id = $1', [chatId]);
+        const isSupergroup = chatRes.rows[0]?.is_supergroup || false;
+
+        let sql = `SELECT 
                 m.id, m.chat_id, m.sender_id, m.content, m.content_plain, m.type, m.reply_to_message_id,
                 m.is_edited, m.edited_at, m.is_pinned, m.created_at,
                 m.media_url, m.media_type, m.voice_duration,
@@ -4951,11 +5688,26 @@ app.get('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
                 FROM message_mentions mm
                 WHERE mm.message_id = m.id
              ) mentions ON TRUE
-             WHERE m.chat_id = $1 AND m.is_deleted = FALSE
-             ORDER BY m.created_at DESC
-             LIMIT $2 OFFSET $3`,
-            [chatId, parseInt(limit), parseInt(offset)]
-        );
+             WHERE m.chat_id = $1 AND m.is_deleted = FALSE`;
+
+        const params = [chatId];
+        let paramIdx = 2;
+
+        if (topicId) {
+            if (topicId === 'null') {
+                sql += ` AND m.topic_id IS NULL`;
+            } else {
+                sql += ` AND m.topic_id = $${paramIdx++}`;
+                params.push(topicId);
+            }
+        } else if (isSupergroup) {
+            sql += ` AND m.topic_id IS NULL`;
+        }
+
+        sql += ` ORDER BY m.created_at DESC LIMIT $${paramIdx++} OFFSET $${paramIdx++}`;
+        params.push(parseInt(limit), parseInt(offset));
+
+        const result = await query(sql, params);
 
         const messages = result.rows.reverse().map(m => ({
             id: m.id, 
@@ -5065,7 +5817,7 @@ async function resolveGroupMentions(chatId, plainText, senderId) {
 app.post('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
     try {
         const { chatId } = req.params;
-        const { content, type = 'text', replyTo, mediaUrl, mediaType, forwardFrom, voiceDuration } = req.body;
+        const { content, type = 'text', replyTo, mediaUrl, mediaType, forwardFrom, voiceDuration, topicId } = req.body;
         const { iv: encryptionIv, isEncrypted, contentPlain } = req.body;
 
         logger.info('📨 POST /api/v1/messages:', { chatId, type, mediaUrl: mediaUrl?.substring(0, 50), mediaType });
@@ -5092,6 +5844,49 @@ app.post('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
             return res.status(403).json({ error: 'Вы временно заглушены в этой группе', mutedUntil: member.muted_until });
         }
 
+        const chatInfo = await query('SELECT type, title, slow_mode_seconds FROM chats WHERE id = $1', [chatId]);
+        if (chatInfo.rows.length === 0) {
+            return res.status(404).json({ error: 'Чат не найден' });
+        }
+        const chatType = chatInfo.rows[0].type || 'private';
+        const chatTitle = chatInfo.rows[0].title || null;
+        const slowModeSeconds = chatInfo.rows[0].slow_mode_seconds || 0;
+
+        if (chatType === 'group' && slowModeSeconds > 0 && member.role === 'member') {
+            const lastMessageResult = await query(
+                `SELECT created_at FROM messages 
+                 WHERE chat_id = $1 AND sender_id = $2 AND is_deleted = FALSE 
+                 ORDER BY created_at DESC LIMIT 1`,
+                [chatId, req.user.id]
+            );
+            if (lastMessageResult.rows.length > 0) {
+                const lastMessageTime = new Date(lastMessageResult.rows[0].created_at);
+                const secondsSinceLastMessage = Math.floor((Date.now() - lastMessageTime.getTime()) / 1000);
+                if (secondsSinceLastMessage < slowModeSeconds) {
+                    const retryAfter = slowModeSeconds - secondsSinceLastMessage;
+                    return res.status(429).json({ 
+                        error: `Медленный режим активен. Подождите еще ${retryAfter} сек.`, 
+                        retryAfter 
+                    });
+                }
+            }
+        }
+
+        let dbTopicId = null;
+        if (topicId && topicId !== 'null') {
+            dbTopicId = topicId;
+            const topicCheck = await query(
+                'SELECT is_closed FROM chat_topics WHERE id = $1 AND chat_id = $2',
+                [dbTopicId, chatId]
+            );
+            if (topicCheck.rows.length === 0) {
+                return res.status(404).json({ error: 'Тема не найдена' });
+            }
+            if (topicCheck.rows[0].is_closed) {
+                return res.status(403).json({ error: 'Эта тема закрыта для отправки сообщений' });
+            }
+        }
+
         if (replyTo) {
             const replyCheck = await query(
                 'SELECT id FROM messages WHERE id = $1 AND chat_id = $2 AND is_deleted = FALSE',
@@ -5115,9 +5910,9 @@ app.post('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
         const plainText = isEncrypted ? (contentPlain || '') : messageContent;
 
         await query(
-            `INSERT INTO messages (id, chat_id, sender_id, content, content_plain, type, reply_to_message_id, media_url, media_type, voice_duration, is_encrypted, encryption_iv, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())`,
-            [messageId, chatId, req.user.id, messageContent, plainText, type, replyTo || null, mediaUrl || null, mediaType || null, voiceDuration || 0, isEncrypted || false, encryptionIv || null]
+            `INSERT INTO messages (id, chat_id, sender_id, content, content_plain, type, reply_to_message_id, topic_id, media_url, media_type, voice_duration, is_encrypted, encryption_iv, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())`,
+            [messageId, chatId, req.user.id, messageContent, plainText, type, replyTo || null, dbTopicId, mediaUrl || null, mediaType || null, voiceDuration || 0, isEncrypted || false, encryptionIv || null]
         );
 
         logger.info('✅ Message inserted:', messageId);
@@ -5142,9 +5937,7 @@ app.post('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
             }
         }
 
-        const chatInfo = await query('SELECT type, title FROM chats WHERE id = $1', [chatId]);
-        const chatType = chatInfo.rows[0]?.type || 'private';
-        const chatTitle = chatInfo.rows[0]?.title || null;
+
 
         const mentionedUserIds = chatType === 'group'
             ? await resolveGroupMentions(chatId, plainText, req.user.id)
@@ -5182,7 +5975,8 @@ app.post('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
             isEncrypted: isEncrypted || false,
             encryptionIv: encryptionIv || null,
             mentionedUserIds,
-            createdAt: new Date()
+            createdAt: new Date(),
+            topicId: dbTopicId
         };
 
         broadcastToChat(chatId, { type: 'new_message', chatId, chatType, chatTitle, message }, req.user.id);
@@ -6155,6 +6949,58 @@ async function broadcastToChat(chatId, message, excludeUserId) {
         logger.warn('⚠️ broadcastToChat error:', e.message);
     }
 }
+
+async function checkAndUpgradeToSupergroup(chatId) {
+    try {
+        const countRes = await query('SELECT COUNT(*) FROM chat_members WHERE chat_id = $1', [chatId]);
+        const memberCount = parseInt(countRes.rows[0].count, 10);
+        if (memberCount >= 200) {
+            const chatRes = await query('SELECT type, is_supergroup FROM chats WHERE id = $1', [chatId]);
+            if (chatRes.rows.length > 0) {
+                const chat = chatRes.rows[0];
+                if (chat.type === 'group' && !chat.is_supergroup) {
+                    await query('UPDATE chats SET is_supergroup = TRUE WHERE id = $1', [chatId]);
+                    logger.info(`⚡ Chat ${chatId} automatically upgraded to a Supergroup! Member count: ${memberCount}`);
+                    
+                    const botResult = await query("SELECT id FROM users WHERE username = 'craneapp_bot'");
+                    const systemSenderId = botResult.rows.length ? botResult.rows[0].id : null;
+                    if (systemSenderId) {
+                        const msgId = uuidv4();
+                        const systemMsgText = `Группа автоматически повышена до Супергруппы в связи с достижением 200 участников! 🚀`;
+                        await query(
+                            `INSERT INTO messages (id, chat_id, sender_id, content, created_at) VALUES ($1, $2, $3, $4, NOW())`,
+                            [msgId, chatId, systemSenderId, systemMsgText]
+                        );
+                        await broadcastToChat(chatId, {
+                            type: 'new_message',
+                            chatId,
+                            message: {
+                                id: msgId,
+                                chatId,
+                                senderId: systemSenderId,
+                                senderUsername: 'craneapp_bot',
+                                senderFirstName: 'CraneApp Bot',
+                                content: systemMsgText,
+                                type: 'text',
+                                createdAt: new Date().toISOString()
+                            }
+                        });
+                    }
+                    await broadcastToChat(chatId, {
+                        type: 'chat_settings_updated',
+                        chatId,
+                        settings: {
+                            isSupergroup: true
+                        }
+                    });
+                }
+            }
+        }
+    } catch (err) {
+        logger.error('❌ Check/Upgrade to supergroup error:', err);
+    }
+}
+
 
 // ============================================
 // HEALTH & ERROR HANDLING

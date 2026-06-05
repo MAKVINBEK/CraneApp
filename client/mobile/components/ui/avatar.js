@@ -87,11 +87,6 @@ export class Avatar {
   }
 
   getColorFromString(str) {
-    const hues = ['#FF007F', '#9D00FF', '#2AABEE', '#FF9F00', '#00C853'];
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      hash = str.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return hues[Math.abs(hash) % hues.length];
+    return 'linear-gradient(135deg, #FF007F, #9D00FF)';
   }
 }

@@ -184,7 +184,8 @@
             editorCrop: 'Обрезка', editorRotate: 'Поворот', editorFlip: 'Отзеркалить',
             editorTransform: 'Трансформация',
             editorAspectRatio: 'Пропорции', editorFree: 'Произвольно',
-            editorOriginal: 'Оригинал', editorSquare: 'Квадрат'
+            editorOriginal: 'Оригинал', editorSquare: 'Квадрат',
+            addMember: 'Добавить', deleteGroup: 'Удалить группу', leaveGroup: 'Выйти из группы'
         },
         en: {
             settings: 'Settings', account: 'Account', privacy: 'Privacy',
@@ -364,7 +365,8 @@
             editorCrop: 'Crop', editorRotate: 'Rotate', editorFlip: 'Flip',
             editorTransform: 'Transform',
             editorAspectRatio: 'Aspect Ratio', editorFree: 'Free',
-            editorOriginal: 'Original', editorSquare: 'Square'
+            editorOriginal: 'Original', editorSquare: 'Square',
+            addMember: 'Add Member', deleteGroup: 'Delete Group', leaveGroup: 'Leave Group'
         },
         de: {
             settings: 'Einstellungen', account: 'Konto', privacy: 'Datenschutz',

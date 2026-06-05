@@ -487,6 +487,11 @@ body {
     color: #FFFFFF;
 }
 
+.avatar.blocked {
+    background: #333333;
+    font-size: 24px;
+}
+
 .avatar-img { width: 100%; height: 100%; object-fit: cover; }
 
 .chat-info { flex: 1; overflow: hidden; }
@@ -838,7 +843,6 @@ body {
 }
 
 .message.text-msg .msg-time {
-    display: inline-block;
     float: right;
     margin-left: 8px;
     margin-top: 4px;
@@ -1267,6 +1271,28 @@ body {
     padding: 0 2px;
 }
 
+/* Ссылки в сообщениях */
+.message-text a {
+    color: var(--accent-color);
+    font-weight: 600;
+    text-decoration: underline;
+    transition: opacity 0.15s;
+}
+
+.message-text a:active {
+    opacity: 0.7;
+}
+
+/* В исходящих сообщениях цвет текста белый, поэтому ссылка должна быть белой для контрастности */
+.message.outgoing .message-text a {
+    color: #FFFFFF;
+    text-decoration: underline;
+}
+
+.message.outgoing .message-text a:active {
+    opacity: 0.8;
+}
+
 .send-btn {
     width: 40px;
     height: 40px;
@@ -1304,6 +1330,27 @@ body {
     user-select: none;
     -webkit-user-select: none;
     touch-action: none;
+}
+
+/* ============================================
+   Interactive Message Links & Join Links styling
+   ============================================ */
+.message-text a {
+    color: var(--accent-color);
+    text-decoration: underline;
+    font-weight: 500;
+    transition: opacity 0.15s;
+}
+.message-text a:hover {
+    opacity: 0.8;
+}
+.message.outgoing .message-text a {
+    color: #FFFFFF;
+    text-decoration: underline;
+    font-weight: 600;
+}
+.message-text a.chat-join-link {
+    font-weight: 600;
 }
 .voice-btn:active { transform: scale(0.92); }
 .voice-btn.recording {
@@ -3604,3 +3651,189 @@ body.chat-open .tab-bar  { display: none !important; }
     from { transform: translateY(100%); opacity: 0; }
     to   { transform: translateY(0);    opacity: 1; }
 }
+
+/* ============================================
+   Topics & Threads (Phase 3)
+   ============================================ */
+.topics-area {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: var(--bg-primary);
+    position: relative;
+}
+.topics-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.topic-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 20px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 18px;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    position: relative;
+    overflow: hidden;
+}
+.topic-item::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 10% 20%, rgba(255, 255, 255, 0.02) 0%, transparent 100%);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+}
+.topic-item:hover {
+    transform: translateY(-2px);
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+.topic-item:hover::before {
+    opacity: 1;
+}
+.topic-item:active {
+    transform: translateY(0);
+}
+.topic-icon-wrap {
+    width: 46px;
+    height: 46px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    position: relative;
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.05);
+    transition: transform 0.25s ease;
+}
+.topic-item:hover .topic-icon-wrap {
+    transform: scale(1.06);
+}
+.topic-info {
+    flex: 1;
+    min-width: 0;
+}
+.topic-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 3px;
+    letter-spacing: -0.012em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.topic-meta {
+    font-size: 13px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.topic-badge-closed {
+    font-size: 10px;
+    background: rgba(255, 75, 75, 0.12);
+    color: #FF4B4B;
+    border: 1px solid rgba(255, 75, 75, 0.2);
+    padding: 1px 6px;
+    border-radius: 6px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.topic-unread-badge {
+    background: var(--accent-gradient);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 10px;
+    min-width: 20px;
+    text-align: center;
+    box-shadow: 0 4px 12px rgba(255, 0, 127, 0.35);
+}
+.create-topic-fab {
+    position: absolute;
+    bottom: 24px;
+    right: 24px;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: none;
+    background: var(--accent-gradient);
+    color: #fff;
+    font-size: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 8px 24px rgba(255, 0, 127, 0.4);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 10;
+}
+.create-topic-fab:hover {
+    transform: translateY(-3px) scale(1.05);
+    box-shadow: 0 12px 28px rgba(255, 0, 127, 0.5);
+}
+.create-topic-fab:active {
+    transform: translateY(-1px) scale(0.98);
+}
+.color-dot {
+    transition: all 0.2s ease;
+}
+.color-dot:hover {
+    transform: scale(1.15);
+}
+.color-dot.active {
+    border-color: #fff !important;
+    transform: scale(1.15);
+    box-shadow: 0 0 12px var(--dot-color, rgba(255,255,255,0.4));
+}
+.emoji-dot {
+    transition: all 0.2s ease;
+}
+.emoji-dot:hover {
+    background: rgba(255,255,255,0.1) !important;
+    transform: scale(1.1);
+}
+.emoji-dot.active {
+    background: var(--accent-gradient) !important;
+    color: #fff;
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(255, 0, 127, 0.25);
+}
+
+.topic-closed-bar {
+    padding: 16px 10px;
+    background: var(--bg-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: 14px;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    flex-shrink: 0;
+    width: 100%;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* Sidebar slide in from the right */
+@keyframes slideLeft {
+    from { transform: translateX(100%); }
+    to   { transform: translateX(0); }
+}
+

@@ -382,10 +382,79 @@ async function ensureTablesExist() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
-    CREATE INDEX IF NOT EXISTS idx_reports_reported ON reports(reported_user_id);
-    CREATE INDEX IF NOT EXISTS idx_reports_reporter ON reports(reporter_id);
-    CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status);
     CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(created_at DESC);
+
+    -- Phase 1 column migrations for groups
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'chats' AND column_name = 'is_supergroup') THEN
+            ALTER TABLE chats ADD COLUMN is_supergroup BOOLEAN DEFAULT FALSE;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'chats' AND column_name = 'history_visible') THEN
+            ALTER TABLE chats ADD COLUMN history_visible BOOLEAN DEFAULT TRUE;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'chats' AND column_name = 'slow_mode_seconds') THEN
+            ALTER TABLE chats ADD COLUMN slow_mode_seconds INT DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'chats' AND column_name = 'username') THEN
+            ALTER TABLE chats ADD COLUMN username VARCHAR(50) UNIQUE;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'chats' AND column_name = 'join_approval_required') THEN
+            ALTER TABLE chats ADD COLUMN join_approval_required BOOLEAN DEFAULT FALSE;
+        END IF;
+
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'chat_members' AND column_name = 'custom_title') THEN
+            ALTER TABLE chat_members ADD COLUMN custom_title VARCHAR(50);
+        END IF;
+
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'messages' AND column_name = 'topic_id') THEN
+            ALTER TABLE messages ADD COLUMN topic_id UUID;
+        END IF;
+    END $$;
+
+    -- Chat invite links table
+    CREATE TABLE IF NOT EXISTS chat_invite_links (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        chat_id UUID REFERENCES chats(id) ON DELETE CASCADE,
+        creator_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        link_code VARCHAR(20) UNIQUE NOT NULL,
+        expire_at TIMESTAMP,
+        usage_limit INT,
+        usage_count INT DEFAULT 0,
+        is_revoked BOOLEAN DEFAULT FALSE,
+        request_to_join BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_chat_invite_links_chat ON chat_invite_links(chat_id);
+    CREATE INDEX IF NOT EXISTS idx_chat_invite_links_code ON chat_invite_links(link_code);
+
+    -- Chat join requests table
+    CREATE TABLE IF NOT EXISTS chat_join_requests (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        chat_id UUID REFERENCES chats(id) ON DELETE CASCADE,
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'declined')),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        decided_by UUID REFERENCES users(id) ON DELETE SET NULL,
+        decided_at TIMESTAMP,
+        UNIQUE(chat_id, user_id, status)
+    );
+    CREATE INDEX IF NOT EXISTS idx_chat_join_requests_chat ON chat_join_requests(chat_id);
+
+    -- Chat topics table
+    CREATE TABLE IF NOT EXISTS chat_topics (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        chat_id UUID REFERENCES chats(id) ON DELETE CASCADE,
+        title VARCHAR(100) NOT NULL,
+        icon_color VARCHAR(20),
+        icon_emoji VARCHAR(10),
+        creator_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        is_closed BOOLEAN DEFAULT FALSE,
+        is_hidden BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_chat_topics_chat ON chat_topics(chat_id);
+    CREATE INDEX IF NOT EXISTS idx_messages_topic ON messages(topic_id);
     `;
 
     try {

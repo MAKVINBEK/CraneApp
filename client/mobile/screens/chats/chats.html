@@ -656,6 +656,9 @@
                 </div>
                 <button class="modal-close" onclick="closeGroupMembers()">×</button>
             </div>
+            <div style="padding: 8px 16px;">
+                <input type="text" id="groupMembersSearchInput" placeholder="Поиск участников..." style="width: 100%; padding: 10px 14px; border-radius: 12px; border: 1.5px solid var(--border-color); background: var(--bg-tertiary); color: var(--text-primary); font-size: 14px; outline: none; margin-bottom: 4px;" oninput="onGroupMembersSearch(this.value)">
+            </div>
             <div id="groupMembersList" style="padding:8px 0;"></div>
         </div>
     </div>
@@ -914,7 +917,8 @@
 
             <div class="chat-view" id="chatView">
                 <div class="chat-header">
-                    <button class="back-btn" onclick="closeChat()">←</button>
+                    <button class="back-btn" id="chatBackBtn" onclick="closeChat()">←</button>
+                    <button class="back-btn" id="topicsBackBtn" onclick="backToTopics()" style="display: none;">←</button>
                     <div class="chat-header-avatar" id="chatAvatar" onclick="openChatUserProfile()">
                         <span>💬</span>
                     </div>
@@ -950,6 +954,12 @@
                     <button class="pinned-message-bar-close" onclick="event.stopPropagation(); hidePinnedMessageBar(event);">×</button>
                 </div>
                 
+                <!-- Topics Area (для супергрупп) -->
+                <div class="topics-area" id="topicsArea" style="display: none;">
+                    <div class="topics-container" id="topicsContainer"></div>
+                    <button class="create-topic-fab" onclick="openCreateTopicModal()" title="Создать тему">＋</button>
+                </div>
+
                 <div class="messages-area" id="messagesArea">
                     <div class="messages-container" id="messagesContainer">
                         <!-- Support Requests Panel (только для разработчиков в чате с ботом) -->
@@ -1233,6 +1243,105 @@
                 <div id="groupInviteList" style="display: flex; flex-direction: column; gap: 8px; max-height: 40vh; overflow-y: auto;">
                     <!-- Сюда вставляются результаты поиска -->
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Invite Links Modal -->
+    <div class="modal-overlay" id="inviteLinksModal">
+        <div class="modal" style="width: 350px; max-height: 85vh; overflow-y: auto; padding: 20px; border-radius: 16px; background: var(--bg-secondary); color: var(--text-primary); box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.05);">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 16px;">
+                <span class="modal-title" style="font-size: 18px; font-weight: 600;">Пригласительные ссылки</span>
+                <button class="modal-close" onclick="closeInviteLinksModal()" style="background: none; border: none; color: var(--text-muted); font-size: 24px; cursor: pointer; line-height: 1;">&times;</button>
+            </div>
+            <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px;">
+                <!-- Блок создания ссылки -->
+                <div style="background: var(--bg-tertiary); padding: 14px; border-radius: 12px; display: flex; flex-direction: column; gap: 10px; border: 1px solid var(--border-color);">
+                    <div style="font-size: 14px; font-weight: 600; color: var(--accent-color);">Создать новую ссылку</div>
+                    
+                    <label style="display: flex; align-items: center; justify-content: space-between; font-size: 13px; cursor: pointer;">
+                        <span>Заявка на вступление</span>
+                        <input type="checkbox" id="linkRequestToJoin" style="accent-color: var(--accent-color); cursor: pointer;">
+                    </label>
+
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <span style="font-size: 12px; color: var(--text-muted);">Лимит использований (пусто = без лимита)</span>
+                        <input type="number" id="linkUsageLimit" placeholder="Например, 10" style="width: 100%; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary); font-size: 13px;">
+                    </div>
+
+                    <button onclick="generateInviteLink()" style="background: var(--accent-color); color: #fff; border: none; padding: 10px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 13px; transition: opacity 0.2s;">Создать ссылку</button>
+                </div>
+
+                <!-- Список активных ссылок -->
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <div style="font-size: 14px; font-weight: 600; color: var(--text-muted);">Активные ссылки</div>
+                    <div id="inviteLinksList" style="display: flex; flex-direction: column; gap: 10px; max-height: 35vh; overflow-y: auto;">
+                        <!-- Динамический список ссылок -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Join Requests Modal -->
+    <div class="modal-overlay" id="joinRequestsModal">
+        <div class="modal" style="width: 350px; max-height: 85vh; overflow-y: auto; padding: 20px; border-radius: 16px; background: var(--bg-secondary); color: var(--text-primary); box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.05);">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 16px;">
+                <span class="modal-title" style="font-size: 18px; font-weight: 600;">Заявки на вступление</span>
+                <button class="modal-close" onclick="closeJoinRequestsModal()" style="background: none; border: none; color: var(--text-muted); font-size: 24px; cursor: pointer; line-height: 1;">&times;</button>
+            </div>
+            <div class="modal-body" style="display: flex; flex-direction: column; gap: 12px;">
+                <div id="joinRequestsList" style="display: flex; flex-direction: column; gap: 10px; max-height: 50vh; overflow-y: auto;">
+                    <!-- Динамический список заявок -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Topic Modal -->
+    <div class="modal-overlay" id="createTopicModal">
+        <div class="modal" style="width: 320px;">
+            <div class="modal-header">
+                <span class="modal-title">✨ Создать тему</span>
+                <button class="modal-close" onclick="closeCreateTopicModal()">×</button>
+            </div>
+            <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px; padding-top: 10px;">
+                <div class="create-pack-field" style="margin-bottom: 0;">
+                    <label class="create-pack-label">Название темы</label>
+                    <input type="text" class="create-pack-input" id="newTopicTitle" placeholder="Например, Обсуждения" style="width: 100%;">
+                </div>
+                
+                <div>
+                    <label class="create-pack-label" style="margin-bottom: 6px; display: block;">Цвет иконки</label>
+                    <div style="display: flex; gap: 8px; justify-content: space-between;" id="topicColorPicker">
+                        <div class="color-dot active" data-color="#00E676" style="background-color: #00E676; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; border: 2px solid transparent;"></div>
+                        <div class="color-dot" data-color="#00B0FF" style="background-color: #00B0FF; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; border: 2px solid transparent;"></div>
+                        <div class="color-dot" data-color="#FF1744" style="background-color: #FF1744; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; border: 2px solid transparent;"></div>
+                        <div class="color-dot" data-color="#D500F9" style="background-color: #D500F9; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; border: 2px solid transparent;"></div>
+                        <div class="color-dot" data-color="#FFEA00" style="background-color: #FFEA00; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; border: 2px solid transparent;"></div>
+                        <div class="color-dot" data-color="#FF9100" style="background-color: #FF9100; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; border: 2px solid transparent;"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="create-pack-label" style="margin-bottom: 6px; display: block;">Иконка (эмодзи)</label>
+                    <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px;" id="topicEmojiPicker">
+                        <div class="emoji-dot active" data-emoji="📁" style="font-size: 20px; text-align: center; cursor: pointer; padding: 4px; border-radius: 8px; background: rgba(255,255,255,0.05);">📁</div>
+                        <div class="emoji-dot" data-emoji="💬" style="font-size: 20px; text-align: center; cursor: pointer; padding: 4px; border-radius: 8px; background: rgba(255,255,255,0.05);">💬</div>
+                        <div class="emoji-dot" data-emoji="📢" style="font-size: 20px; text-align: center; cursor: pointer; padding: 4px; border-radius: 8px; background: rgba(255,255,255,0.05);">📢</div>
+                        <div class="emoji-dot" data-emoji="🛠️" style="font-size: 20px; text-align: center; cursor: pointer; padding: 4px; border-radius: 8px; background: rgba(255,255,255,0.05);">🛠️</div>
+                        <div class="emoji-dot" data-emoji="🎮" style="font-size: 20px; text-align: center; cursor: pointer; padding: 4px; border-radius: 8px; background: rgba(255,255,255,0.05);">🎮</div>
+                        <div class="emoji-dot" data-emoji="🎨" style="font-size: 20px; text-align: center; cursor: pointer; padding: 4px; border-radius: 8px; background: rgba(255,255,255,0.05);">🎨</div>
+                        <div class="emoji-dot" data-emoji="🎵" style="font-size: 20px; text-align: center; cursor: pointer; padding: 4px; border-radius: 8px; background: rgba(255,255,255,0.05);">🎵</div>
+                        <div class="emoji-dot" data-emoji="📚" style="font-size: 20px; text-align: center; cursor: pointer; padding: 4px; border-radius: 8px; background: rgba(255,255,255,0.05);">📚</div>
+                        <div class="emoji-dot" data-emoji="💼" style="font-size: 20px; text-align: center; cursor: pointer; padding: 4px; border-radius: 8px; background: rgba(255,255,255,0.05);">💼</div>
+                        <div class="emoji-dot" data-emoji="🍿" style="font-size: 20px; text-align: center; cursor: pointer; padding: 4px; border-radius: 8px; background: rgba(255,255,255,0.05);">🍿</div>
+                        <div class="emoji-dot" data-emoji="🚀" style="font-size: 20px; text-align: center; cursor: pointer; padding: 4px; border-radius: 8px; background: rgba(255,255,255,0.05);">🚀</div>
+                        <div class="emoji-dot" data-emoji="💡" style="font-size: 20px; text-align: center; cursor: pointer; padding: 4px; border-radius: 8px; background: rgba(255,255,255,0.05);">💡</div>
+                    </div>
+                </div>
+
+                <button class="create-pack-btn" onclick="submitCreateTopic()" style="margin-top: 10px; width: 100%;">Создать тему</button>
             </div>
         </div>
     </div>
