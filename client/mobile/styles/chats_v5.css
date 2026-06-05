@@ -1024,7 +1024,7 @@ body {
 .reply-bar {
     display: none;
     padding: 6px 10px;
-    background: var(--bg-tertiary);
+    background: rgba(155, 130, 255, 0.06);
     border-left: 3px solid var(--accent-color);
     margin: 0 8px;
     border-radius: 6px 6px 0 0;
@@ -1256,15 +1256,9 @@ body {
 }
 
 .message-text .message-mention {
-    color: var(--accent-color);
+    color: var(--text-primary);
     font-weight: 600;
     cursor: default;
-}
-
-.message-text .message-mention-me {
-    background: rgba(255, 0, 127, 0.18);
-    border-radius: 4px;
-    padding: 0 2px;
 }
 
 .send-btn {
@@ -3111,7 +3105,7 @@ body.chat-open .tab-bar  { display: none !important; }
 .pinned-message-bar {
     display: none;
     padding: 10px 16px;
-    background: rgba(255, 255, 255, 0.02);
+    background: rgba(155, 130, 255, 0.06);
     backdrop-filter: var(--rd-blur);
     -webkit-backdrop-filter: var(--rd-blur);
     border-bottom: 1px solid var(--rd-stroke);
@@ -3131,11 +3125,6 @@ body.chat-open .tab-bar  { display: none !important; }
     display: flex;
 }
 
-.pinned-message-bar-icon {
-    font-size: 14px;
-    flex-shrink: 0;
-}
-
 .pinned-message-bar-text {
     flex: 1;
     font-size: 13px;
@@ -3149,7 +3138,6 @@ body.chat-open .tab-bar  { display: none !important; }
 .pinned-counter {
     font-size: 11px;
     color: var(--accent-color);
-    background: rgba(255, 0, 127, 0.12);
     padding: 2px 6px;
     border-radius: 10px;
     margin: 0 4px;

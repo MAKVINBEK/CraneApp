@@ -5955,7 +5955,6 @@
             bar.className = 'pinned-message-bar';
             bar.setAttribute('onclick', 'openPinnedMessage()');
             bar.innerHTML = 
-                '<div class="pinned-message-bar-icon">📌</div>' +
                 '<div class="pinned-message-bar-text" id="pinnedMessageBarText">Закрепленное сообщение</div>' +
                 '<button class="pinned-message-bar-close" onclick="hidePinnedMessageBar(event)">×</button>';
             
