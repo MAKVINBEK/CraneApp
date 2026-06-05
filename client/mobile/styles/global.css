@@ -383,9 +383,12 @@ body {
 /* ── Pinned / Reply bars ───────────────────────────────────── */
 .pinned-message-bar {
     border-left: 3px solid var(--accent-color, #FF007F) !important;
-    background: rgba(255,0,127,0.05) !important;
+    background: rgba(155, 130, 255, 0.08) !important;
 }
-.reply-bar { border-left: 3px solid var(--accent-color, #FF007F) !important; background: rgba(255,0,127,0.05) !important; }
+.reply-bar {
+    border-left: 3px solid var(--accent-color, #FF007F) !important;
+    background: rgba(155, 130, 255, 0.08) !important;
+}
 
 /* ── Scroll to bottom ──────────────────────────────────────── */
 .scroll-bottom-btn {

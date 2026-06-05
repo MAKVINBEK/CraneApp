@@ -18,15 +18,25 @@ const E2E = (() => {
     const STORE_NAME = 'keys';
 
     // ── IndexedDB для хранения приватных ключей ────────────────────────────
+    let dbPromise = null;
+
     function openDB() {
-        return new Promise((resolve, reject) => {
-            const req = indexedDB.open(DB_NAME, DB_VERSION);
-            req.onupgradeneeded = e => {
-                e.target.result.createObjectStore(STORE_NAME);
-            };
-            req.onsuccess = e => resolve(e.target.result);
-            req.onerror = () => reject(req.error);
-        });
+        if (!dbPromise) {
+            dbPromise = new Promise((resolve, reject) => {
+                const req = indexedDB.open(DB_NAME, DB_VERSION);
+                req.onupgradeneeded = e => {
+                    if (!e.target.result.objectStoreNames.contains(STORE_NAME)) {
+                        e.target.result.createObjectStore(STORE_NAME);
+                    }
+                };
+                req.onsuccess = e => resolve(e.target.result);
+                req.onerror = () => {
+                    dbPromise = null;
+                    reject(req.error);
+                };
+            });
+        }
+        return dbPromise;
     }
 
     async function dbGet(key) {
@@ -158,6 +168,7 @@ const E2E = (() => {
 
     // ── Кэш сессионных ключей (chatId → CryptoKey) ────────────────────────
     const sessionKeyCache = new Map();
+    const sessionKeyInflight = new Map();
 
     // ── Публичный API ──────────────────────────────────────────────────────
 
@@ -205,6 +216,19 @@ const E2E = (() => {
      * Получить или создать сессионный ключ для чата
      */
     async function getSessionKey(chatId, authToken) {
+        if (sessionKeyCache.has(chatId)) return sessionKeyCache.get(chatId);
+        if (sessionKeyInflight.has(chatId)) return sessionKeyInflight.get(chatId);
+
+        const loadPromise = loadSessionKey(chatId, authToken);
+        sessionKeyInflight.set(chatId, loadPromise);
+        try {
+            return await loadPromise;
+        } finally {
+            sessionKeyInflight.delete(chatId);
+        }
+    }
+
+    async function loadSessionKey(chatId, authToken) {
         if (sessionKeyCache.has(chatId)) return sessionKeyCache.get(chatId);
 
         const privateKey = await dbGet('privateKey');

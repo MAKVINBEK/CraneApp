@@ -39,20 +39,17 @@ const databaseUrl = normalizeConnectionString(process.env.DATABASE_URL);
 const pool = new Pool({
     connectionString: databaseUrl,
     ssl: shouldUseSsl(databaseUrl) ? { rejectUnauthorized: false } : false,
-    max: 10,
+    max: 20,
     connectionTimeoutMillis: 5000,
     idleTimeoutMillis: 30000,
 });
 
-async function query(text, params, timeoutMs = 12000) {
-    const client = await pool.connect();
-    try {
-        await client.query(`SET statement_timeout = ${timeoutMs}`);
-        const res = await client.query(text, params);
-        return res;
-    } finally {
-        client.release();
-    }
+pool.on('connect', (client) => {
+    client.query('SET statement_timeout = 12000').catch(() => {});
+});
+
+async function query(text, params) {
+    return pool.query(text, params);
 }
 
 async function initDatabase() {
@@ -178,7 +175,7 @@ async function ensureTablesExist() {
         chat_id UUID REFERENCES chats(id) ON DELETE CASCADE,
         sender_id UUID REFERENCES users(id),
         content TEXT,
-        type VARCHAR(20) DEFAULT 'text' CHECK (type IN ('text', 'image', 'video', 'audio', 'voice', 'file', 'sticker', 'gif', 'contact', 'location', 'call')),
+        type VARCHAR(20) DEFAULT 'text' CHECK (type IN ('text', 'image', 'video', 'audio', 'voice', 'file', 'sticker', 'gif', 'contact', 'location', 'call', 'poll')),
         media_url TEXT,
         media_type VARCHAR(50),
         reply_to_message_id UUID,

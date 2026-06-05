@@ -890,9 +890,45 @@ async function autoMigrate() {
         await query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_encrypted BOOLEAN DEFAULT FALSE`);
         await query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS encryption_iv TEXT`);
 
-        // Расширяем CHECK-ограничение типов сообщений — добавляем 'call'
+        // Расширяем CHECK-ограничение типов сообщений — добавляем 'call', 'poll'
         await query(`ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_type_check`).catch(() => {});
-        await query(`ALTER TABLE messages ADD CONSTRAINT messages_type_check CHECK (type IN ('text','image','video','audio','voice','file','sticker','gif','contact','location','call'))`).catch(() => {});
+        await query(`ALTER TABLE messages ADD CONSTRAINT messages_type_check CHECK (type IN ('text','image','video','audio','voice','file','sticker','gif','contact','location','call','poll'))`).catch(() => {});
+
+        // Опросы в групповых чатах
+        await query(`
+            CREATE TABLE IF NOT EXISTS polls (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                message_id UUID REFERENCES messages(id) ON DELETE CASCADE UNIQUE,
+                question TEXT NOT NULL,
+                is_anonymous BOOLEAN DEFAULT FALSE,
+                allow_multiple BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        `);
+        await query(`CREATE INDEX IF NOT EXISTS idx_polls_message ON polls(message_id)`);
+
+        await query(`
+            CREATE TABLE IF NOT EXISTS poll_options (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                poll_id UUID REFERENCES polls(id) ON DELETE CASCADE,
+                text TEXT NOT NULL,
+                position INTEGER NOT NULL DEFAULT 0
+            )
+        `);
+        await query(`CREATE INDEX IF NOT EXISTS idx_poll_options_poll ON poll_options(poll_id)`);
+
+        await query(`
+            CREATE TABLE IF NOT EXISTS poll_votes (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                poll_id UUID REFERENCES polls(id) ON DELETE CASCADE,
+                option_id UUID REFERENCES poll_options(id) ON DELETE CASCADE,
+                user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                created_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(poll_id, option_id, user_id)
+            )
+        `);
+        await query(`CREATE INDEX IF NOT EXISTS idx_poll_votes_poll ON poll_votes(poll_id)`);
+        await query(`CREATE INDEX IF NOT EXISTS idx_poll_votes_option ON poll_votes(option_id)`);
 
         // Group moderation migrations: permissions column and chat_bans table
         await query(`
@@ -5642,7 +5678,7 @@ app.get('/api/v1/chats/archived', authMiddleware, async (req, res) => {
 app.get('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
     try {
         const { chatId } = req.params;
-        const { limit = 50, offset = 0, topicId } = req.query;
+        const { limit = 50, offset = 0, topicId, includePolls = '1' } = req.query;
 
         const memberCheck = await query(
             'SELECT 1 FROM chat_members WHERE chat_id = $1 AND user_id = $2',
@@ -5722,7 +5758,7 @@ app.get('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
             senderIsPremium: m.sender_is_premium || false,
             content: m.content,
             contentPlain: m.content_plain || null,
-            type: m.media_type || m.type || 'text', 
+            type: m.type || m.media_type || 'text',
             mediaUrl: m.media_url,
             voiceDuration: m.voice_duration || 0,
             replyToMessageId: m.reply_to_message_id,
@@ -5760,9 +5796,41 @@ app.get('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
             messages.forEach(m => { m.reactions = reactionsByMessage[m.id] || []; });
         }
 
+        if (includePolls !== '0') {
+            await attachPollsToMessages(messages, req.user.id);
+        }
+
         res.json({ messages });
     } catch (error) {
         logger.error('❌ Get messages error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/v1/polls/batch', authMiddleware, async (req, res) => {
+    try {
+        const idsParam = req.query.ids;
+        const messageIds = typeof idsParam === 'string' && idsParam.length
+            ? idsParam.split(',').filter(Boolean)
+            : [];
+        const polls = await loadPollsBatch(messageIds, req.user.id);
+        res.json({ polls });
+    } catch (error) {
+        logger.error('❌ Batch polls error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/v1/polls/batch', authMiddleware, async (req, res) => {
+    try {
+        const { messageIds } = req.body || {};
+        if (!Array.isArray(messageIds) || messageIds.length === 0) {
+            return res.json({ polls: {} });
+        }
+        const polls = await loadPollsBatch(messageIds, req.user.id);
+        res.json({ polls });
+    } catch (error) {
+        logger.error('❌ Batch polls error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -5819,6 +5887,7 @@ app.post('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
         const { chatId } = req.params;
         const { content, type = 'text', replyTo, mediaUrl, mediaType, forwardFrom, voiceDuration, topicId } = req.body;
         const { iv: encryptionIv, isEncrypted, contentPlain } = req.body;
+        const { question, options, isAnonymous, allowMultiple } = req.body;
 
         logger.info('📨 POST /api/v1/messages:', { chatId, type, mediaUrl: mediaUrl?.substring(0, 50), mediaType });
 
@@ -5872,6 +5941,22 @@ app.post('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
             }
         }
 
+        if (type === 'poll') {
+            if (chatType !== 'group') {
+                return res.status(400).json({ error: req.t('pollGroupOnly') });
+            }
+            const pollQuestion = (question || content || '').trim();
+            const pollOptions = Array.isArray(options)
+                ? options.map(o => String(o || '').trim()).filter(Boolean)
+                : [];
+            if (!pollQuestion) {
+                return res.status(400).json({ error: req.t('pollQuestionRequired') });
+            }
+            if (pollOptions.length < 2 || pollOptions.length > 10) {
+                return res.status(400).json({ error: req.t('pollOptionsCount') });
+            }
+        }
+
         let dbTopicId = null;
         if (topicId && topicId !== 'null') {
             dbTopicId = topicId;
@@ -5900,7 +5985,7 @@ app.post('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
         const messageId = uuidv4();
 
         // Формируем контент для пересланного сообщения
-        let messageContent = content || '';
+        let messageContent = type === 'poll' ? (question || content || '').trim() : (content || '');
         if (forwardFrom) {
             messageContent = '↪️ ' + req.t('forwardedFrom', { name: forwardFrom }) + ':\n' + messageContent;
         }
@@ -5914,6 +5999,22 @@ app.post('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())`,
             [messageId, chatId, req.user.id, messageContent, plainText, type, replyTo || null, dbTopicId, mediaUrl || null, mediaType || null, voiceDuration || 0, isEncrypted || false, encryptionIv || null]
         );
+
+        if (type === 'poll') {
+            const pollId = uuidv4();
+            const pollOptions = options.map(o => String(o || '').trim()).filter(Boolean);
+            await query(
+                `INSERT INTO polls (id, message_id, question, is_anonymous, allow_multiple, created_at)
+                 VALUES ($1, $2, $3, $4, $5, NOW())`,
+                [pollId, messageId, messageContent, !!isAnonymous, !!allowMultiple]
+            );
+            for (let i = 0; i < pollOptions.length; i++) {
+                await query(
+                    `INSERT INTO poll_options (id, poll_id, text, position) VALUES ($1, $2, $3, $4)`,
+                    [uuidv4(), pollId, pollOptions[i], i]
+                );
+            }
+        }
 
         logger.info('✅ Message inserted:', messageId);
 
@@ -5978,6 +6079,10 @@ app.post('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
             createdAt: new Date(),
             topicId: dbTopicId
         };
+
+        if (type === 'poll') {
+            message.poll = await buildPollPayload(messageId, req.user.id);
+        }
 
         broadcastToChat(chatId, { type: 'new_message', chatId, chatType, chatTitle, message }, req.user.id);
 
@@ -6429,6 +6534,332 @@ app.get('/api/v1/emojis', (req, res) => {
         res.json({ emojis: data });
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+// ============================================
+// POLLS
+// ============================================
+
+async function buildPollPayload(messageId, userId) {
+    const pollResult = await query(
+        `SELECT id, message_id, question, is_anonymous, allow_multiple
+         FROM polls WHERE message_id = $1`,
+        [messageId]
+    );
+    if (!pollResult.rows.length) return null;
+
+    const poll = pollResult.rows[0];
+    const optionsResult = await query(
+        `SELECT id, text, position FROM poll_options
+         WHERE poll_id = $1 ORDER BY position ASC`,
+        [poll.id]
+    );
+
+    const votesResult = await query(
+        `SELECT pv.option_id, pv.user_id,
+                u.first_name, u.username, u.avatar_url
+         FROM poll_votes pv
+         JOIN users u ON pv.user_id = u.id
+         WHERE pv.poll_id = $1`,
+        [poll.id]
+    );
+
+    const myVotes = [];
+    const votersByOption = {};
+    const voteCounts = {};
+    const voterIds = new Set();
+
+    for (const opt of optionsResult.rows) {
+        voteCounts[opt.id] = 0;
+        votersByOption[opt.id] = [];
+    }
+
+    for (const vote of votesResult.rows) {
+        voteCounts[vote.option_id] = (voteCounts[vote.option_id] || 0) + 1;
+        voterIds.add(vote.user_id);
+        if (vote.user_id === userId) myVotes.push(vote.option_id);
+        if (!poll.is_anonymous) {
+            votersByOption[vote.option_id].push({
+                id: vote.user_id,
+                firstName: vote.first_name || vote.username || 'User',
+                avatarUrl: vote.avatar_url || null
+            });
+        }
+    }
+
+    return formatPollPayload(
+        poll,
+        optionsResult.rows,
+        voteCounts,
+        myVotes,
+        voterIds.size,
+        votersByOption
+    );
+}
+
+function formatPollPayload(poll, options, voteCounts, myVotes, totalVoters, votersByOption, includeVoters = true) {
+    const hasVoted = myVotes.length > 0;
+    const attachVoters = includeVoters && hasVoted && !poll.is_anonymous;
+
+    return {
+        id: poll.id,
+        question: poll.question,
+        isAnonymous: poll.is_anonymous,
+        allowMultiple: poll.allow_multiple,
+        hasVoted,
+        myVotes,
+        totalVoters,
+        options: options.map(opt => ({
+            id: opt.id,
+            text: opt.text,
+            voteCount: voteCounts[opt.id] || 0,
+            voters: attachVoters ? (votersByOption[opt.id] || []) : []
+        }))
+    };
+}
+
+async function loadPollsBatch(messageIds, userId) {
+    const uniqueIds = [...new Set((messageIds || []).filter(Boolean))];
+    if (!uniqueIds.length) return {};
+
+    const msgResult = await query(
+        `SELECT id, chat_id, type FROM messages
+         WHERE id = ANY($1) AND is_deleted = FALSE`,
+        [uniqueIds]
+    );
+    if (!msgResult.rows.length) return {};
+
+    const chatIds = [...new Set(msgResult.rows.map(r => r.chat_id))];
+    const memberResult = await query(
+        `SELECT chat_id FROM chat_members
+         WHERE user_id = $1 AND chat_id = ANY($2)`,
+        [userId, chatIds]
+    );
+    const allowedChats = new Set(memberResult.rows.map(r => r.chat_id));
+
+    const pollMessages = msgResult.rows
+        .filter(r => r.type === 'poll' && allowedChats.has(r.chat_id))
+        .map(r => ({ id: r.id, type: 'poll' }));
+
+    await attachPollsToMessages(pollMessages, userId);
+
+    const polls = {};
+    for (const m of pollMessages) {
+        if (m.poll) polls[m.id] = m.poll;
+    }
+    return polls;
+}
+
+async function attachPollsToMessages(messages, userId) {
+    const pollMessages = messages.filter(m => m.type === 'poll');
+    if (!pollMessages.length) return;
+
+    const messageIds = pollMessages.map(m => m.id);
+
+    const result = await query(
+        `SELECT
+            p.message_id,
+            p.id AS poll_id,
+            p.question,
+            p.is_anonymous,
+            p.allow_multiple,
+            COALESCE(vt.total_voters, 0)::int AS total_voters,
+            COALESCE(my_votes.option_ids, ARRAY[]::uuid[]) AS my_votes,
+            COALESCE(opts.options_json, '[]'::json) AS options_json
+         FROM polls p
+         LEFT JOIN LATERAL (
+            SELECT COUNT(DISTINCT user_id)::int AS total_voters
+            FROM poll_votes pv WHERE pv.poll_id = p.id
+         ) vt ON TRUE
+         LEFT JOIN LATERAL (
+            SELECT ARRAY_AGG(pv.option_id) AS option_ids
+            FROM poll_votes pv
+            WHERE pv.poll_id = p.id AND pv.user_id = $2
+         ) my_votes ON TRUE
+         LEFT JOIN LATERAL (
+            SELECT JSON_AGG(
+                JSON_BUILD_OBJECT(
+                    'id', po.id,
+                    'text', po.text,
+                    'position', po.position,
+                    'voteCount', COALESCE(vc.cnt, 0)
+                ) ORDER BY po.position
+            ) AS options_json
+            FROM poll_options po
+            LEFT JOIN LATERAL (
+                SELECT COUNT(*)::int AS cnt FROM poll_votes pv2 WHERE pv2.option_id = po.id
+            ) vc ON TRUE
+            WHERE po.poll_id = p.id
+         ) opts ON TRUE
+         WHERE p.message_id = ANY($1::uuid[])`,
+        [messageIds, userId]
+    );
+    if (!result.rows.length) return;
+
+    const pollByMessageId = new Map(result.rows.map(row => [row.message_id, row]));
+
+    for (const m of pollMessages) {
+        const row = pollByMessageId.get(m.id);
+        if (!row) continue;
+
+        const rawOptions = Array.isArray(row.options_json) ? row.options_json : [];
+        const options = rawOptions.map(opt => ({
+            id: opt.id,
+            text: opt.text,
+            position: opt.position
+        }));
+        const voteCounts = {};
+        for (const opt of rawOptions) {
+            voteCounts[opt.id] = opt.voteCount || 0;
+        }
+
+        m.poll = formatPollPayload(
+            {
+                id: row.poll_id,
+                question: row.question,
+                is_anonymous: row.is_anonymous,
+                allow_multiple: row.allow_multiple
+            },
+            options,
+            voteCounts,
+            row.my_votes || [],
+            row.total_voters,
+            {},
+            false
+        );
+    }
+}
+
+app.get('/api/v1/polls/:messageId', authMiddleware, async (req, res) => {
+    try {
+        const { messageId } = req.params;
+        const msgResult = await query(
+            'SELECT chat_id, type FROM messages WHERE id = $1 AND is_deleted = FALSE',
+            [messageId]
+        );
+        if (!msgResult.rows.length) return res.status(404).json({ error: req.t('messageNotFound') });
+        if (msgResult.rows[0].type !== 'poll') {
+            return res.status(400).json({ error: req.t('pollNotPollMessage') });
+        }
+
+        const chatId = msgResult.rows[0].chat_id;
+        const memberCheck = await query(
+            'SELECT 1 FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, req.user.id]
+        );
+        if (!memberCheck.rows.length) return res.status(403).json({ error: req.t('accessDenied') });
+
+        const pollPayload = await buildPollPayload(messageId, req.user.id);
+        if (!pollPayload) return res.status(404).json({ error: req.t('pollNotFound') });
+
+        res.json({ poll: pollPayload });
+    } catch (error) {
+        logger.error('❌ Get poll error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/v1/polls/:messageId/vote', authMiddleware, async (req, res) => {
+    try {
+        const { messageId } = req.params;
+        const { optionIds } = req.body;
+
+        if (!Array.isArray(optionIds) || optionIds.length === 0) {
+            return res.status(400).json({ error: req.t('pollOptionIdsRequired') });
+        }
+
+        const msgResult = await query(
+            'SELECT chat_id, type FROM messages WHERE id = $1 AND is_deleted = FALSE',
+            [messageId]
+        );
+        if (!msgResult.rows.length) return res.status(404).json({ error: req.t('messageNotFound') });
+        if (msgResult.rows[0].type !== 'poll') {
+            return res.status(400).json({ error: req.t('pollNotPollMessage') });
+        }
+
+        const chatId = msgResult.rows[0].chat_id;
+        const memberCheck = await query(
+            'SELECT 1 FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, req.user.id]
+        );
+        if (!memberCheck.rows.length) return res.status(403).json({ error: req.t('accessDenied') });
+
+        const chatType = await query('SELECT type FROM chats WHERE id = $1', [chatId]);
+        if (chatType.rows[0]?.type !== 'group') {
+            return res.status(400).json({ error: req.t('pollGroupOnly') });
+        }
+
+        const pollResult = await query('SELECT id, allow_multiple FROM polls WHERE message_id = $1', [messageId]);
+        if (!pollResult.rows.length) return res.status(404).json({ error: req.t('pollNotFound') });
+
+        const poll = pollResult.rows[0];
+        const uniqueOptionIds = [...new Set(optionIds)];
+
+        if (!poll.allow_multiple && uniqueOptionIds.length > 1) {
+            return res.status(400).json({ error: req.t('pollSingleOptionOnly') });
+        }
+
+        const validOptions = await query(
+            'SELECT id FROM poll_options WHERE poll_id = $1 AND id = ANY($2)',
+            [poll.id, uniqueOptionIds]
+        );
+        if (validOptions.rows.length !== uniqueOptionIds.length) {
+            return res.status(400).json({ error: req.t('pollInvalidOption') });
+        }
+
+        await query('DELETE FROM poll_votes WHERE poll_id = $1 AND user_id = $2', [poll.id, req.user.id]);
+
+        for (const optionId of uniqueOptionIds) {
+            await query(
+                `INSERT INTO poll_votes (id, poll_id, option_id, user_id, created_at)
+                 VALUES ($1, $2, $3, $4, NOW())`,
+                [uuidv4(), poll.id, optionId, req.user.id]
+            );
+        }
+
+        const pollPayload = await buildPollPayload(messageId, req.user.id);
+        broadcastToChat(chatId, { type: 'poll_updated', messageId, chatId }, null);
+
+        res.json({ success: true, poll: pollPayload });
+    } catch (error) {
+        logger.error('❌ Poll vote error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.delete('/api/v1/polls/:messageId/vote', authMiddleware, async (req, res) => {
+    try {
+        const { messageId } = req.params;
+
+        const msgResult = await query(
+            'SELECT chat_id, type FROM messages WHERE id = $1 AND is_deleted = FALSE',
+            [messageId]
+        );
+        if (!msgResult.rows.length) return res.status(404).json({ error: req.t('messageNotFound') });
+        if (msgResult.rows[0].type !== 'poll') {
+            return res.status(400).json({ error: req.t('pollNotPollMessage') });
+        }
+
+        const chatId = msgResult.rows[0].chat_id;
+        const memberCheck = await query(
+            'SELECT 1 FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, req.user.id]
+        );
+        if (!memberCheck.rows.length) return res.status(403).json({ error: req.t('accessDenied') });
+
+        const pollResult = await query('SELECT id FROM polls WHERE message_id = $1', [messageId]);
+        if (!pollResult.rows.length) return res.status(404).json({ error: req.t('pollNotFound') });
+
+        await query('DELETE FROM poll_votes WHERE poll_id = $1 AND user_id = $2', [pollResult.rows[0].id, req.user.id]);
+
+        const pollPayload = await buildPollPayload(messageId, req.user.id);
+        broadcastToChat(chatId, { type: 'poll_updated', messageId, chatId }, null);
+
+        res.json({ success: true, poll: pollPayload });
+    } catch (error) {
+        logger.error('❌ Poll retract vote error:', error);
+        res.status(500).json({ error: error.message });
     }
 });
 
