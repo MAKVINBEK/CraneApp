@@ -2370,12 +2370,58 @@
             }
         }
 
+        function createPollPlaceholder(messageId, question) {
+            const container = document.createElement('div');
+            container.className = 'poll-message poll-message--loading';
+            const header = document.createElement('div');
+            header.className = 'poll-header';
+            const q = document.createElement('div');
+            q.className = 'poll-question';
+            q.textContent = question || '…';
+            header.appendChild(q);
+            container.appendChild(header);
+            return container;
+        }
+
+        async function hydratePollsInChat(chatId, messages) {
+            const pollIds = messages
+                .filter(function(m) { return m.type === 'poll' && !m.poll; })
+                .map(function(m) { return m.id; });
+            if (!pollIds.length) return;
+
+            try {
+                const res = await fetch('/api/v1/polls/batch', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify({ messageIds: pollIds })
+                });
+                const data = await res.json();
+                if (!activeChat || activeChat.id !== chatId || !res.ok || !data.polls) return;
+
+                beginMessagesLayoutBatch();
+                for (let i = 0; i < pollIds.length; i++) {
+                    const messageId = pollIds[i];
+                    const poll = data.polls[messageId];
+                    if (!poll || !messagesData[messageId]) continue;
+                    messagesData[messageId].poll = poll;
+                    refreshPollElement(messageId);
+                }
+                endMessagesLayoutBatch(true);
+            } catch (err) {
+                console.error('Hydrate polls error:', err);
+                endMessagesLayoutBatch(true);
+            }
+        }
+
         function createPollElement(messageId, poll) {
             const container = document.createElement('div');
             container.className = 'poll-message';
 
             const header = document.createElement('div');
-            header.className = 'poll-header';
+            header.className = 'poll-header' + (poll.hasVoted ? ' poll-header--voted' : '');
 
             const headerText = document.createElement('div');
             headerText.className = 'poll-header-text';
@@ -2404,7 +2450,7 @@
             container.appendChild(header);
 
             const optionsWrap = document.createElement('div');
-            optionsWrap.className = 'poll-options';
+            optionsWrap.className = 'poll-options poll-options--static';
             const showResults = !!poll.hasVoted;
             const totalVoters = poll.totalVoters || 0;
             const pending = _getPollPendingSelection(messageId);
@@ -2465,6 +2511,9 @@
                 optionsWrap.appendChild(optBtn);
             });
             container.appendChild(optionsWrap);
+            requestAnimationFrame(function() {
+                optionsWrap.classList.remove('poll-options--static');
+            });
 
             if (!showResults && poll.allowMultiple) {
                 const voteActions = document.createElement('div');
@@ -3073,8 +3122,10 @@
             } else if (m.type === 'video_note') {
                 const noteEl = createVideoNoteElement(m.mediaUrl, m.voiceDuration || 0);
                 div.appendChild(noteEl);
-            } else if (m.type === 'poll' && m.poll) {
-                div.appendChild(createPollElement(m.id, m.poll));
+            } else if (m.type === 'poll') {
+                div.appendChild(m.poll
+                    ? createPollElement(m.id, m.poll)
+                    : createPollPlaceholder(m.id, m.content || m.contentPlain));
             } else if (m.type === 'call') {
                 let callData = {};
                 try { callData = JSON.parse(m.content || '{}'); } catch(_) {}
@@ -4663,9 +4714,17 @@
             if (typeof ResizeObserver !== 'undefined') {
                 const messagesEl = document.getElementById('messages');
                 if (messagesEl) {
+                    let resizeObserverPending = false;
                     new ResizeObserver(function() {
-                        refreshScrollBottomObserver();
-                        updateMentionJumpButton();
+                        if (_messagesLayoutBatchDepth > 0) return;
+                        if (resizeObserverPending) return;
+                        resizeObserverPending = true;
+                        requestAnimationFrame(function() {
+                            resizeObserverPending = false;
+                            if (_messagesLayoutBatchDepth > 0) return;
+                            refreshScrollBottomObserver();
+                            updateMentionJumpButton();
+                        });
                     }).observe(messagesEl);
                 }
             }
@@ -5955,6 +6014,23 @@
             cancelReply();
         }
 
+        let _messagesLayoutBatchDepth = 0;
+
+        function beginMessagesLayoutBatch() {
+            _messagesLayoutBatchDepth++;
+        }
+
+        function endMessagesLayoutBatch(scrollAfter) {
+            if (_messagesLayoutBatchDepth > 0) _messagesLayoutBatchDepth--;
+            if (_messagesLayoutBatchDepth === 0) {
+                requestAnimationFrame(function() {
+                    if (scrollAfter) scrollToBottom();
+                    refreshScrollBottomObserver();
+                    updateMentionJumpButton();
+                });
+            }
+        }
+
         function renderMessagesChunked(messages, container, chunkSize) {
             return new Promise(function(resolve) {
                 let index = 0;
@@ -5990,7 +6066,7 @@
             messagesEl.innerHTML = '';
             
             try {
-                const res = await fetch('/api/v1/messages/' + chatId, {
+                const res = await fetch('/api/v1/messages/' + chatId + '?includePolls=0', {
                     headers: { 'Authorization': 'Bearer ' + token }
                 });
                 const data = await res.json();
@@ -6015,10 +6091,10 @@
                         messagesData[m.id] = m;
                     });
 
-                    const pollCount = decrypted.filter(function(m) { return m.type === 'poll'; }).length;
-                    const useChunkedRender = decrypted.length > 20 || pollCount > 2;
+                    const useChunkedRender = decrypted.length > 30;
+                    beginMessagesLayoutBatch();
                     if (useChunkedRender) {
-                        await renderMessagesChunked(decrypted, messagesEl, 12);
+                        await renderMessagesChunked(decrypted, messagesEl, 15);
                     } else {
                         const frag = document.createDocumentFragment();
                         decrypted.forEach(function(m) {
@@ -6026,13 +6102,17 @@
                         });
                         messagesEl.appendChild(frag);
                     }
+                    endMessagesLayoutBatch(true);
+                    hydratePollsInChat(chatId, decrypted);
                 } else {
                     messagesEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:20px;font-size:14px;">' + tr('noMessages', 'Нет сообщений') + '</div>';
                 }
                 refreshMentionPendingFromLoadedMessages(chatId);
-                scrollToBottom();
-                refreshScrollBottomObserver();
-                updateMentionJumpButton();
+                if (!data.messages || !data.messages.length) {
+                    scrollToBottom();
+                    refreshScrollBottomObserver();
+                    updateMentionJumpButton();
+                }
                 renderChatList();
                 markChatAsRead(chatId, { silent: true }).catch(function(err) {
                     console.error('Mark chat as read error:', err);

@@ -4232,7 +4232,7 @@ app.get('/api/v1/chats/archived', authMiddleware, async (req, res) => {
 app.get('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
     try {
         const { chatId } = req.params;
-        const { limit = 50, offset = 0 } = req.query;
+        const { limit = 50, offset = 0, includePolls = '1' } = req.query;
 
         const memberCheck = await query(
             'SELECT 1 FROM chat_members WHERE chat_id = $1 AND user_id = $2',
@@ -4295,7 +4295,7 @@ app.get('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
             senderIsPremium: m.sender_is_premium || false,
             content: m.content,
             contentPlain: m.content_plain || null,
-            type: m.media_type || m.type || 'text', 
+            type: m.type || m.media_type || 'text',
             mediaUrl: m.media_url,
             voiceDuration: m.voice_duration || 0,
             replyToMessageId: m.reply_to_message_id,
@@ -4333,11 +4333,56 @@ app.get('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
             messages.forEach(m => { m.reactions = reactionsByMessage[m.id] || []; });
         }
 
-        await attachPollsToMessages(messages, req.user.id);
+        if (includePolls !== '0') {
+            await attachPollsToMessages(messages, req.user.id);
+        }
 
         res.json({ messages });
     } catch (error) {
         logger.error('❌ Get messages error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/v1/polls/batch', authMiddleware, async (req, res) => {
+    try {
+        const { messageIds } = req.body || {};
+        if (!Array.isArray(messageIds) || messageIds.length === 0) {
+            return res.json({ polls: {} });
+        }
+
+        const uniqueIds = [...new Set(messageIds.filter(Boolean))];
+        const msgResult = await query(
+            `SELECT id, chat_id, type FROM messages
+             WHERE id = ANY($1) AND is_deleted = FALSE`,
+            [uniqueIds]
+        );
+        if (!msgResult.rows.length) {
+            return res.json({ polls: {} });
+        }
+
+        const chatIds = [...new Set(msgResult.rows.map(r => r.chat_id))];
+        const memberResult = await query(
+            `SELECT chat_id FROM chat_members
+             WHERE user_id = $1 AND chat_id = ANY($2)`,
+            [req.user.id, chatIds]
+        );
+        const allowedChats = new Set(memberResult.rows.map(r => r.chat_id));
+
+        const pollMessages = msgResult.rows
+            .filter(r => r.type === 'poll' && allowedChats.has(r.chat_id))
+            .map(r => ({ id: r.id, type: 'poll' }));
+
+        await attachPollsToMessages(pollMessages, req.user.id);
+
+        const polls = {};
+        for (const m of pollMessages) {
+            if (m.poll) polls[m.id] = m.poll;
+        }
+
+        res.json({ polls });
+    } catch (error) {
+        logger.error('❌ Batch polls error:', error);
         res.status(500).json({ error: error.message });
     }
 });

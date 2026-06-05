@@ -3604,8 +3604,14 @@ body.chat-open .tab-bar  { display: none !important; }
     position: relative;
     margin-top: 15px;
 }
-.poll-header:has(.poll-retract-btn) .poll-header-text {
+.poll-header--voted .poll-header-text {
     padding-right: 40px;
+}
+.poll-message--loading .poll-question {
+    opacity: 0.72;
+}
+.poll-options--static .poll-option-bar {
+    transition: none !important;
 }
 .poll-header-text {
     min-width: 0;
