@@ -33,6 +33,23 @@
     };
     const ME = { id: userData.id || ('guest_'+Math.random().toString(36).slice(2,7)), name: userData.firstName || userData.username || tr('guest', 'Гость'), avatar: userData.avatarUrl || null };
 
+    let localStream = null;
+
+    function exitLobby(){
+        if (localStream) {
+            localStream.getTracks().forEach(t => t.stop());
+            localStream = null;
+        }
+        if (IS_EMBEDDED) {
+            window.parent.postMessage({ type: 'crane_call_ended' }, '*');
+            return;
+        }
+        if (window.opener && !window.opener.closed) {
+            try { window.close(); return; } catch(_) {}
+        }
+        location.href = '../chats/chats.html';
+    }
+
     if (!TOKEN || !userData.id) {
         location.href = '../auth/login.html';
         return;
@@ -41,6 +58,9 @@
         document.getElementById('lobbyTitle').textContent = tr('roomMissing', 'Комната не указана');
         document.getElementById('lobbySub').textContent = tr('openCallInvite', 'Откройте звонок по приглашению');
         document.getElementById('lobbyJoinBtn').disabled = true;
+        const lobbyInviteEarly = document.getElementById('lobbyInvite');
+        if (lobbyInviteEarly) lobbyInviteEarly.classList.add('is-disabled');
+        document.getElementById('lobbyLeaveBtn').onclick = exitLobby;
         return;
     }
 
@@ -53,10 +73,65 @@
         document.body.classList.add('pip-mode');
     }
 
-    document.getElementById('lobbyRoomCode').textContent = ROOM_ID;
-        document.getElementById('callTitle').textContent = ROOM_TITLE || (IS_AUDIO
-            ? tr('audioCall', 'Аудиозвонок')
-            : (IS_P2P ? tr('videoCall', 'Видеозвонок') : tr('videoMeeting', 'Видеовстреча')));
+    function buildInviteLink(){
+        const params = new URLSearchParams();
+        params.set('room', ROOM_ID);
+        params.set('type', ROOM_TYPE || 'group');
+        params.set('kind', ROOM_KIND);
+        if (ROOM_TITLE) params.set('title', ROOM_TITLE);
+        return location.origin + location.pathname + '?' + params.toString();
+    }
+
+    async function copyText(text){
+        try {
+            await navigator.clipboard.writeText(text);
+            return true;
+        } catch(_) {
+            try {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                const ok = document.execCommand('copy');
+                document.body.removeChild(ta);
+                return ok;
+            } catch(__) { return false; }
+        }
+    }
+
+    async function copyInviteLink(){
+        if (!ROOM_ID) return;
+        const url = buildInviteLink();
+        const ok = await copyText(url);
+        if (!ok) {
+            showToast(tr('copyError', 'Ошибка копирования'));
+            return;
+        }
+        showToast(tr('linkCopied', 'Ссылка скопирована'));
+        const btn = document.getElementById('lobbyCopyBtn');
+        if (!btn) return;
+        btn.classList.add('copied');
+        const span = btn.querySelector('span');
+        const orig = span ? span.textContent : '';
+        if (span) span.textContent = tr('copied', 'Скопировано');
+        clearTimeout(copyInviteLink._t);
+        copyInviteLink._t = setTimeout(() => {
+            btn.classList.remove('copied');
+            if (span && orig) span.textContent = orig;
+        }, 2000);
+    }
+
+    const lobbyInvite = document.getElementById('lobbyInvite');
+    const lobbyInviteUrl = document.getElementById('lobbyInviteUrl');
+    if (lobbyInviteUrl) lobbyInviteUrl.value = ROOM_ID ? buildInviteLink() : '';
+    document.getElementById('lobbyCopyBtn').onclick = copyInviteLink;
+    lobbyInviteUrl && (lobbyInviteUrl.onclick = () => { lobbyInviteUrl.select(); lobbyInviteUrl.setSelectionRange(0, lobbyInviteUrl.value.length); });
+    document.getElementById('lobbyLeaveBtn').onclick = exitLobby;
+    document.getElementById('callTitle').textContent = ROOM_TITLE || (IS_AUDIO
+        ? tr('audioCall', 'Аудиозвонок')
+        : (IS_P2P ? tr('videoCall', 'Видеозвонок') : tr('videoMeeting', 'Видеовстреча')));
 
     function showToast(text, ms=2200){
         const t = document.getElementById('toast');
@@ -67,7 +142,6 @@
     }
 
     // ---------- Состояние ----------
-    let localStream = null;
     let screenStream = null;
     let micEnabled = true;
     let camEnabled = !IS_AUDIO; // в audio-mode камера отключена
