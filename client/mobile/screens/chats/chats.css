@@ -35,3 +35,4 @@
       .ic-toast-btn.reject{background:linear-gradient(135deg,#ff4b62,#d92847);box-shadow:0 6px 16px rgba(217,40,71,0.4);}
       .ic-toast-btn.accept{background:linear-gradient(135deg,#34d399,#10b981);box-shadow:0 6px 16px rgba(16,185,129,0.4);}
       .ic-toast-btn svg{width:20px;height:20px;}
+.protected-chat { user-select: none; -webkit-user-select: none; }

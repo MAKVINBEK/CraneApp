@@ -18,15 +18,16 @@ async function loadProfile() {
         const res = await fetch('/api/v1/users/me', { headers: { 'Authorization': 'Bearer ' + token } });
         if (!res.ok) throw new Error();
         const { user: u } = await res.json();
-        originalData = { firstName: u.firstName || '', lastName: u.lastName || '', username: u.username || '', bio: u.bio || '', avatarUrl: u.avatarUrl || '' };
+        originalData = { firstName: u.firstName || '', lastName: u.lastName || '', username: u.username || '', bio: u.bio || '', avatarUrl: u.avatarUrl || '', statusEmoji: u.statusEmoji || '' };
     } catch (e) {
         const u = JSON.parse(localStorage.getItem('craneapp_user_data') || '{}');
-        originalData = { firstName: u.firstName || '', lastName: u.lastName || '', username: u.username || '', bio: u.bio || '', avatarUrl: u.avatarUrl || '' };
+        originalData = { firstName: u.firstName || '', lastName: u.lastName || '', username: u.username || '', bio: u.bio || '', avatarUrl: u.avatarUrl || '', statusEmoji: u.statusEmoji || '' };
     }
     document.getElementById('firstName').value = originalData.firstName;
     document.getElementById('lastName').value = originalData.lastName;
     document.getElementById('username').value = originalData.username;
     document.getElementById('bio').value = originalData.bio;
+    if (document.getElementById('statusEmoji')) document.getElementById('statusEmoji').value = originalData.statusEmoji;
     updateBioCounter();
     renderAvatar(originalData.avatarUrl, originalData.firstName);
 }
@@ -112,6 +113,7 @@ async function saveProfile() {
     btn.textContent = tr('saving', 'Saving...');
 
     const body = { firstName, lastName: document.getElementById('lastName').value.trim(), bio: document.getElementById('bio').value.trim() };
+    if (document.getElementById('statusEmoji')) body.statusEmoji = document.getElementById('statusEmoji').value.trim();
     const newUsername = document.getElementById('username').value.trim();
     if (newUsername && newUsername !== originalData.username) body.username = newUsername;
     if (newAvatarBase64) body.avatar = newAvatarBase64;
@@ -126,7 +128,7 @@ async function saveProfile() {
         if (res.ok) {
             const cached = JSON.parse(localStorage.getItem('craneapp_user_data') || '{}');
             localStorage.setItem('craneapp_user_data', JSON.stringify({ ...cached, ...data.user }));
-            originalData = { firstName: data.user.firstName, lastName: data.user.lastName, username: data.user.username, bio: data.user.bio, avatarUrl: data.user.avatarUrl };
+            originalData = { firstName: data.user.firstName, lastName: data.user.lastName, username: data.user.username, bio: data.user.bio, avatarUrl: data.user.avatarUrl, statusEmoji: data.user.statusEmoji };
             newAvatarBase64 = null;
             isDirty = false;
             showToast('success', tr('profileSaved', 'Profile saved'), '✓');

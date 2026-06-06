@@ -1098,7 +1098,7 @@ app.post('/api/v1/auth/register', authLimiter, async (req, res) => {
         const result = await query(
             `INSERT INTO users (id, username, password_hash, first_name, last_name, phone, bio, avatar_url, language, created_at, last_seen)
              VALUES ($1, $2, $3, $4, $5, NULL, '', '', $6, NOW(), NOW())
-             RETURNING id, username, first_name, last_name, bio, avatar_url`,
+             RETURNING id, username, first_name, last_name, bio, avatar_url, status_emoji`,
             [userId, username.toLowerCase(), hashedPassword, firstName, lastName || '', lang]
         );
 
@@ -3212,7 +3212,7 @@ app.get('/api/v1/messages/search', authMiddleware, async (req, res) => {
 
 app.put('/api/v1/users/profile', authMiddleware, async (req, res) => {
     try {
-        const { firstName, lastName, bio, avatar } = req.body;
+        const { firstName, lastName, bio, avatar, statusEmoji } = req.body;
         const userId = req.user.id;
         
         const updates = [];
@@ -3295,7 +3295,7 @@ app.get('/api/v1/users/:userId/profile', authMiddleware, async (req, res) => {
         const { userId } = req.params;
 
         const result = await query(
-            `SELECT id, username, first_name, last_name, bio, avatar_url, is_blocked, is_muted, muted_until FROM users WHERE id = $1`,
+            `SELECT id, username, first_name, last_name, bio, avatar_url, status_emoji, is_blocked, is_muted, muted_until FROM users WHERE id = $1`,
             [userId]
         );
 
@@ -3704,7 +3704,7 @@ app.get('/api/v1/chats', authMiddleware, async (req, res) => {
              LEFT JOIN LATERAL (
                  SELECT content, type, sender_id, is_encrypted, encryption_iv, created_at
                  FROM messages
-                 WHERE chat_id = c.id AND is_deleted = FALSE
+                 WHERE chat_id = c.id AND is_deleted = FALSE AND (expires_at IS NULL OR expires_at > NOW())
                  ORDER BY created_at DESC
                  LIMIT 1
              ) lm ON TRUE
@@ -3715,6 +3715,7 @@ app.get('/api/v1/chats', authMiddleware, async (req, res) => {
                    AND m.is_deleted = FALSE
                    AND m.sender_id <> $1
                    AND (ucs.last_read_at IS NULL OR m.created_at > ucs.last_read_at)
+                   AND (m.expires_at IS NULL OR m.expires_at > NOW())
              ) unread ON TRUE
              LEFT JOIN LATERAL (
                  SELECT COUNT(*)::int AS mention_count,
@@ -3740,6 +3741,8 @@ app.get('/api/v1/chats', authMiddleware, async (req, res) => {
             avatarUrl: c.avatar_url,
             role: c.role,
             isSupergroup: c.is_supergroup || false,
+            isProtected: c.is_protected || false,
+            ttlSeconds: c.ttl_seconds || 0,
             mutedUntil: c.user_muted_until || null,
             isPinned: c.user_is_pinned || false,
             isArchived: c.user_is_archived || false,
@@ -5355,7 +5358,7 @@ app.delete('/api/v1/chats/:chatId/topics/:topicId', authMiddleware, async (req, 
 app.post('/api/v1/chats/:chatId/settings', authMiddleware, async (req, res) => {
     try {
         const { chatId } = req.params;
-        const { isSupergroup, joinApprovalRequired, slowModeSeconds } = req.body;
+        const { isSupergroup, joinApprovalRequired, slowModeSeconds, isProtected, ttlSeconds } = req.body;
 
         const memberCheck = await query(
             'SELECT role FROM chat_members WHERE chat_id = $1 AND user_id = $2',
@@ -5556,6 +5559,25 @@ app.delete('/api/v1/chats/:chatId/archive', authMiddleware, async (req, res) => 
 });
 
 // Пометить чат прочитанным
+app.post('/api/v1/chats/:chatId/unread', authMiddleware, async (req, res) => {
+    try {
+        const { chatId } = req.params;
+        const lastMsgRes = await query('SELECT created_at FROM messages WHERE chat_id = $1 AND is_deleted = FALSE ORDER BY created_at DESC LIMIT 1', [chatId]);
+        if (lastMsgRes.rows.length > 0) {
+            const lastMsgTime = lastMsgRes.rows[0].created_at;
+            await query(`
+                INSERT INTO user_chat_settings (user_id, chat_id, last_read_at)
+                VALUES ($1, $2, $3 - INTERVAL '1 millisecond')
+                ON CONFLICT (user_id, chat_id) DO UPDATE SET last_read_at = $3 - INTERVAL '1 millisecond'
+            `, [req.user.id, chatId, lastMsgTime]);
+        }
+        res.json({ success: true, unreadCount: 1 });
+    } catch (error) {
+        logger.error('❌ Mark chat unread error:', error);
+        res.status(500).json({ error: 'Failed to mark chat as unread' });
+    }
+});
+
 app.post('/api/v1/chats/:chatId/read', authMiddleware, async (req, res) => {
     try {
         const { chatId } = req.params;
@@ -5616,7 +5638,7 @@ app.get('/api/v1/chats/archived', authMiddleware, async (req, res) => {
              LEFT JOIN LATERAL (
                  SELECT content, type, is_encrypted, encryption_iv, created_at
                  FROM messages
-                 WHERE chat_id = c.id AND is_deleted = FALSE
+                 WHERE chat_id = c.id AND is_deleted = FALSE AND (expires_at IS NULL OR expires_at > NOW())
                  ORDER BY created_at DESC LIMIT 1
              ) lm ON TRUE
              LEFT JOIN LATERAL (
@@ -5626,6 +5648,7 @@ app.get('/api/v1/chats/archived', authMiddleware, async (req, res) => {
                    AND m.is_deleted = FALSE
                    AND m.sender_id <> $1
                    AND (ucs.last_read_at IS NULL OR m.created_at > ucs.last_read_at)
+                   AND (m.expires_at IS NULL OR m.expires_at > NOW())
              ) unread ON TRUE
              LEFT JOIN LATERAL (
                  SELECT COUNT(*)::int AS mention_count,
@@ -5649,6 +5672,8 @@ app.get('/api/v1/chats/archived', authMiddleware, async (req, res) => {
             ownerId: c.owner_id,
             avatarUrl: c.avatar_url,
             isSupergroup: c.is_supergroup || false,
+            isProtected: c.is_protected || false,
+            ttlSeconds: c.ttl_seconds || 0,
             isPinned: false,
             isArchived: true,
             lastMessage: c.last_message_content || '',
@@ -5724,7 +5749,7 @@ app.get('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
                 FROM message_mentions mm
                 WHERE mm.message_id = m.id
              ) mentions ON TRUE
-             WHERE m.chat_id = $1 AND m.is_deleted = FALSE`;
+             WHERE m.chat_id = $1 AND m.is_deleted = FALSE AND (m.expires_at IS NULL OR m.expires_at > NOW())`;
 
         const params = [chatId];
         let paramIdx = 2;
@@ -5886,7 +5911,7 @@ app.post('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
     try {
         const { chatId } = req.params;
         const { content, type = 'text', replyTo, mediaUrl, mediaType, forwardFrom, voiceDuration, topicId } = req.body;
-        const { iv: encryptionIv, isEncrypted, contentPlain } = req.body;
+        const { iv: encryptionIv, isEncrypted, contentPlain, isSilent } = req.body;
         const { question, options, isAnonymous, allowMultiple } = req.body;
 
         logger.info('📨 POST /api/v1/messages:', { chatId, type, mediaUrl: mediaUrl?.substring(0, 50), mediaType });
@@ -5913,13 +5938,14 @@ app.post('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
             return res.status(403).json({ error: 'Вы временно заглушены в этой группе', mutedUntil: member.muted_until });
         }
 
-        const chatInfo = await query('SELECT type, title, slow_mode_seconds FROM chats WHERE id = $1', [chatId]);
+        const chatInfo = await query('SELECT type, title, slow_mode_seconds, ttl_seconds FROM chats WHERE id = $1', [chatId]);
         if (chatInfo.rows.length === 0) {
             return res.status(404).json({ error: 'Чат не найден' });
         }
         const chatType = chatInfo.rows[0].type || 'private';
         const chatTitle = chatInfo.rows[0].title || null;
         const slowModeSeconds = chatInfo.rows[0].slow_mode_seconds || 0;
+        const ttlSeconds = chatInfo.rows[0].ttl_seconds || 0;
 
         if (chatType === 'group' && slowModeSeconds > 0 && member.role === 'member') {
             const lastMessageResult = await query(
@@ -7572,7 +7598,7 @@ app.get('/api/v1/support/requests/:id/messages', authMiddleware, async (req, res
                     u.first_name, u.username, u.is_bot
              FROM messages m
              JOIN users u ON m.sender_id = u.id
-             WHERE m.chat_id = $1 AND m.is_deleted = FALSE
+             WHERE m.chat_id = $1 AND m.is_deleted = FALSE AND (m.expires_at IS NULL OR m.expires_at > NOW())
              ORDER BY m.created_at ASC LIMIT 100`,
             [chatId]
         );

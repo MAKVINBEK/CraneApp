@@ -175,7 +175,7 @@ async function ensureTablesExist() {
         chat_id UUID REFERENCES chats(id) ON DELETE CASCADE,
         sender_id UUID REFERENCES users(id),
         content TEXT,
-        type VARCHAR(20) DEFAULT 'text' CHECK (type IN ('text', 'image', 'video', 'audio', 'voice', 'file', 'sticker', 'gif', 'contact', 'location', 'call', 'poll')),
+        type VARCHAR(20) DEFAULT 'text' CHECK (type IN ('text', 'image', 'video', 'audio', 'voice', 'file', 'sticker', 'gif', 'contact', 'location', 'call', 'poll', 'system')),
         media_url TEXT,
         media_type VARCHAR(50),
         reply_to_message_id UUID,
@@ -406,6 +406,25 @@ async function ensureTablesExist() {
 
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'messages' AND column_name = 'topic_id') THEN
             ALTER TABLE messages ADD COLUMN topic_id UUID;
+        END IF;
+
+        -- Mega-Batch 3 migrations
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'chats' AND column_name = 'is_protected') THEN
+            ALTER TABLE chats ADD COLUMN is_protected BOOLEAN DEFAULT FALSE;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'chats' AND column_name = 'ttl_seconds') THEN
+            ALTER TABLE chats ADD COLUMN ttl_seconds INT DEFAULT 0;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'messages' AND column_name = 'expires_at') THEN
+            ALTER TABLE messages ADD COLUMN expires_at TIMESTAMP;
+        END IF;
+
+        -- Mega-Batch 4 migrations
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'status_emoji') THEN
+            ALTER TABLE users ADD COLUMN status_emoji VARCHAR(10) DEFAULT NULL;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'messages' AND column_name = 'is_silent') THEN
+            ALTER TABLE messages ADD COLUMN is_silent BOOLEAN DEFAULT FALSE;
         END IF;
     END $$;
 

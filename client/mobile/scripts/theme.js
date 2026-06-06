@@ -23,9 +23,9 @@
             const res = await _origFetch.apply(this, args);
             if (!isApi || _errShown) return res;
             if (res.status === 429 || res.status === 403) {
-                // Не перенаправляем на экран блокировки при обычных бизнес-ошибках доступа к чатам, участникам и звонкам
-                const isBusinessError = url.includes('/chats/') || url.includes('/members') || url.includes('/calls/');
-                if (res.status === 403 && isBusinessError) {
+                // Не перенаправляем на экран блокировки при обычных бизнес-ошибках доступа к чатам, участникам, звонкам и сообщениям
+                const isBusinessError = url.includes('/chats/') || url.includes('/members') || url.includes('/calls/') || url.includes('/messages/');
+                if ((res.status === 403 || res.status === 429) && isBusinessError) {
                     return res;
                 }
 

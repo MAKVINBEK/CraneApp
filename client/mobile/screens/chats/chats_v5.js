@@ -1,5 +1,52 @@
 // ============================================
         // REACTIONS
+
+        async function exportChatHistory() {
+            if (!activeChat) return;
+            const chatId = activeChat.id;
+            const isRu = (window.i18n?.currentLang || localStorage.getItem('craneapp_language') || 'ru') === 'ru';
+            showToast('info', isRu ? 'Экспорт истории начат...' : 'Export started...', '⏳');
+            
+            try {
+                let msgs = [];
+                const res = await fetch('/api/v1/messages/' + chatId, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    msgs = data.messages || [];
+                } else {
+                    msgs = Object.values(messagesData);
+                }
+                
+                msgs.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                
+                let txtContent = `История чата: ${activeChat.name}\nЭкспортировано: ${new Date().toLocaleString()}\n\n`;
+                msgs.forEach(m => {
+                    const d = new Date(m.createdAt).toLocaleString();
+                    const sName = m.senderId === user.id ? (user.name || user.username || 'Я') : (chatUsers[m.senderId]?.name || 'Пользователь');
+                    const text = m.contentPlain || m.content || '[Вложение/Системное сообщение]';
+                    txtContent += `[${d}] ${sName}: ${text}\n`;
+                });
+                
+                const blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `chat_export_${chatId.substring(0,8)}.txt`;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    showToast('success', isRu ? 'Экспорт завершен' : 'Export completed', '✅');
+                }, 100);
+            } catch(e) {
+                console.error(e);
+                showToast('error', isRu ? 'Ошибка при экспорте' : 'Export failed', '❌');
+            }
+        }
         // ============================================
         const QUICK_REACTIONS = ['👍','❤️','😂','😮','😢','🔥','👏','🎉'];
 
@@ -1843,9 +1890,9 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 
                 let roleBadge = '';
                 if (m.role === 'owner') {
-                    roleBadge = `<span style="font-size:10px; font-weight:600; background:rgba(255,0,127,0.12); color:#FF007F; padding:2px 6px; border-radius:10px; border:1px solid rgba(255,0,127,0.2); font-family:Geologica,sans-serif;">${isRu ? 'создатель' : 'owner'}</span>`;
+                    roleBadge = `<span style="font-size:13px; color:var(--text-muted); font-weight:400;">${isRu ? 'владелец' : 'owner'}</span>`;
                 } else if (m.role === 'admin') {
-                    roleBadge = `<span style="font-size:10px; font-weight:600; background:rgba(0,230,118,0.12); color:#00E676; padding:2px 6px; border-radius:10px; border:1px solid rgba(0,230,118,0.2); font-family:Geologica,sans-serif;">${isRu ? 'админ' : 'admin'}</span>`;
+                    roleBadge = `<span style="font-size:13px; color:var(--text-muted); font-weight:400;">${isRu ? 'админ' : 'admin'}</span>`;
                 }
 
                 const lastSeenVal = m.last_seen || m.lastSeen;
@@ -1975,6 +2022,12 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                           <span>${isRu ? 'Включить темы' : 'Enable Topics'}</span>
                        </div>`)
                 : '';
+            const chatSettingsBtnHtml = (isOwner || myRole === 'admin')
+                ? `<div onclick="openChatSettingsModal('${chatId}')" style="display:flex; align-items:center; gap:10px; padding:10px 14px; font-size:13px; color:var(--text-primary); cursor:pointer; transition:background 0.2s; font-family:Geologica,sans-serif;" onmouseover="this.style.background='${dropdownHover}'" onmouseout="this.style.background='transparent'">
+                      <span style="font-size:16px;">⚙️</span>
+                      <span>${isRu ? 'Настройки' : 'Settings'}</span>
+                   </div>`
+                : '';
             const reportOption = `<div onclick="showToast('info', '${isRu ? 'Жалоба отправлена модераторам' : 'Report sent to moderators'}', '⚠️')" style="display:flex; align-items:center; gap:10px; padding:10px 14px; font-size:13px; color:#FF4B4B; cursor:pointer; transition:background 0.2s; font-family:Geologica,sans-serif;" onmouseover="this.style.background='${dropdownHover}'" onmouseout="this.style.background='transparent'">
                 <span style="font-size:16px;">⚠️</span>
                 <span>${isRu ? 'Пожаловаться' : 'Report'}</span>
@@ -2084,6 +2137,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                                 ${bansBtnHtml}
                                 ${inviteLinksBtnHtml}
                                 ${joinRequestsBtnHtml}
+                                ${chatSettingsBtnHtml}
                                 ${topicsToggleBtnHtml}
                                 ${reportOption}
                             </div>
@@ -3529,7 +3583,21 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             messagesData[serverMessage.id] = serverMessage;
         }
 
+        function getTelegramColor(userId) {
+            const colors = ['#e17076', '#eda86c', '#a695e7', '#7bc862', '#6ec9cb', '#65aadd', '#ee7aae'];
+            let sum = 0;
+            const str = String(userId || '');
+            for (let i = 0; i < str.length; i++) sum += str.charCodeAt(i);
+            return colors[sum % colors.length];
+        }
+
         function createMessageElement(m) {
+            if (m.type === 'system') {
+                const sysDiv = document.createElement('div');
+                sysDiv.className = 'system-msg';
+                sysDiv.textContent = m.content || '';
+                return sysDiv;
+            }
             const div = document.createElement('div');
             const isOutgoing = m.senderId === user.id || m.outgoing;
             const isBotMessage = isCraneAppBotMessage(m);
@@ -3556,14 +3624,49 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             });
 
             let pressTimer;
+            let startX = 0;
+            let currentX = 0;
+            let isSwiping = false;
+
             div.addEventListener('touchstart', function(e) {
+                startX = e.touches[0].clientX;
+                isSwiping = false;
+                div.style.transition = 'none';
                 pressTimer = setTimeout(function() {
+                    if (isSwiping) return;
                     const actualId = div.dataset.messageId || m.id;
                     showMessageContextMenu(e.touches[0], actualId, div, m.content || '', m.senderName || tr('user', 'Пользователь'));
                 }, 500);
             });
-            div.addEventListener('touchend', function() { clearTimeout(pressTimer); });
-            div.addEventListener('touchmove', function() { clearTimeout(pressTimer); });
+            div.addEventListener('touchmove', function(e) {
+                currentX = e.touches[0].clientX;
+                let deltaX = currentX - startX;
+                if (Math.abs(deltaX) > 10) {
+                    isSwiping = true;
+                    clearTimeout(pressTimer);
+                }
+                if (deltaX < 0 && deltaX > -80) { // Swipe left
+                    div.style.transform = `translateX(${deltaX}px)`;
+                }
+            });
+            div.addEventListener('touchend', function() { 
+                clearTimeout(pressTimer); 
+                div.style.transition = 'transform 0.2s cubic-bezier(0.25, 1, 0.5, 1)';
+                div.style.transform = '';
+                
+                if (isSwiping && currentX) {
+                    let deltaX = currentX - startX;
+                    if (deltaX < -50) { // threshold for reply
+                        const actualId = div.dataset.messageId || m.id;
+                        currentMessageId = actualId;
+                        replyToMessage();
+                        if (window.navigator.vibrate) window.navigator.vibrate(50); // haptic feedback
+                    }
+                }
+                startX = 0;
+                currentX = 0;
+                isSwiping = false;
+            });
 
             // ── Аватарка и имя отправителя в группах ──────────────────
             if (isGroup && !isOutgoing) {
@@ -3593,12 +3696,13 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                             ? '<span class="camera-icon" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;border-radius:50%">📷</span>'
                             : (initial || '?');
 
+                const senderColor = getTelegramColor(m.senderId || m.sender?.id || '');
                 const wrapper = document.createElement('div');
                 wrapper.className = 'msg-group-wrapper';
                 wrapper.innerHTML = `
                     <div class="msg-sender-avatar">${avatarContent}</div>
                     <div class="msg-group-content">
-                        <div class="msg-sender-name">${senderName}${senderBadgeHtml}</div>
+                        <div class="msg-sender-name" style="color: ${senderColor}">${senderName}${statusEmojiHtml}${senderBadgeHtml}</div>
                     </div>
                 `;
                 // Сообщение будет добавлено внутрь msg-group-content
@@ -3689,13 +3793,30 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 const img = document.createElement('img');
                 img.className = 'message-media';
                 img.src = m.mediaUrl;
-                img.onclick = function() { openMediaPreview(m.mediaUrl, 'image'); };
+                
+                const hasSpoiler = m.hasSpoiler || (m.content && m.content.toLowerCase().includes('#spoiler'));
+                if (hasSpoiler) {
+                    img.classList.add('media-spoiler');
+                    img.onclick = function(e) {
+                        if (img.classList.contains('media-spoiler')) {
+                            e.stopPropagation();
+                            img.classList.remove('media-spoiler');
+                        } else {
+                            openMediaPreview(m.mediaUrl, 'image');
+                        }
+                    };
+                } else {
+                    img.onclick = function() { openMediaPreview(m.mediaUrl, 'image'); };
+                }
+                
                 div.appendChild(img);
-                if (m.content) {
+                let capTxt = m.content;
+                if (hasSpoiler && typeof capTxt === 'string') capTxt = capTxt.replace(/#spoiler\b/gi, '').trim();
+                if (capTxt) {
                     div.classList.remove('media-only');
                     const cap = document.createElement('div');
                     cap.className = 'message-caption';
-                    cap.textContent = isCraneAppBotMessage(m) ? localizeBotMessageText(m.content) : m.content;
+                    cap.innerHTML = renderFormattedText(isCraneAppBotMessage(m) ? localizeBotMessageText(capTxt) : capTxt);
                     div.appendChild(cap);
                 }
             } else if (m.type === 'video') {
@@ -3703,12 +3824,31 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 video.className = 'message-media';
                 video.src = m.mediaUrl;
                 video.controls = true;
-                video.onclick = function() { openMediaPreview(m.mediaUrl, 'video'); };
+                
+                const hasSpoiler = m.hasSpoiler || (m.content && m.content.toLowerCase().includes('#spoiler'));
+                if (hasSpoiler) {
+                    video.classList.add('media-spoiler');
+                    video.onclick = function(e) {
+                        if (video.classList.contains('media-spoiler')) {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            video.classList.remove('media-spoiler');
+                            video.play();
+                        } else {
+                            openMediaPreview(m.mediaUrl, 'video');
+                        }
+                    };
+                } else {
+                    video.onclick = function() { openMediaPreview(m.mediaUrl, 'video'); };
+                }
+                
                 div.appendChild(video);
-                if (m.content) {
+                let capTxt = m.content;
+                if (hasSpoiler && typeof capTxt === 'string') capTxt = capTxt.replace(/#spoiler\b/gi, '').trim();
+                if (capTxt) {
                     const cap = document.createElement('div');
                     cap.className = 'message-caption';
-                    cap.textContent = isCraneAppBotMessage(m) ? localizeBotMessageText(m.content) : m.content;
+                    cap.innerHTML = renderFormattedText(isCraneAppBotMessage(m) ? localizeBotMessageText(capTxt) : capTxt);
                     div.appendChild(cap);
                 }
             } else if (m.type === 'gif') {
@@ -3716,13 +3856,30 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 const img = document.createElement('img');
                 img.className = 'message-gif';
                 img.src = m.mediaUrl;
-                img.onclick = function() { openMediaPreview(m.mediaUrl, 'gif'); };
+                
+                const hasSpoiler = m.hasSpoiler || (m.content && m.content.toLowerCase().includes('#spoiler'));
+                if (hasSpoiler) {
+                    img.classList.add('media-spoiler');
+                    img.onclick = function(e) {
+                        if (img.classList.contains('media-spoiler')) {
+                            e.stopPropagation();
+                            img.classList.remove('media-spoiler');
+                        } else {
+                            openMediaPreview(m.mediaUrl, 'gif');
+                        }
+                    };
+                } else {
+                    img.onclick = function() { openMediaPreview(m.mediaUrl, 'gif'); };
+                }
+                
                 div.appendChild(img);
-                if (m.content) {
+                let capTxt = m.content;
+                if (hasSpoiler && typeof capTxt === 'string') capTxt = capTxt.replace(/#spoiler\b/gi, '').trim();
+                if (capTxt) {
                     div.classList.remove('media-only');
                     const cap = document.createElement('div');
                     cap.className = 'message-caption';
-                    cap.textContent = isCraneAppBotMessage(m) ? localizeBotMessageText(m.content) : m.content;
+                    cap.innerHTML = renderFormattedText(isCraneAppBotMessage(m) ? localizeBotMessageText(capTxt) : capTxt);
                     div.appendChild(cap);
                 }
             } else if (m.type === 'sticker') {
@@ -3789,6 +3946,16 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                     displayContent = localizeBotMessageText(displayContent);
                 }
                 textSpan.innerHTML = renderFormattedText(displayContent);
+                
+                // Проверяем на Jumbo Emoji
+                const isOnlyEmoji = /^(\p{Emoji_Presentation}|\p{Extended_Pictographic}|\s)+$/u.test(displayContent);
+                if (isOnlyEmoji) {
+                    const emojiCount = [...displayContent.replace(/\s/g, '')].length;
+                    if (emojiCount > 0 && emojiCount <= 3) {
+                        textSpan.classList.add('jumbo-emoji');
+                        div.classList.add('jumbo-emoji-msg');
+                    }
+                }
                 
                 // Add spacer for time to prevent overlapping in shrink-to-fit layout
                 const spacer = document.createElement('span');
@@ -6488,6 +6655,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 name: name, 
                 type: chatInfo?.type || 'private',
                 isSupergroup: chatInfo?.isSupergroup || false,
+                isProtected: chatInfo?.isProtected || false,
                 ownerId: chatInfo?.ownerId,
                 role: chatInfo?.role,
                 mentionReadAt: chatInfo?.mentionReadAt || null,
@@ -6523,6 +6691,13 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
 
             document.getElementById('noChat').style.display = 'none';
             document.getElementById('chatView').classList.add('active');
+
+            const msgContainer = document.getElementById('messagesContainer');
+            if (activeChat.isProtected) {
+                msgContainer.classList.add('protected-chat');
+            } else {
+                msgContainer.classList.remove('protected-chat');
+            }
 
             // Имя + бейджи в хедере
             const chatUserForBadge = chatUsers[id];
@@ -6736,6 +6911,13 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
 
         function closeChat() {
             if (activeChat) {
+                const advSettings = JSON.parse(localStorage.getItem('craneapp_advanced_settings') || '{}');
+                const saveDrafts = advSettings.saveDrafts !== false;
+                if (saveDrafts) {
+                    const draft = document.getElementById('msgInput').innerText;
+                    if (draft) localStorage.setItem('crane_draft_' + activeChat.id, draft);
+                    else localStorage.removeItem('crane_draft_' + activeChat.id);
+                }
                 delete mentionJumpCursorByChat[activeChat.id];
             }
             activeChat = null;
@@ -6928,10 +7110,17 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             const msg = messagesData[messageId];
             const downloadItem = document.getElementById('downloadMediaItem');
             const copyItem = document.getElementById('copyTextItem');
+            const forwardItem = document.getElementById('forwardMessageItem');
             const copyLabel = document.getElementById('copyItemLabel');
             const isMedia = msg && (msg.type === 'image' || msg.type === 'photo' || msg.type === 'gif');
-            if (downloadItem) downloadItem.style.display = isMedia ? 'flex' : 'none';
-        if (copyLabel) copyLabel.textContent = isMedia ? (window.i18n?.t('copyPhoto') || 'Скопировать фото') : (window.i18n?.t('copyText') || 'Копировать текст');
+            
+            const isProtected = activeChat && activeChat.isProtected;
+
+            if (downloadItem) downloadItem.style.display = (isMedia && !isProtected) ? 'flex' : 'none';
+            if (copyItem) copyItem.style.display = isProtected ? 'none' : 'flex';
+            if (forwardItem) forwardItem.style.display = isProtected ? 'none' : 'flex';
+
+            if (copyLabel) copyLabel.textContent = isMedia ? (window.i18n?.t('copyPhoto') || 'Скопировать фото') : (window.i18n?.t('copyText') || 'Копировать текст');
             if (copyItem) copyItem.onclick = isMedia ? copyMessagePhoto : copyMessageText;
 
             // Настраиваем пункт закрепления (Закрепить / Открепить)
@@ -7071,7 +7260,17 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 },
                 body: JSON.stringify({ content: newText })
             }).then(function(r) { return r.json(); }).then(function(d) {
-                if (d.success) {
+                // Функция для рендеринга форматированного текста в сообщениях
+        function renderFormattedText(text) {
+            if (!text) return '';
+            
+            // Скрываем хэштег #spoiler
+            text = text.replace(/(^|\s)#spoiler\b/gi, '');
+            
+            // Экранируем HTML
+            return text;
+        }
+        if (d.success) {
                     currentMessageElement.querySelector('.message-text').innerHTML = renderFormattedText(newText);
                     closeEditMessageModal();
                     showToast('success', 'Сохранено', '✓');
@@ -7268,6 +7467,21 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             if (msg.type === 'image' || msg.type === 'photo') {
                 contentText = `<span>${mediaIcon}</span> ` + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ': Фото';
             } else if (msg.type === 'video') {
+                const hideSender = document.getElementById('forwardHideSender') && document.getElementById('forwardHideSender').checked;
+                const res = await fetch('/api/v1/messages/' + chatId, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify({
+                        content: messageContent,
+                        type: messageType,
+                        mediaUrl: mediaUrl,
+                        forwardFrom: hideSender ? null : forwardMessageData.senderName,
+                        replyToMessageId: null
+                    })
+                });
                 contentText = `<span>${mediaIcon}</span> ` + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ': Видео';
             } else if (msg.type === 'gif') {
                 contentText = `<span>${mediaIcon}</span> ` + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ': GIF';
@@ -7516,8 +7730,16 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             // Курсив: _текст_
             escaped = escaped.replace(/_(.+?)_/g, '<span class="italic">$1</span>');
             
+            // Моноширинный (код): `текст`
+            escaped = escaped.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
+            
             // Скрытый текст: ||текст||
             escaped = escaped.replace(/\|\|(.+?)\|\|/g, '<span class="spoiler" onclick="this.classList.toggle(\'revealed\')">$1</span>');
+
+            // Хэштеги: #тег
+            escaped = escaped.replace(/(^|\s)#([a-zA-Zа-яА-Я0-9_]+)/g, function(full, space, tag) {
+                return space + `<a href="#" class="hashtag" onclick="event.preventDefault(); event.stopPropagation(); window.openSearchModal(); document.getElementById('modalSearchInput').value = '#${tag}'; document.getElementById('modalSearchInput').dispatchEvent(new Event('input'));">#${tag}</a>`;
+            });
 
             // 1. Обрабатываем полные ссылки http(s)://...
             escaped = escaped.replace(/(https?:\/\/[^\s<]+)/gi, function(url) {
@@ -7709,6 +7931,47 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 showToast('error', 'Ошибка пересылки', '❌');
             }
         }
+
+        function handlePaste(e) {
+            e.preventDefault();
+            const text = (e.originalEvent || e).clipboardData.getData('text/plain');
+            document.execCommand('insertText', false, text);
+        }
+
+        let slowModeInterval = null;
+        function startSlowModeTimer(seconds) {
+            const input = document.getElementById('msgInput');
+            const sendBtn = document.getElementById('sendBtn');
+            const wrap = document.getElementById('msgInputWrap');
+            
+            if (slowModeInterval) clearInterval(slowModeInterval);
+            
+            let remain = seconds;
+            input.contentEditable = false;
+            wrap.style.opacity = '0.7';
+            input.dataset.placeholder = `Вы не можете писать ${remain} сек`;
+            input.innerHTML = '';
+            sendBtn.style.display = 'none';
+            input.blur();
+            
+            slowModeInterval = setInterval(() => {
+                remain--;
+                if (remain <= 0) {
+                    clearInterval(slowModeInterval);
+                    slowModeInterval = null;
+                    input.contentEditable = true;
+                    wrap.style.opacity = '1';
+                    input.dataset.placeholder = 'Сообщение...';
+                    updateSendButton();
+                } else {
+                    input.dataset.placeholder = `Вы не можете писать ${remain} сек`;
+                }
+            }, 1000);
+        }
+
+        // ============================================
+        // INPUT EVENTS
+        // ============================================
 
         // Обработчик поиска в модале пересылки
         document.getElementById('forwardSearchInput').addEventListener('input', function(e) {
@@ -8057,7 +8320,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
         // ============================================
         // SEND MESSAGE
         // ============================================
-        async function send() {
+        async function send(isSilent = false) {
             const input = document.getElementById('msgInput');
             const text = getInputText();
             if (!text || !activeChat) return;
@@ -8086,7 +8349,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             cancelReply();
             
             try {
-                const body = { content: text, type: 'text' };
+                const body = { content: text, type: 'text', isSilent };
                 if (replyData) body.replyTo = replyData.messageId;
                 if (activeTopic) body.topicId = activeTopic.id;
 
@@ -8156,6 +8419,22 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                         updateInputAreaMuteState();
                     }
                     showToast('error', data.error || tr('muted', 'Вы замучены'), '🔇');
+                } else if (res.status === 429) {
+                    const el = document.querySelector('[data-message-id="' + tempId + '"]');
+                    if (el) el.remove();
+                    delete messagesData[tempId];
+                    let retrySeconds = data.retryAfter;
+                    if (!retrySeconds) {
+                        const h = res.headers.get('Retry-After');
+                        if (h) retrySeconds = parseInt(h, 10);
+                    }
+                    if (!retrySeconds && data.error) {
+                        const m = data.error.match(/(\d+)\s*сек/i);
+                        if (m) retrySeconds = parseInt(m[1], 10);
+                    }
+                    if (!retrySeconds) retrySeconds = 60; // fallback
+
+                    startSlowModeTimer(retrySeconds);
                 } else {
                     const el = document.querySelector('[data-message-id="' + tempId + '"]');
                     if (el) el.remove();
@@ -8173,6 +8452,65 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
         // ============================================
         // INPUT TYPING
         // ============================================
+        
+        const sendBtnEl = document.getElementById('sendBtn');
+        let sendBtnTimer;
+        sendBtnEl.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            showSendContextMenu(e);
+        });
+        sendBtnEl.addEventListener('touchstart', function(e) {
+            sendBtnTimer = setTimeout(() => {
+                showSendContextMenu(e.touches ? e.touches[0] : e);
+            }, 500);
+        });
+        sendBtnEl.addEventListener('touchend', function() {
+            clearTimeout(sendBtnTimer);
+        });
+        sendBtnEl.addEventListener('touchmove', function() {
+            clearTimeout(sendBtnTimer);
+        });
+        
+        function showSendContextMenu(e) {
+            // Remove any existing
+            const existing = document.getElementById('sendContextMenu');
+            if (existing) existing.remove();
+            
+            const menu = document.createElement('div');
+            menu.id = 'sendContextMenu';
+            menu.className = 'chat-context-menu';
+            menu.style.position = 'fixed';
+            
+            // Positioning
+            let left = e.clientX - 180;
+            if (left < 10) left = 10;
+            let top = e.clientY - 60;
+            
+            menu.style.left = left + 'px';
+            menu.style.top = top + 'px';
+            menu.style.zIndex = 10000;
+            menu.style.display = 'block';
+            
+            menu.innerHTML = `
+                <div class="chat-context-item" style="cursor:pointer;" onclick="window.send(true); document.getElementById('sendContextMenu').remove();">
+                    <span style="margin-right: 8px;">🔕</span> <span data-i18n="sendSilent">Отправить без звука</span>
+                </div>
+            `;
+            document.body.appendChild(menu);
+            
+            setTimeout(() => {
+                const handler = function(ev) {
+                    if (!menu.contains(ev.target)) {
+                        menu.remove();
+                    }
+                    document.removeEventListener('click', handler);
+                };
+                document.addEventListener('click', handler);
+            }, 50);
+        }
+
+        window.send = send;
+        
         document.getElementById('msgInput').addEventListener('input', function() {
             sendTyping();
             requestAnimationFrame(handleMentionInput);
@@ -8455,7 +8793,21 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             if (pinText) {
                 const pinKey = isPinned ? 'unpin' : 'pin';
                 pinText.setAttribute('data-i18n', pinKey);
-                pinText.textContent = tr(pinKey, isPinned ? 'Unpin' : 'Pin');
+                pinText.textContent = tr(pinKey, isPinned ? 'Открепить' : 'Закрепить');
+            }
+            
+            // Обновляем текст "Пометить прочитанным/непрочитанным"
+            const readText = document.getElementById('contextReadText');
+            const chat = allChats.find(c => c.id === chatId);
+            const isUnread = chat && chat.unreadCount > 0;
+            if (readText) {
+                if (isUnread) {
+                    readText.setAttribute('data-i18n', 'markAsRead');
+                    readText.textContent = tr('markAsRead', 'Пометить прочитанным');
+                } else {
+                    readText.setAttribute('data-i18n', 'markAsUnread');
+                    readText.textContent = tr('markAsUnread', 'Пометить непрочитанным');
+                }
             }
             
             // Обновляем текст пункта "Архивировать/Разархивировать"
@@ -8509,8 +8861,20 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             document.getElementById('chatContextMenu').classList.remove('active');
             if (!chatId) return;
 
+            const chat = allChats.find(c => c.id === chatId);
+            const isUnread = chat && chat.unreadCount > 0;
+
             try {
-                await markChatAsRead(chatId, { acknowledgeMentions: true });
+                if (isUnread) {
+                    await markChatAsRead(chatId, { acknowledgeMentions: true });
+                } else {
+                    await fetch('/api/v1/chats/' + chatId + '/unread', {
+                        method: 'POST',
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+                    if (chat) chat.unreadCount = 1;
+                    renderChatList();
+                }
             } catch (err) {
                 showToast('error', tr('saveError', 'Ошибка сохранения'), '❌');
             }
@@ -9089,9 +9453,9 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                     
                     let roleLabel = '';
                     if (m.role === 'owner') {
-                        roleLabel = '<span style="font-size:11px;color:var(--accent-color);margin-left:6px;">Создатель</span>';
+                        roleLabel = `<span style="font-size:13px;color:var(--text-muted);font-weight:400;margin-left:6px;">${isRu ? 'владелец' : 'owner'}</span>`;
                     } else if (m.role === 'admin') {
-                        roleLabel = '<span style="font-size:11px;color:#00B0FF;margin-left:6px;">Админ</span>';
+                        roleLabel = `<span style="font-size:13px;color:var(--text-muted);font-weight:400;margin-left:6px;">${isRu ? 'админ' : 'admin'}</span>`;
                     }
                     
                     const onlineDot = m.is_online ? '<span style="width:8px;height:8px;border-radius:50%;background:#00E676;display:inline-block;margin-left:6px;"></span>' : '';
@@ -9620,9 +9984,9 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                     
                     let roleLabel = '';
                     if (m.role === 'owner') {
-                        roleLabel = '<span style="font-size:11px;color:var(--accent-color);margin-left:6px;">Создатель</span>';
+                        roleLabel = `<span style="font-size:13px;color:var(--text-muted);font-weight:400;margin-left:6px;">${isRu ? 'владелец' : 'owner'}</span>`;
                     } else if (m.role === 'admin') {
-                        roleLabel = '<span style="font-size:11px;color:#00B0FF;margin-left:6px;">Админ</span>';
+                        roleLabel = `<span style="font-size:13px;color:var(--text-muted);font-weight:400;margin-left:6px;">${isRu ? 'админ' : 'admin'}</span>`;
                     }
                     
                     const onlineDot = m.is_online ? '<span style="width:8px;height:8px;border-radius:50%;background:#00E676;display:inline-block;margin-left:6px;"></span>' : '';
@@ -10676,3 +11040,81 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
   window.decideJoinRequest = decideJoinRequest;
   window.handleInviteLinkClick = handleInviteLinkClick;
 
+
+
+// Chat Settings Modal
+window.openChatSettingsModal = function(chatId) {
+    const chat = allChats.find(c => c.id === chatId);
+    if (!chat) return;
+    const isRu = (window.i18n?.currentLang || localStorage.getItem('craneapp_language') || 'ru') === 'ru';
+    const ttlOptions = [
+        { val: 0, label: isRu ? 'Выкл' : 'Off' },
+        { val: 10, label: '10 ' + (isRu ? 'сек' : 'sec') },
+        { val: 60, label: '1 ' + (isRu ? 'мин' : 'min') },
+        { val: 3600, label: '1 ' + (isRu ? 'час' : 'hour') },
+        { val: 86400, label: '1 ' + (isRu ? 'день' : 'day') }
+    ];
+    const optionsHtml = ttlOptions.map(opt => `<option value="${opt.val}" ${chat.ttlSeconds == opt.val ? 'selected' : ''}>${opt.label}</option>`).join('');
+    
+    let modal = document.createElement('div');
+    modal.id = 'chatSettingsModal';
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+        <div class="modal" style="width: 320px; padding: 16px;">
+            <div class="modal-header">
+                <span class="modal-title">${isRu ? 'Настройки чата' : 'Chat Settings'}</span>
+                <button class="modal-close" onclick="document.getElementById('chatSettingsModal').remove()">×</button>
+            </div>
+            <div class="modal-body" style="display:flex; flex-direction:column; gap:16px; padding-top:12px;">
+                <label style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="color:var(--text-primary);">${isRu ? 'Защита от пересылки' : 'Forward Protection'}</span>
+                    <input type="checkbox" id="chatSettingsProtected" ${chat.isProtected ? 'checked' : ''} style="accent-color:var(--accent-color); width:18px; height:18px;">
+                </label>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                    <label style="color:var(--text-primary);">${isRu ? 'Автоудаление сообщений' : 'Auto-delete Messages'}</label>
+                    <select id="chatSettingsTtl" style="padding:8px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-tertiary); color:var(--text-primary);">
+                        ${optionsHtml}
+                    </select>
+                </div>
+                <button onclick="saveChatSettings('${chatId}')" style="margin-top:8px; background:var(--accent-color); color:#fff; border:none; padding:10px; border-radius:8px; cursor:pointer; font-weight:600;">
+                    ${isRu ? 'Сохранить' : 'Save'}
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    modal.style.display = 'flex';
+};
+
+window.exportChatHistory = exportChatHistory;
+window.saveChatSettings = async function(chatId) {
+    const isProtected = document.getElementById('chatSettingsProtected').checked;
+    const ttlSeconds = parseInt(document.getElementById('chatSettingsTtl').value, 10);
+    try {
+        const res = await fetch(`/api/v1/chats/${chatId}/settings`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ isProtected, ttlSeconds })
+        });
+        if (res.ok) {
+            document.getElementById('chatSettingsModal').remove();
+            showToast('success', 'Сохранено', '✓');
+            const chat = allChats.find(c => c.id === chatId);
+            if (chat) {
+                chat.isProtected = isProtected;
+                chat.ttlSeconds = ttlSeconds;
+                if (activeChat && activeChat.id === chatId) {
+                    activeChat.isProtected = isProtected;
+                    const msgContainer = document.getElementById('messagesContainer');
+                    if (isProtected) msgContainer.classList.add('protected-chat');
+                    else msgContainer.classList.remove('protected-chat');
+                }
+            }
+        } else {
+            const data = await res.json();
+            showToast('error', data.error || 'Ошибка', '❌');
+        }
+    } catch(e) {
+        showToast('error', 'Network error', '❌');
+    }
+};
