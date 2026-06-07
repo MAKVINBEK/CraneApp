@@ -570,6 +570,13 @@ func (s *Service) ForwardMessage(ctx context.Context, userID, messageID, targetC
 		return Message{}, err
 	}
 
+	if ok, err := s.isMember(ctx, userID, src.ChatID); err != nil || !ok {
+		if err != nil {
+			return Message{}, err
+		}
+		return Message{}, ErrForbidden
+	}
+
 	forwardedFrom := src.ID
 	msg, err := s.SendMessage(ctx, userID, targetChatID, src.Content, src.Type, nil)
 	if err != nil {
@@ -616,6 +623,9 @@ func (s *Service) ListReactions(ctx context.Context, userID, messageID string) (
 // Returns (added bool, updated reactions, error).
 func (s *Service) ToggleReaction(ctx context.Context, userID, messageID, emoji string) (bool, []Reaction, error) {
 	if emoji == "" {
+		return false, nil, ErrInvalidInput
+	}
+	if len(emoji) > 64 || strings.ContainsAny(emoji, "<>\"'&/\\") {
 		return false, nil, ErrInvalidInput
 	}
 

@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"strings"
 
@@ -78,7 +79,8 @@ func (s *Service) Register(ctx context.Context, username, password, firstName, l
 	if lang == "" {
 		lang = "ru"
 	}
-	defaultSettings := `{"theme":"dark","notifications":true,"sounds":true,"language":"` + lang + `"}`
+	langJSON, _ := json.Marshal(lang)
+	defaultSettings := `{"theme":"dark","notifications":true,"sounds":true,"language":` + string(langJSON) + `}`
 
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO users.settings (user_id, settings, privacy_settings, notification_settings, sound_settings, storage_settings, advanced_settings, folders)

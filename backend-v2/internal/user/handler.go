@@ -243,8 +243,12 @@ func (h *Handler) DeleteDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := h.service.DeleteDevice(r.Context(), current.ID, sessionID)
-	if err != nil {
-		httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", err.Error())
+	switch {
+	case errors.Is(err, ErrNotFound):
+		httpx.ErrorJSON(w, r, http.StatusNotFound, "not_found", "session not found")
+		return
+	case err != nil:
+		httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", "operation failed")
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"success": true})
