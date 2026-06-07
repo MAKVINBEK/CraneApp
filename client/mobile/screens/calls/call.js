@@ -9,6 +9,8 @@
     const ROOM_TITLE = qs.get('title') || '';
     const ROOM_TYPE = qs.get('type') || 'group';
     const ROOM_KIND = (qs.get('kind') === 'audio') ? 'audio' : 'video'; // audio | video
+    const CHAT_ID = qs.get('chatId') || '';
+    const IS_GROUP_CHAT_CALL = !!CHAT_ID || (ROOM_ID && ROOM_ID.startsWith('grp_'));
     const IS_EMBEDDED = qs.get('embedded') === '1';
     if (IS_EMBEDDED) document.body.classList.add('embedded');
 
@@ -125,9 +127,13 @@
 
     const lobbyInvite = document.getElementById('lobbyInvite');
     const lobbyInviteUrl = document.getElementById('lobbyInviteUrl');
-    if (lobbyInviteUrl) lobbyInviteUrl.value = ROOM_ID ? buildInviteLink() : '';
-    document.getElementById('lobbyCopyBtn').onclick = copyInviteLink;
-    lobbyInviteUrl && (lobbyInviteUrl.onclick = () => { lobbyInviteUrl.select(); lobbyInviteUrl.setSelectionRange(0, lobbyInviteUrl.value.length); });
+    if (IS_GROUP_CHAT_CALL && lobbyInvite) {
+        lobbyInvite.style.display = 'none';
+    } else {
+        if (lobbyInviteUrl) lobbyInviteUrl.value = ROOM_ID ? buildInviteLink() : '';
+        document.getElementById('lobbyCopyBtn').onclick = copyInviteLink;
+        lobbyInviteUrl && (lobbyInviteUrl.onclick = () => { lobbyInviteUrl.select(); lobbyInviteUrl.setSelectionRange(0, lobbyInviteUrl.value.length); });
+    }
     document.getElementById('lobbyLeaveBtn').onclick = exitLobby;
     document.getElementById('callTitle').textContent = ROOM_TITLE || (IS_AUDIO
         ? tr('audioCall', 'Аудиозвонок')
@@ -262,7 +268,12 @@
                 const cr = await fetch('/api/v1/calls/rooms', {
                     method:'POST',
                     headers:{ 'Authorization':'Bearer '+TOKEN, 'Content-Type':'application/json' },
-                    body: JSON.stringify({ type: ROOM_TYPE, title: ROOM_TITLE, roomId: ROOM_ID })
+                    body: JSON.stringify({
+                        type: ROOM_TYPE,
+                        title: ROOM_TITLE,
+                        roomId: ROOM_ID,
+                        chatId: CHAT_ID || null
+                    })
                 });
                 if (cr.ok) {
                     const cd = await cr.json();

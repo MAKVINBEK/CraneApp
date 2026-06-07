@@ -396,8 +396,9 @@ async function saveCallMessage(r) {
 app.post('/api/v1/calls/rooms', async (req, res) => {
     const u = await authFromHeader(req);
     if (!u) return res.status(401).json({ error: req.t('unauthorized') });
-    const { type = 'group', chatId = null, title = null, callKind = 'video' } = req.body || {};
-    const room = callRoom.createRoom(u.userId, { type, chatId, title, callKind });
+    const { type = 'group', chatId = null, title = null, callKind = 'video', roomId = null } = req.body || {};
+    const stableRoomId = roomId || (type === 'group' && chatId ? 'grp_' + String(chatId).replace(/[^a-zA-Z0-9_-]/g, '_') : null);
+    const room = callRoom.createRoom(u.userId, { type, chatId, title, callKind, roomId: stableRoomId || undefined });
     res.json({
         success: true,
         room: { id: room.id, type: room.type, chatId: room.chatId, title: room.title, hostId: room.hostId },

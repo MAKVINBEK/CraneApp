@@ -521,6 +521,13 @@ body {
     text-overflow: ellipsis;
 }
 
+.chat-last .poll-preview-icon,
+.forward-chat-last .poll-preview-icon {
+    display: inline-block;
+    vertical-align: -2px;
+    margin-right: 5px;
+}
+
 .chat-meta {
     display: flex;
     flex-direction: column;

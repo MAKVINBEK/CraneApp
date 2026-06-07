@@ -586,6 +586,11 @@
 
         function _genRoomId() { return 'rm_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
 
+        function _groupCallRoomId(chatId) {
+            if (!chatId) return null;
+            return 'grp_' + String(chatId).replace(/[^a-zA-Z0-9_-]/g, '_');
+        }
+
         let _activeCallRoomId = null;
         let _activeCallTitle = '';
         let _activeCallTitleKey = '';
@@ -611,11 +616,12 @@
             if (endBtn) endBtn.title = tr('endCall', 'Завершить звонок');
         }
 
-        function _openCallWindow(roomId, type, title, kind) {
+        function _openCallWindow(roomId, type, title, kind, chatId) {
             const url = '../calls/call.html?room=' + encodeURIComponent(roomId)
                 + '&type=' + encodeURIComponent(type || 'group')
                 + '&kind=' + encodeURIComponent(kind || 'video')
                 + (title ? '&title=' + encodeURIComponent(title) : '')
+                + (chatId ? '&chatId=' + encodeURIComponent(chatId) : '')
                 + '&embedded=1';
             _activeCallRoomId = roomId;
             _activeCallTitleKey = title ? '' : (kind === 'audio' ? 'audioCall' : 'videoCall');
@@ -697,19 +703,20 @@
         });
 
         async function _createCallRoom(type, chatId, title) {
+            const roomId = (type === 'group' && chatId) ? _groupCallRoomId(chatId) : null;
             try {
                 const token = localStorage.getItem('craneapp_auth_token');
                 const res = await fetch('/api/v1/calls/rooms', {
                     method: 'POST',
                     headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ type, chatId, title })
+                    body: JSON.stringify({ type, chatId, title, roomId: roomId || undefined })
                 });
                 if (!res.ok) throw new Error('Failed');
                 const data = await res.json();
                 return data.room.id;
             } catch (e) {
                 // Фолбэк — клиентский ID, /calls/call.html сам создаст комнату
-                return _genRoomId();
+                return roomId || _genRoomId();
             }
         }
 
@@ -719,6 +726,11 @@
             // Если уже идёт звонок — приглашаем собеседника присоединиться к нему
             if (_activeCallRoomId) {
                 if (activeChat.type === 'group') {
+                    const groupRoomId = _groupCallRoomId(activeChat.id);
+                    if (groupRoomId && _activeCallRoomId === groupRoomId) {
+                        _showCallPanel();
+                        return;
+                    }
                     try { showToast && showToast('info', tr('groupAddUnsupported', 'Групповое добавление из меню чата пока не поддерживается')); } catch(_){}
                     return;
                 }
@@ -775,7 +787,9 @@
                     const invitePayloads = targets.map(to => ({
                         type: 'call_invite', to, roomId,
                         kind, fromName: user.firstName || user.username, fromAvatar: user.avatarUrl || null,
-                        title
+                        title,
+                        callType: isGroup ? 'group' : 'p2p',
+                        chatId: isGroup ? activeChat.id : null
                     }));
                     // Отправляем сразу, потом повторяем 2 раза с интервалом 3 сек
                     // (защита от zombie-соединений на мобильных сетях)
@@ -793,7 +807,7 @@
                     window._cancelCallInviteRetry = cancelRetry;
                 }
             } catch (_) {}
-            _openCallWindow(roomId, isGroup ? 'group' : 'p2p', title, kind);
+            _openCallWindow(roomId, isGroup ? 'group' : 'p2p', title, kind, isGroup ? activeChat.id : null);
         }
 
         function startVideoCallFromChat() { return _startCallFromChat('video'); }
@@ -895,8 +909,9 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             // Сообщаем другим вкладкам — они прекратят звонить
             try { _callTabChannel && _callTabChannel.postMessage({ type: 'call_tab_handled', roomId: c.roomId }); } catch(_) {}
             const kind = (c.kind === 'audio') ? 'audio' : 'video';
-            const callType = c.callType || 'p2p';
-            _openCallWindow(c.roomId, callType, c.title || c.fromName || (kind === 'audio' ? tr('audioCall', 'Аудиозвонок') : tr('videoCall', 'Видеозвонок')), kind);
+            const callType = c.callType || (c.roomId && String(c.roomId).startsWith('grp_') ? 'group' : 'p2p');
+            const chatId = c.chatId || null;
+            _openCallWindow(c.roomId, callType, c.title || c.fromName || (kind === 'audio' ? tr('audioCall', 'Аудиозвонок') : tr('videoCall', 'Видеозвонок')), kind, chatId);
             _incomingCall = null;
         }
 
@@ -5837,6 +5852,11 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             return isVideo ? '📹 ' + tr('videoCall', 'Видеозвонок') : '📞 ' + tr('audioCall', 'Аудиозвонок');
         }
 
+        function pollIconSvg(size) {
+            const s = size || 14;
+            return '<svg class="poll-preview-icon" width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>';
+        }
+
         function formatLastMessageType(c, text) {
                         if (c.lastMessageType === 'image' || c.lastMessageType === 'photo') return '🖼️ ' + tr('photoMessage', 'Фото');
             if (c.lastMessageType === 'video') return '🎬 ' + tr('videoMessage', 'Видео');
@@ -5844,7 +5864,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             if (c.lastMessageType === 'sticker') return '🎨 ' + tr('stickerMessage', 'Стикер');
             if (c.lastMessageType === 'video_note') return '⭕ ' + tr('videoNoteMessage', 'Кружок');
             if (c.lastMessageType === 'call' || c.type === 'call') return formatCallLastMessage(c, text);
-            if (c.lastMessageType === 'poll') return '📊 ' + tr('pollMessage', 'Опрос');
+            if (c.lastMessageType === 'poll') return pollIconSvg(14) + tr('pollMessage', 'Опрос');
             return text || '';
         }
 
@@ -9053,88 +9073,6 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             modal.classList.add('active');
         }
 
-        let groupMembersSearchTimeout = null;
-        async function onGroupMembersSearch(val) {
-            clearTimeout(groupMembersSearchTimeout);
-            groupMembersSearchTimeout = setTimeout(() => {
-                loadGroupMembersList(val);
-            }, 300);
-        }
-        window.onGroupMembersSearch = onGroupMembersSearch;
-
-        async function loadGroupMembersList(searchVal = '') {
-            if (!activeChat) return;
-            const list = document.getElementById('groupMembersList');
-            try {
-                let url = '/api/v1/chats/' + activeChat.id + '/members';
-                if (searchVal) {
-                    url += '?search=' + encodeURIComponent(searchVal);
-                }
-                const res = await fetch(url, {
-                    headers: { 'Authorization': 'Bearer ' + token }
-                });
-                if (!res.ok) throw new Error();
-                const data = await res.json();
-                
-                activeGroupMembers = data.members;
-                
-                const isOwner = activeChat.ownerId === user.id || activeChat.role === 'owner';
-                const currentRole = activeChat.role || 'member';
-                
-                list.innerHTML = data.members.map((m, idx) => {
-                    const name = (m.first_name || '') + (m.last_name ? ' ' + m.last_name : '') || m.username;
-                    const av = m.avatar_url
-                        ? `<img src="${m.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
-                        : name[0].toUpperCase();
-                    
-                    let roleLabel = '';
-                    if (m.role === 'owner') {
-                        roleLabel = '<span style="font-size:11px;color:var(--accent-color);margin-left:6px;">Создатель</span>';
-                    } else if (m.role === 'admin') {
-                        roleLabel = '<span style="font-size:11px;color:#00B0FF;margin-left:6px;">Админ</span>';
-                    }
-                    
-                    const onlineDot = m.is_online ? '<span style="width:8px;height:8px;border-radius:50%;background:#00E676;display:inline-block;margin-left:6px;"></span>' : '';
-                    
-                    let gearIcon = '';
-                    if (m.id !== user.id) {
-                        const canModThis = isOwner || (currentRole === 'admin' && m.role === 'member');
-                        if (canModThis) {
-                            gearIcon = `<button onclick="showMemberActionsMenu(${idx})" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;padding:4px;font-size:16px;">⚙️</button>`;
-                        }
-                    }
-                    
-                    return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border-color);">
-                        <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#FF007F,#9D00FF);display:flex;align-items:center;justify-content:center;font-size:16px;color:#fff;flex-shrink:0;overflow:hidden;">${av}</div>
-                        <div style="flex:1;">
-                            <div style="font-size:15px;font-weight:500;">${name}${roleLabel}${onlineDot}</div>
-                            <div style="font-size:12px;color:var(--text-muted);">@${m.username}</div>
-                        </div>
-                        ${gearIcon}
-                    </div>`;
-                }).join('') || '<div style="padding:20px;text-align:center;color:var(--text-muted);">Нет участников</div>';
-            } catch (e) {
-                list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);">Ошибка загрузки</div>';
-            }
-        }
-
-        async function openGroupMembers() {
-            if (!activeChat) return;
-            document.getElementById('groupMembersTitle').textContent = activeChat.name + ' — участники';
-            document.getElementById('groupMembersModal').classList.add('active');
-            
-            const searchInput = document.getElementById('groupMembersSearchInput');
-            if (searchInput) searchInput.value = '';
-            
-            const isOwner = activeChat.ownerId === user.id || activeChat.role === 'owner';
-            const canBan = isOwner || activeChat.role === 'admin';
-            
-            document.getElementById('groupBansBtn').style.display = canBan ? 'block' : 'none';
-            document.getElementById('groupInviteBtn').style.display = 'block';
-            
-            loadGroupMembersList('');
-        }
-
         function closeDurationModal() {
             document.getElementById('durationModal').classList.remove('active');
             currentDurationAction = null;
@@ -9584,85 +9522,11 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
         });
 
         // ── Group Members & Moderation ───────────────────────────────────
-        async function openGroupMembers() {
-            if (!activeChat) return;
-            document.getElementById('groupMembersTitle').textContent = activeChat.name + ' — участники';
-            document.getElementById('groupMembersModal').classList.add('active');
-            const list = document.getElementById('groupMembersList');
-            list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);">Загрузка...</div>';
-            try {
-                const res = await fetch('/api/v1/chats/' + activeChat.id + '/members', {
-                    headers: { 'Authorization': 'Bearer ' + token }
-                });
-                if (!res.ok) throw new Error();
-                const data = await res.json();
-                
-                activeGroupMembers = data.members;
-                
-                // Find current user's membership details
-                const currentMember = data.members.find(m => m.id === user.id);
-                const currentRole = currentMember ? currentMember.role : 'member';
-                const currentPerms = currentMember ? (currentMember.permissions || {}) : {};
-                
-                const isOwner = currentRole === 'owner';
-                const canBan = isOwner || currentPerms.can_ban_users === true || currentPerms.can_ban_users === 'true';
-                const canInvite = isOwner || (currentPerms.can_invite_users !== false && currentPerms.can_invite_users !== 'false');
-                
-                // Show/hide invite and ban buttons
-                document.getElementById('groupBansBtn').style.display = canBan ? 'block' : 'none';
-                document.getElementById('groupInviteBtn').style.display = (isOwner || (currentRole === 'admin' && canInvite) || currentRole === 'member') ? 'block' : 'none';
-                
-                list.innerHTML = data.members.map((m, idx) => {
-                    const name = (m.first_name || '') + (m.last_name ? ' ' + m.last_name : '') || m.username;
-                    const av = m.avatar_url
-                        ? `<img src="${m.avatar_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
-                        : name[0].toUpperCase();
-                    
-                    let roleLabel = '';
-                    if (m.role === 'owner') {
-                        roleLabel = '<span style="font-size:11px;color:var(--accent-color);margin-left:6px;">Создатель</span>';
-                    } else if (m.role === 'admin') {
-                        roleLabel = '<span style="font-size:11px;color:#00B0FF;margin-left:6px;">Админ</span>';
-                    }
-                    
-                    const onlineDot = m.is_online ? '<span style="width:8px;height:8px;border-radius:50%;background:#00E676;display:inline-block;margin-left:6px;"></span>' : '';
-                    
-                    // Gear icon: show if current user can moderate this member
-                    let gearIcon = '';
-                    if (m.id !== user.id) {
-                        const canModThis = isOwner || (currentRole === 'admin' && canBan && m.role === 'member');
-                        if (canModThis) {
-                            gearIcon = `<button onclick="showMemberActionsMenu(${idx})" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;padding:4px;font-size:16px;">⚙️</button>`;
-                        }
-                    }
-                    
-                    return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border-color);">
-                        <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#FF007F,#9D00FF);display:flex;align-items:center;justify-content:center;font-size:16px;color:#fff;flex-shrink:0;overflow:hidden;">${av}</div>
-                        <div style="flex:1;">
-                            <div style="font-size:15px;font-weight:500;">${name}${roleLabel}${onlineDot}</div>
-                            <div style="font-size:12px;color:var(--text-muted);">@${m.username}</div>
-                        </div>
-                        ${gearIcon}
-                    </div>`;
-                }).join('') || '<div style="padding:20px;text-align:center;color:var(--text-muted);">Нет участников</div>';
-            } catch (e) {
-                list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);">Ошибка загрузки</div>';
-            }
-        }
-
         function pluralMembers(n) {
             if (n % 10 === 1 && n % 100 !== 11) return 'участник';
             if ([2,3,4].includes(n % 10) && ![12,13,14].includes(n % 100)) return 'участника';
             return 'участников';
         }
-
-        function closeGroupMembers() {
-            document.getElementById('groupMembersModal').classList.remove('active');
-        }
-
-        document.getElementById('groupMembersModal').addEventListener('click', function(e) {
-            if (e.target.id === 'groupMembersModal') closeGroupMembers();
-        });
 
         // Moderation functions
         function showMemberActionsMenu(idx) {
@@ -9705,7 +9569,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 }
                 showToast('success', 'Пользователь исключен', '✓');
                 closeMemberActions();
-                openGroupMembers();
+                openGroupInfoModal(activeChat.id);
             } catch (e) {
                 showToast('error', e.message, '❌');
             }
@@ -9721,7 +9585,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 if (!res.ok) throw new Error();
                 showToast('success', 'Ограничения сняты', '🔊');
                 closeMemberActions();
-                openGroupMembers();
+                openGroupInfoModal(activeChat.id);
             } catch (e) {
                 showToast('error', 'Не удалось снять ограничения', '❌');
             }
@@ -9759,7 +9623,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 showToast('success', groupDurationAction === 'mute' ? 'Пользователь заглушен' : 'Пользователь забанен', '✓');
                 closeGroupDurationModal();
                 closeMemberActions();
-                openGroupMembers();
+                openGroupInfoModal(activeChat.id);
             } catch (e) {
                 showToast('error', e.message, '❌');
             }
@@ -9807,7 +9671,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 showToast('success', 'Назначен администратором', '👑');
                 closeAdminPermissions();
                 closeMemberActions();
-                openGroupMembers();
+                openGroupInfoModal(activeChat.id);
             } catch (e) {
                 showToast('error', 'Не удалось обновить роль', '❌');
             }
@@ -9829,7 +9693,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 if (!res.ok) throw new Error();
                 showToast('success', 'Администратор разжалован', '✓');
                 closeMemberActions();
-                openGroupMembers();
+                openGroupInfoModal(activeChat.id);
             } catch (e) {
                 showToast('error', 'Не удалось разжаловать', '❌');
             }
@@ -9877,7 +9741,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 if (!res.ok) throw new Error();
                 showToast('success', 'Пользователь разбанен', '✓');
                 openBannedUsersModal();
-                openGroupMembers();
+                openGroupInfoModal(activeChat.id);
             } catch (e) {
                 showToast('error', 'Не удалось разбанить', '❌');
             }
@@ -9942,7 +9806,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 }
                 showToast('success', 'Пользователь добавлен', '✓');
                 closeGroupInviteModal();
-                openGroupMembers();
+                openGroupInfoModal(activeChat.id);
             } catch (e) {
                 showToast('error', e.message, '❌');
             }
@@ -10170,8 +10034,6 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
 
 
 // Expose functions globally
-        window.openGroupMembers = openGroupMembers;
-        window.closeGroupMembers = closeGroupMembers;
         window.showMemberActionsMenu = showMemberActionsMenu;
         window.closeMemberActions = closeMemberActions;
         window.kickGroupMember = kickGroupMember;
