@@ -18,25 +18,15 @@ const E2E = (() => {
     const STORE_NAME = 'keys';
 
     // ── IndexedDB для хранения приватных ключей ────────────────────────────
-    let dbPromise = null;
-
     function openDB() {
-        if (!dbPromise) {
-            dbPromise = new Promise((resolve, reject) => {
-                const req = indexedDB.open(DB_NAME, DB_VERSION);
-                req.onupgradeneeded = e => {
-                    if (!e.target.result.objectStoreNames.contains(STORE_NAME)) {
-                        e.target.result.createObjectStore(STORE_NAME);
-                    }
-                };
-                req.onsuccess = e => resolve(e.target.result);
-                req.onerror = () => {
-                    dbPromise = null;
-                    reject(req.error);
-                };
-            });
-        }
-        return dbPromise;
+        return new Promise((resolve, reject) => {
+            const req = indexedDB.open(DB_NAME, DB_VERSION);
+            req.onupgradeneeded = e => {
+                e.target.result.createObjectStore(STORE_NAME);
+            };
+            req.onsuccess = e => resolve(e.target.result);
+            req.onerror = () => reject(req.error);
+        });
     }
 
     async function dbGet(key) {
@@ -113,6 +103,91 @@ const E2E = (() => {
         );
     }
 
+    // ── Derive гибридного секрета (ECDH + Kyber-1024) → AES-256-GCM ──────
+    async function deriveHybridKey(myPrivateKey, recipientPubKey, recipientPQPubKeyB64) {
+        // 1. Classical ECDH shared secret bits
+        const sharedECDHBytes = new Uint8Array(await crypto.subtle.deriveBits(
+            { name: 'ECDH', public: recipientPubKey },
+            myPrivateKey,
+            256
+        ));
+
+        // 2. Kyber-1024 encapsulation
+        const recipientPQPubKey = new Uint8Array(b64ToBuf(recipientPQPubKeyB64));
+        const encapResult = window.ml_kem1024.encapsulate(recipientPQPubKey);
+
+        // 3. Concatenate classical and PQ secrets
+        const masterSecret = new Uint8Array(sharedECDHBytes.length + encapResult.sharedSecret.length);
+        masterSecret.set(sharedECDHBytes, 0);
+        masterSecret.set(encapResult.sharedSecret, sharedECDHBytes.length);
+
+        // 4. HKDF derivation
+        const importedMaster = await crypto.subtle.importKey(
+            'raw', masterSecret,
+            { name: 'HKDF' },
+            false,
+            ['deriveKey']
+        );
+
+        const sharedKey = await crypto.subtle.deriveKey(
+            {
+                name: 'HKDF',
+                hash: 'SHA-256',
+                salt: new Uint8Array(0),
+                info: new TextEncoder().encode('CraneApp PQXDH Hybrid Key')
+            },
+            importedMaster,
+            { name: 'AES-GCM', length: 256 },
+            false,
+            ['wrapKey', 'unwrapKey']
+        );
+
+        return {
+            sharedKey,
+            pqCiphertextB64: bufToB64(encapResult.cipherText)
+        };
+    }
+
+    // ── Decapsulate гибридный секрет (ECDH + Kyber-1024) ─────────────────
+    async function decapsulateHybridKey(myPrivateKey, senderPubKey, myPQSecretKey, pqCiphertextB64) {
+        // 1. Classical ECDH shared secret bits
+        const sharedECDHBytes = new Uint8Array(await crypto.subtle.deriveBits(
+            { name: 'ECDH', public: senderPubKey },
+            myPrivateKey,
+            256
+        ));
+
+        // 2. Kyber-1024 decapsulation
+        const pqCiphertext = new Uint8Array(b64ToBuf(pqCiphertextB64));
+        const pqSharedSecret = window.ml_kem1024.decapsulate(pqCiphertext, myPQSecretKey);
+
+        // 3. Concatenate classical and PQ secrets
+        const masterSecret = new Uint8Array(sharedECDHBytes.length + pqSharedSecret.length);
+        masterSecret.set(sharedECDHBytes, 0);
+        masterSecret.set(pqSharedSecret, sharedECDHBytes.length);
+
+        // 4. HKDF derivation
+        const importedMaster = await crypto.subtle.importKey(
+            'raw', masterSecret,
+            { name: 'HKDF' },
+            false,
+            ['deriveKey']
+        );
+
+        return crypto.subtle.deriveKey(
+            {
+                name: 'HKDF',
+                hash: 'SHA-256',
+                salt: new Uint8Array(0),
+                info: new TextEncoder().encode('CraneApp PQXDH Hybrid Key')
+            },
+            importedMaster,
+            { name: 'AES-GCM', length: 256 },
+            false,
+            ['wrapKey', 'unwrapKey']
+        );
+    }
+
     // ── Генерация сессионного AES-256-GCM ключа для чата ──────────────────
     async function generateSessionKey() {
         return crypto.subtle.generateKey(
@@ -123,21 +198,41 @@ const E2E = (() => {
     }
 
     // ── Зашифровать сессионный ключ публичным ключом получателя ───────────
-    async function wrapSessionKey(sessionKey, recipientPublicKeyB64, myPrivateKey) {
+    async function wrapSessionKey(sessionKey, recipientPublicKeyB64, recipientPQPubKeyB64, myPrivateKey) {
         const recipientPubKey = await importPublicKey(recipientPublicKeyB64);
-        const sharedKey = await deriveSharedKey(myPrivateKey, recipientPubKey);
+        let sharedKey;
+        let pqCiphertext = '';
+
+        if (recipientPQPubKeyB64 && window.ml_kem1024) {
+            const derived = await deriveHybridKey(myPrivateKey, recipientPubKey, recipientPQPubKeyB64);
+            sharedKey = derived.sharedKey;
+            pqCiphertext = derived.pqCiphertextB64;
+        } else {
+            sharedKey = await deriveSharedKey(myPrivateKey, recipientPubKey);
+        }
+
         const iv = crypto.getRandomValues(new Uint8Array(12));
         const wrapped = await crypto.subtle.wrapKey('raw', sessionKey, sharedKey, { name: 'AES-GCM', iv });
-        return bufToB64(iv) + ':' + bufToB64(wrapped);
+        return {
+            wrappedKeyStr: bufToB64(iv) + ':' + bufToB64(wrapped),
+            pqCiphertext
+        };
     }
 
     // ── Расшифровать сессионный ключ своим приватным ключом ───────────────
-    async function unwrapSessionKey(wrappedB64, senderPublicKeyB64, myPrivateKey) {
+    async function unwrapSessionKey(wrappedB64, senderPublicKeyB64, pqCiphertextB64, myPrivateKey, myPQSecretKey) {
         const [ivB64, keyB64] = wrappedB64.split(':');
         const iv = b64ToBuf(ivB64);
         const wrapped = b64ToBuf(keyB64);
         const senderPubKey = await importPublicKey(senderPublicKeyB64);
-        const sharedKey = await deriveSharedKey(myPrivateKey, senderPubKey);
+
+        let sharedKey;
+        if (pqCiphertextB64 && myPQSecretKey && window.ml_kem1024) {
+            sharedKey = await decapsulateHybridKey(myPrivateKey, senderPubKey, myPQSecretKey, pqCiphertextB64);
+        } else {
+            sharedKey = await deriveSharedKey(myPrivateKey, senderPubKey);
+        }
+
         return crypto.subtle.unwrapKey(
             'raw', wrapped, sharedKey,
             { name: 'AES-GCM', iv },
@@ -166,9 +261,9 @@ const E2E = (() => {
         return new TextDecoder().decode(decrypted);
     }
 
-    // ── Кэш сессионных ключей (chatId → CryptoKey) ────────────────────────
+    // ── Кэш сессионных ключей (chatId → { key, epoch, msgCount }) ─────────
     const sessionKeyCache = new Map();
-    const sessionKeyInflight = new Map();
+    const SESSION_KEY_ROTATION_THRESHOLD = 200;
 
     // ── Публичный API ──────────────────────────────────────────────────────
 
@@ -181,9 +276,11 @@ const E2E = (() => {
             let privateKey = await dbGet('privateKey');
             let publicKeyB64 = await dbGet('publicKeyB64');
             let keyId = await dbGet('keyId');
+            let pqSecretKey = await dbGet('pqSecretKey');
+            let pqPublicKeyB64 = await dbGet('pqPublicKeyB64');
 
             if (!privateKey || !publicKeyB64) {
-                console.log('🔐 E2E: Generating new key pair...');
+                console.log('🔐 E2E: Generating new classical key pair...');
                 const pair = await generateKeyPair();
                 privateKey = pair.privateKey;
                 publicKeyB64 = await exportPublicKey(pair.publicKey);
@@ -194,14 +291,32 @@ const E2E = (() => {
                 await dbSet('keyId', keyId);
             }
 
+            if ((!pqSecretKey || !pqPublicKeyB64) && window.ml_kem1024) {
+                console.log('🔐 E2E: Generating new post-quantum key pair...');
+                try {
+                    const pqKeys = window.ml_kem1024.keygen();
+                    pqSecretKey = pqKeys.secretKey;
+                    pqPublicKeyB64 = bufToB64(pqKeys.publicKey);
+
+                    await dbSet('pqSecretKey', pqSecretKey);
+                    await dbSet('pqPublicKeyB64', pqPublicKeyB64);
+                } catch (e) {
+                    console.warn('⚠️ E2E: Post-quantum keygen failed:', e);
+                }
+            }
+
             // Публикуем публичный ключ на сервер
-            await fetch('/api/v1/encryption/keys', {
+            await fetch('/api/v2/encryption/keys', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': 'Bearer ' + authToken
                 },
-                body: JSON.stringify({ publicKey: publicKeyB64, keyId })
+                body: JSON.stringify({ 
+                    publicKey: publicKeyB64, 
+                    keyId,
+                    pqPublicKey: pqPublicKeyB64 || null
+                })
             });
 
             console.log('🔐 E2E: Initialized, key ID:', keyId.substring(0, 8) + '...');
@@ -216,20 +331,8 @@ const E2E = (() => {
      * Получить или создать сессионный ключ для чата
      */
     async function getSessionKey(chatId, authToken) {
-        if (sessionKeyCache.has(chatId)) return sessionKeyCache.get(chatId);
-        if (sessionKeyInflight.has(chatId)) return sessionKeyInflight.get(chatId);
-
-        const loadPromise = loadSessionKey(chatId, authToken);
-        sessionKeyInflight.set(chatId, loadPromise);
-        try {
-            return await loadPromise;
-        } finally {
-            sessionKeyInflight.delete(chatId);
-        }
-    }
-
-    async function loadSessionKey(chatId, authToken) {
-        if (sessionKeyCache.has(chatId)) return sessionKeyCache.get(chatId);
+        const cached = sessionKeyCache.get(chatId);
+        if (cached) return cached.key;
 
         const privateKey = await dbGet('privateKey');
         const myKeyId = await dbGet('keyId');
@@ -238,39 +341,50 @@ const E2E = (() => {
 
         // Пробуем загрузить существующий ключ с сервера
         try {
-            const res = await fetch('/api/v1/encryption/my-key/' + chatId, {
+            const res = await fetch('/api/v2/encryption/my-key/' + chatId, {
                 headers: { 'Authorization': 'Bearer ' + authToken }
             });
 
             if (res.ok) {
-                const { encrypted_key, sender_key_id } = await res.json();
-
-                // Получаем публичный ключ отправителя ключа
-                // Если sender_key_id == myKeyId — это мы сами создали ключ
+                const { encrypted_key, sender_key_id, pq_ciphertext } = await res.json();
+                
+                const myUserId = JSON.parse(localStorage.getItem('craneapp_user_data') || '{}').id;
                 let senderPublicKeyB64;
-                if (sender_key_id === myKeyId) {
+
+                // Для старых чатов sender_key_id мог хранить myUserId
+                if (sender_key_id === myKeyId || sender_key_id === myUserId) {
                     senderPublicKeyB64 = myPublicKeyB64;
                 } else {
-                    // Ищем публичный ключ среди участников чата
-                    const keysRes = await fetch('/api/v1/encryption/chat-keys/' + chatId, {
+                    const keysRes = await fetch('/api/v2/encryption/chat-keys/' + chatId, {
                         headers: { 'Authorization': 'Bearer ' + authToken }
                     });
                     if (keysRes.ok) {
                         const { keys } = await keysRes.json();
-                        // Находим ключ по keyId (sender_key_id хранит userId отправителя)
-                        const senderKey = keys.find(k => k.key_id === sender_key_id);
+                        const senderKey = keys.find(k => k.key_id === sender_key_id || k.user_id === sender_key_id);
                         if (senderKey) senderPublicKeyB64 = senderKey.public_key;
                     }
                 }
 
                 if (senderPublicKeyB64) {
-                    const sessionKey = await unwrapSessionKey(encrypted_key, senderPublicKeyB64, privateKey);
-                    sessionKeyCache.set(chatId, sessionKey);
-                    return sessionKey;
+                    try {
+                        const pqSecretKey = await dbGet('pqSecretKey');
+                        const sessionKey = await unwrapSessionKey(encrypted_key, senderPublicKeyB64, pq_ciphertext, privateKey, pqSecretKey);
+                        sessionKeyCache.set(chatId, { key: sessionKey, epoch: key_epoch || 0, msgCount: 0 });
+                        return sessionKey;
+                    } catch (e) {
+                        console.warn('⚠️ E2E: unwrapSessionKey failed (wrong private key?)', e);
+                        // Если ключ есть на сервере, но мы не можем его расшифровать (сменилось устройство),
+                        // нельзя генерировать новый и перезаписывать его! Иначе сломаем историю другим.
+                        return null;
+                    }
+                } else {
+                    console.warn('⚠️ E2E: Could not find sender public key for session key.');
+                    return null; // Аналогично, не перезаписываем ключ
                 }
             }
         } catch (e) {
-            console.warn('⚠️ E2E: Could not load session key:', e);
+            console.warn('⚠️ E2E: Error fetching my-key:', e);
+            return null; // При сетевой ошибке тоже не перезаписываем
         }
 
         // Создаём новый сессионный ключ
@@ -278,7 +392,7 @@ const E2E = (() => {
             const sessionKey = await generateSessionKey();
 
             // Получаем публичные ключи всех участников чата
-            const keysRes = await fetch('/api/v1/encryption/chat-keys/' + chatId, {
+            const keysRes = await fetch('/api/v2/encryption/chat-keys/' + chatId, {
                 headers: { 'Authorization': 'Bearer ' + authToken }
             });
 
@@ -295,24 +409,25 @@ const E2E = (() => {
 
             // Шифруем сессионный ключ для каждого участника
             const encryptedKeys = [];
-            for (const { user_id, public_key } of keys) {
+            for (const { user_id, public_key, pq_public_key } of keys) {
                 try {
-                    const wrapped = await wrapSessionKey(sessionKey, public_key, privateKey);
-                    encryptedKeys.push({ userId: user_id, encryptedKey: wrapped, senderKeyId: myKeyId });
+                    const { wrappedKeyStr, pqCiphertext } = await wrapSessionKey(sessionKey, public_key, pq_public_key, privateKey);
+                    encryptedKeys.push({ userId: user_id, encryptedKey: wrappedKeyStr, senderKeyId: myKeyId, pqCiphertext });
                 } catch (e) {
-                    console.warn('⚠️ E2E: Could not wrap key for user', user_id);
+                    console.warn('⚠️ E2E: Could not wrap key for user', user_id, e);
                 }
             }
 
             // Также шифруем для себя (если нас нет в списке)
             const myUserId = JSON.parse(localStorage.getItem('craneapp_user_data') || '{}').id;
             if (myUserId && !keys.find(k => k.user_id === myUserId)) {
-                const wrapped = await wrapSessionKey(sessionKey, myPublicKeyB64, privateKey);
-                encryptedKeys.push({ userId: myUserId, encryptedKey: wrapped, senderKeyId: myKeyId });
+                const myPQPublicKeyB64 = await dbGet('pqPublicKeyB64');
+                const { wrappedKeyStr, pqCiphertext } = await wrapSessionKey(sessionKey, myPublicKeyB64, myPQPublicKeyB64, privateKey);
+                encryptedKeys.push({ userId: myUserId, encryptedKey: wrappedKeyStr, senderKeyId: myKeyId, pqCiphertext });
             }
 
             if (encryptedKeys.length > 0) {
-                await fetch('/api/v1/encryption/chat-keys/' + chatId, {
+                await fetch('/api/v2/encryption/chat-keys/' + chatId, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -322,7 +437,7 @@ const E2E = (() => {
                 });
             }
 
-            sessionKeyCache.set(chatId, sessionKey);
+            sessionKeyCache.set(chatId, { key: sessionKey, epoch: 0, msgCount: 0 });
             return sessionKey;
         } catch (e) {
             console.warn('⚠️ E2E: Could not create session key:', e);
@@ -331,14 +446,78 @@ const E2E = (() => {
     }
 
     /**
+     * Rotate the session key for a chat (forward secrecy).
+     * Called automatically after SESSION_KEY_ROTATION_THRESHOLD messages.
+     */
+    async function rotateSessionKey(chatId, authToken) {
+        try {
+            const cached = sessionKeyCache.get(chatId);
+            const newEpoch = ((cached && cached.epoch) || 0) + 1;
+
+            const privateKey = await dbGet('privateKey');
+            const myKeyId = await dbGet('keyId');
+            const myPublicKeyB64 = await dbGet('publicKeyB64');
+            if (!privateKey) return null;
+
+            const newSessionKey = await generateSessionKey();
+
+            const keysRes = await fetch('/api/v2/encryption/chat-keys/' + chatId, {
+                headers: { 'Authorization': 'Bearer ' + authToken }
+            });
+            if (!keysRes.ok) return null;
+
+            const { keys } = await keysRes.json();
+            const encryptedKeys = [];
+
+            for (const { user_id, public_key, pq_public_key } of (keys || [])) {
+                try {
+                    const { wrappedKeyStr, pqCiphertext } = await wrapSessionKey(newSessionKey, public_key, pq_public_key, privateKey);
+                    encryptedKeys.push({ userId: user_id, encryptedKey: wrappedKeyStr, senderKeyId: myKeyId, pqCiphertext });
+                } catch (_) {}
+            }
+
+            const myUserId = JSON.parse(localStorage.getItem('craneapp_user_data') || '{}').id;
+            if (myUserId && !keys.find(k => k.user_id === myUserId)) {
+                const myPQPublicKeyB64 = await dbGet('pqPublicKeyB64');
+                const { wrappedKeyStr, pqCiphertext } = await wrapSessionKey(newSessionKey, myPublicKeyB64, myPQPublicKeyB64, privateKey);
+                encryptedKeys.push({ userId: myUserId, encryptedKey: wrappedKeyStr, senderKeyId: myKeyId, pqCiphertext });
+            }
+
+            if (encryptedKeys.length > 0) {
+                await fetch('/api/v2/encryption/rotate-key/' + chatId, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+                    body: JSON.stringify({ encryptedKeys, keyEpoch: newEpoch })
+                });
+            }
+
+            sessionKeyCache.set(chatId, { key: newSessionKey, epoch: newEpoch, msgCount: 0 });
+            return newSessionKey;
+        } catch (e) {
+            console.warn('⚠️ E2E rotateSessionKey failed:', e);
+            return null;
+        }
+    }
+
+    /**
      * Зашифровать текст сообщения
-     * Возвращает { content: '🔐<base64>', iv: '<base64>', isEncrypted: true }
+     * Возвращает { content: '<base64>', iv: '<base64>', isEncrypted: true }
      * или исходный объект если шифрование недоступно
      */
     async function encrypt(text, chatId, authToken) {
         try {
-            const sessionKey = await getSessionKey(chatId, authToken);
+            let sessionKey = await getSessionKey(chatId, authToken);
             if (!sessionKey) return { content: text, isEncrypted: false };
+
+            // Auto-rotate after threshold for forward secrecy
+            const cached = sessionKeyCache.get(chatId);
+            if (cached) {
+                cached.msgCount = (cached.msgCount || 0) + 1;
+                if (cached.msgCount >= SESSION_KEY_ROTATION_THRESHOLD) {
+                    const rotated = await rotateSessionKey(chatId, authToken);
+                    if (rotated) sessionKey = rotated;
+                }
+            }
 
             const { ciphertext, iv } = await encryptMessage(text, sessionKey);
             return { content: ciphertext, iv, isEncrypted: true };
@@ -370,7 +549,7 @@ const E2E = (() => {
         else sessionKeyCache.clear();
     }
 
-    return { init, encrypt, decrypt, getSessionKey, clearCache };
+    return { init, encrypt, decrypt, getSessionKey, rotateSessionKey, clearCache };
 })();
 
 window.E2E = E2E;
