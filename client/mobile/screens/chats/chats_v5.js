@@ -1674,7 +1674,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             // Совместимость со старым кодом
             if (bioEl) {
                 if (userData.bio) {
-                    bioEl.innerHTML = userData.bio;
+                    bioEl.innerHTML = escapeHtml(userData.bio);
                     bioEl.style.display = 'block';
                 } else {
                     bioEl.style.display = 'none';
@@ -4491,7 +4491,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 item.onclick = function() { selectStickerPack(realIndex); };
                 // Аватар - последний стикер или иконка
                 const avatar = pack.stickers && pack.stickers.length > 0 ? pack.stickers[pack.stickers.length - 1] : (pack.icon || '🎨');
-                item.innerHTML = '<div class="sticker-pack-icon"><img src="' + avatar + '" alt=""></div><span class="sticker-pack-name">' + pack.name + '</span>';
+                item.innerHTML = '<div class="sticker-pack-icon"><img src="' + avatar + '" alt=""></div><span class="sticker-pack-name">' + escapeHtml(pack.name) + '</span>';
                 container.appendChild(item);
             });
 
@@ -6277,10 +6277,12 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 html += archivedChats.map(function(c) {
                     const name = c.name || c.title || tr('chatShort', 'Чат');
                     const ph = c.av || c.avatarUrl || (name[0] || '?');
+                    const safeName = escapeHtml(name);
+                    const safeLastMsg = escapeHtml(c.lastMessage || tr('noMessages', 'Нет сообщений'));
                     return '<div class="chat-item" onclick="openArchivedChat(\'' + c.id + '\', \'' + name + '\')">' +
                         renderAvatar(ph, name[0], 'avatar', '', name) +
-                        '<div class="chat-info"><div class="chat-name">' + name + '</div>' +
-                        '<div class="chat-last">' + (c.lastMessage || tr('noMessages', 'Нет сообщений')) + '</div></div>' +
+                        '<div class="chat-info"><div class="chat-name">' + safeName + '</div>' +
+                        '<div class="chat-last">' + safeLastMsg + '</div></div>' +
                         renderChatMeta(c) +
                         '<div class="chat-actions"><button class="chat-action-icon" onclick="event.stopPropagation(); unarchiveChat(\'' + c.id + '\')" title="' + tr('restore', 'Восстановить') + '">📥</button></div>' +
                         '</div>';
@@ -6296,6 +6298,8 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 html += pinnedChats.map(function(c) {
                     const isActive = activeChat && activeChat.id === c.id;
                     const ph = typeof c.av === 'string' && c.av.length <= 2 ? c.av : c.name[0];
+                    const safeName = escapeHtml(c.name);
+                    const safeLastMsg = escapeHtml(c.lastMessage || tr('noMessages', 'Нет сообщений'));
                     return '<div class="chat-item pinned ' + (isActive ? 'active' : '') + '" ' +
                         'data-chat-type="' + (c.type || (c.isGroup ? 'group' : 'private')) + '" ' +
                         'onclick="openChat(\'' + c.id + '\', \'' + c.name + '\')" ' +
@@ -6303,8 +6307,8 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                         'style="background: linear-gradient(90deg, rgba(255,0,127,0.15) 0%, transparent 100%); border-left: 3px solid var(--accent-color);">' +
                         renderAvatar(c.av, ph, 'avatar', c.isBot ? 'craneapp_bot' : '', c.name) +
                         '<div class="chat-info">' +
-                        '<div class="chat-name" style="color: var(--accent-color);"><span class="pin-icon">📌</span> ' + c.name + '</div>' +
-                        '<div class="chat-last">' + (c.lastMessage || tr('noMessages', 'Нет сообщений')) + '</div>' +
+                        '<div class="chat-name" style="color: var(--accent-color);"><span class="pin-icon">📌</span> ' + safeName + '</div>' +
+                        '<div class="chat-last">' + safeLastMsg + '</div>' +
                         '</div>' +
                         renderChatMeta(c) +
                         '<div class="chat-actions">' +
@@ -6337,14 +6341,16 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                         avatarHtml = renderAvatar(c.av, _initial, 'avatar', c.isBot ? 'craneapp_bot' : '', c.name);
                     }
                     const displayName = isBlocked ? tr('blockedAccount', 'Заблокированный аккаунт') : c.name;
+                    const safeName = escapeHtml(displayName);
+                    const safeLastMsg = escapeHtml(c.lastMessage || tr('noMessages', 'Нет сообщений'));
                     return '<div class="chat-item ' + (isActive ? 'active' : '') + '" ' +
                         'data-chat-type="' + (c.type || (c.isGroup ? 'group' : 'private')) + '" ' +
                         'onclick="openChat(\'' + c.id + '\', \'' + displayName + '\')" ' +
                         'oncontextmenu="showChatContextMenu(event, \'' + c.id + '\')">' +
                         avatarHtml +
                         '<div class="chat-info">' +
-                        '<div class="chat-name">' + displayName + (c.badge || c.isBot ? renderBadge(c.badge, c.isBot) : '') + '</div>' +
-                        '<div class="chat-last">' + (c.lastMessage || tr('noMessages', 'Нет сообщений')) + '</div>' +
+                        '<div class="chat-name">' + safeName + (c.badge || c.isBot ? renderBadge(c.badge, c.isBot) : '') + '</div>' +
+                        '<div class="chat-last">' + safeLastMsg + '</div>' +
                         '</div>' +
                         renderChatMeta(c) +
                         '<div class="chat-actions">' +
@@ -6387,20 +6393,23 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                             section.id = 'userSearchResults';
                             list.appendChild(section);
                         }
-                        section.innerHTML = '<div style="padding:8px 16px 4px;font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-muted);">' + tr('people', 'Люди') + '</div>' +
+                        section.innerHTML = '<div style="padding:8px 16px 4px;font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-muted);">' + escapeHtml(tr('people', 'Люди')) + '</div>' +
                             users.map(u => {
+                                const safeUsername = escapeHtml(u.username || '');
+                                const safeFirstName = escapeHtml(u.firstName || '');
+                                const safeInitial = escapeHtml((u.firstName||u.username||'U')[0]);
                                 // Журавль для бота CraneApp
                                 const av = u.username === 'craneapp_bot'
                                     ? '<img src="/logo.png" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">'
                                     : (u.avatar_url && isImage(u.avatar_url)
-                                        ? '<img src="'+u.avatar_url+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">'
-                                        : '<div style="width:100%;height:100%;background:linear-gradient(135deg,#FF007F,#9D00FF);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;font-weight:700;">'+(u.firstName||u.username||'U')[0]+'</div>');
-                                const displayName = u.firstName && u.lastName ? u.firstName + ' ' + u.lastName : (u.firstName || u.username || tr('user', 'Пользователь'));
-                                return '<div class="chat-item" onclick="startChatFromSearch(\''+u.id+'\',\''+displayName.replace(/'/g,"\\'")+'\')" style="padding:12px 16px;cursor:pointer;transition:background 0.2s;display:flex;align-items:center;gap:12px;">' +
+                                        ? '<img src="' + u.avatar_url + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">'
+                                        : '<div style="width:100%;height:100%;background:linear-gradient(135deg,#FF007F,#9D00FF);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;font-weight:700;">' + safeInitial + '</div>');
+                                const displayName = u.firstName && u.lastName ? safeFirstName + ' ' + escapeHtml(u.lastName||'') : (safeFirstName || safeUsername || escapeHtml(tr('user', 'Пользователь')));
+                                return '<div class="chat-item" onclick="startChatFromSearch(\''+escapeAttr(u.id)+'\',\''+escapeAttr(displayName)+'\')" style="padding:12px 16px;cursor:pointer;transition:background 0.2s;display:flex;align-items:center;gap:12px;">' +
                                     '<div style="width:48px;height:48px;border-radius:50%;overflow:hidden;flex-shrink:0;background:var(--bg-tertiary);">'+av+'</div>' +
                                     '<div style="flex:1;min-width:0;">' +
                                         '<div style="font-size:15px;font-weight:600;color:var(--text-primary);margin-bottom:2px;">'+displayName+'</div>' +
-                                        '<div style="font-size:13px;color:var(--text-muted);">@'+(u.username||'')+'</div>' +
+                                        '<div style="font-size:13px;color:var(--text-muted);">@'+safeUsername+'</div>' +
                                     '</div>' +
                                 '</div>';
                             }).join('');
@@ -6430,14 +6439,14 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                         list.appendChild(section);
                     }
 
-                    section.innerHTML = '<div style="padding:8px 16px 4px;font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-muted);">' + tr('messagesLabel', 'Сообщения') + '</div>' +
+                    section.innerHTML = '<div style="padding:8px 16px 4px;font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-muted);">' + escapeHtml(tr('messagesLabel', 'Сообщения')) + '</div>' +
                         messages.map(m => {
                             const chatName = m.chatType === 'private'
-                                ? (m.senderFirstName && m.senderLastName ? m.senderFirstName + ' ' + m.senderLastName : (m.senderFirstName || m.senderUsername || tr('user', 'Пользователь')))
-                                : m.chatName || tr('chatShort', 'Чат');
-                            const preview = m.content.length > 50 ? m.content.substring(0, 50) + '...' : m.content;
-                            const time = new Date(m.createdAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-                            return '<div class="chat-item" onclick="openChatFromMessageSearch(\''+m.chatId+'\',\''+m.id+'\')" style="padding:12px 16px;cursor:pointer;transition:background 0.2s;">' +
+                                ? escapeHtml(m.senderFirstName && m.senderLastName ? m.senderFirstName + ' ' + m.senderLastName : (m.senderFirstName || m.senderUsername || tr('user', 'Пользователь')))
+                                : escapeHtml(m.chatName || tr('chatShort', 'Чат'));
+                            const preview = escapeHtml(m.content.length > 50 ? m.content.substring(0, 50) + '...' : m.content);
+                            const time = escapeHtml(new Date(m.createdAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }));
+                            return '<div class="chat-item" onclick="openChatFromMessageSearch(\''+escapeAttr(m.chatId)+'\',\''+escapeAttr(m.id)+'\')" style="padding:12px 16px;cursor:pointer;transition:background 0.2s;">' +
                                 '<div style="flex:1;min-width:0;overflow:hidden;">' +
                                     '<div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+chatName+'</div>' +
                                     '<div style="font-size:13px;color:var(--text-primary);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+preview+'</div>' +
@@ -6451,8 +6460,8 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             }, 300);
         }
 
-        function escapeAttr(s) { return (s||'').replace(/'/g,"\\'"); }
-        function escapeHtml(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+        function escapeAttr(s) { return String(s||'').replace(/[&<>"'\/]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','/':'&#x2F;'}[c];}); }
+        function escapeHtml(s) { return String(s||'').replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); }
 
         async function startChatFromSearch(userId, name, username) {
             document.getElementById('searchInput').value = '';
@@ -6553,7 +6562,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 : '';
             const chatNameEl = document.getElementById('chatName');
             if (chatBadgesHtml) {
-                chatNameEl.innerHTML = displayName + chatBadgesHtml;
+                chatNameEl.innerHTML = escapeHtml(displayName) + chatBadgesHtml;
             } else {
                 chatNameEl.textContent = displayName;
             }
@@ -7285,17 +7294,18 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             }
             
             let contentText = '';
+            const senderName = escapeHtml(msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы');
             if (msg.type === 'image' || msg.type === 'photo') {
-                contentText = `<span>${mediaIcon}</span> ` + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ': Фото';
+                contentText = `<span>${mediaIcon}</span> ` + senderName + ': Фото';
             } else if (msg.type === 'video') {
-                contentText = `<span>${mediaIcon}</span> ` + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ': Видео';
+                contentText = `<span>${mediaIcon}</span> ` + senderName + ': Видео';
             } else if (msg.type === 'gif') {
-                contentText = `<span>${mediaIcon}</span> ` + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ': GIF';
+                contentText = `<span>${mediaIcon}</span> ` + senderName + ': GIF';
             } else if (msg.type === 'sticker') {
-                contentText = `<span>${mediaIcon}</span> ` + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ': Стикер';
+                contentText = `<span>${mediaIcon}</span> ` + senderName + ': Стикер';
             } else {
-                const text = msg.content || '';
-                contentText = '<strong>' + (msg.senderFirstName || msg.senderUsername || window.i18n?.t('you') || 'Вы') + ':</strong> ' + (text.length > 60 ? text.substring(0, 60) + '...' : text);
+                const text = escapeHtml(msg.content || '');
+                contentText = '<strong>' + senderName + ':</strong> ' + (text.length > 60 ? text.substring(0, 60) + '...' : text);
             }
             
             pinnedText.innerHTML = prefix + contentText;
@@ -7611,7 +7621,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             } else if (forwardMessageData.type === 'sticker') {
                 previewEl.innerHTML = '<span>🎨</span> <span>Стикер</span>';
             } else {
-                previewEl.innerHTML = '<strong>' + forwardMessageData.senderName + ':</strong> ' + (forwardMessageData.content.substring(0, 100) || 'Текстовое сообщение');
+                previewEl.innerHTML = '<strong>' + escapeHtml(forwardMessageData.senderName) + ':</strong> ' + escapeHtml(forwardMessageData.content.substring(0, 100) || 'Текстовое сообщение');
             }
             
             // Загружаем список чатов

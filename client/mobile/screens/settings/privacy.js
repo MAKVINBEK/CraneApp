@@ -96,18 +96,23 @@ const token = localStorage.getItem('craneapp_auth_token');
                     </div>`;
                 return;
             }
-            container.innerHTML = blockedUsers.map(u => `
+            container.innerHTML = blockedUsers.map(u => {
+                const safeName = (u.firstName || u.username || t('user', 'Пользователь')).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});
+                const safeUsername = (u.username || '').replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});
+                const safeInitial = ((u.firstName || u.username || '?')[0]).toUpperCase().replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});
+                return `
                 <div class="blocked-user" data-id="${u.id}">
                     <div class="blocked-avatar">
                         ${u.avatarUrl
                             ? `<img src="${u.avatarUrl}" alt="">`
-                            : (u.firstName || u.username || '?')[0].toUpperCase()}
+                            : safeInitial}
                     </div>
                     <div class="blocked-info">
-                        <div class="blocked-name">${u.firstName || u.username || t('user', 'Пользователь')}</div>
-                        <div class="blocked-username">@${u.username || ''}</div>
+                        <div class="blocked-name">${safeName}</div>
+                        <div class="blocked-username">@${safeUsername}</div>
                     </div>
-                    <button class="unblock-btn" onclick="unblockUser('${u.id}')">${t('unblock', 'Разблокировать')}</button>
+                    <button class="unblock-btn" onclick="unblockUser('${u.id}')">${t('unblock', 'Разблокировать')}</button>`;
+            }).join('');
                 </div>
             `).join('');
         }

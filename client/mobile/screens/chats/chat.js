@@ -24,10 +24,12 @@ import { router } from '../../app/router.js';
             { text: 'Зайди в Настройки → Оформление!', incoming: true, time: '10:02' }
         ];
 
+        function escapeHtml(s) { return String(s||'').replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); }
+
         demoMessages.forEach(m => {
             const div = document.createElement('div');
             div.className = 'message' + (m.incoming ? ' incoming' : ' outgoing');
-            div.innerHTML = `${m.text}<div class="msg-time">${m.time}</div>`;
+            div.innerHTML = escapeHtml(m.text) + '<div class="msg-time">' + escapeHtml(m.time) + '</div>';
             messages.appendChild(div);
         });
         messages.scrollTop = messages.scrollHeight;
@@ -37,16 +39,18 @@ import { router } from '../../app/router.js';
         function sendMessage() {
             const text = input.value.trim();
             if (!text) return;
+            const safeText = escapeHtml(text);
+            const timeStr = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
             const div = document.createElement('div');
             div.className = 'message outgoing';
-            div.innerHTML = `${text}<div class="msg-time">${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>`;
+            div.innerHTML = safeText + '<div class="msg-time">' + timeStr + '</div>';
             messages.appendChild(div);
             input.value = '';
             messages.scrollTop = messages.scrollHeight;
             setTimeout(() => {
                 const reply = document.createElement('div');
                 reply.className = 'message incoming';
-                reply.innerHTML = `Получил: "${text}"<div class="msg-time">${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>`;
+                reply.innerHTML = 'Получил: "' + safeText + '"<div class="msg-time">' + timeStr + '</div>';
                 messages.appendChild(reply);
                 messages.scrollTop = messages.scrollHeight;
             }, 1000);

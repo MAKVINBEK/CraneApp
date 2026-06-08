@@ -31,11 +31,13 @@ async function loadProfile() {
     renderAvatar(originalData.avatarUrl, originalData.firstName);
 }
 
+function escapeHtml(s) { return String(s||'').replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); }
+
 function renderAvatar(url, name) {
     const el = document.getElementById('avatarEl');
     el.innerHTML = (url && (url.startsWith('http') || url.startsWith('data:') || url.startsWith('/')))
         ? `<img src="${url}" alt="">`
-        : `<span>${(name || '?')[0].toUpperCase()}</span>`;
+        : `<span>${escapeHtml((name || '?')[0].toUpperCase())}</span>`;
 }
 
 function updateBioCounter() {

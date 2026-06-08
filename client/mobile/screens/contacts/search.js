@@ -69,18 +69,25 @@ console.log('✅ Скрипт поиска загружен!');
             }
         }
 
+        function escapeHtml(str) { return String(str||'').replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); }
+        function escapeAttr(str) { return String(str||'').replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+
         function renderResults(users) {
             console.log('📝 Рендер:', users.length, 'пользователей');
             
             const container = document.getElementById('results');
             container.innerHTML = users.map(user => {
                 console.log('  - ' + user.username);
+                const safeId = escapeAttr(user.id);
+                const safeUsername = escapeAttr(user.username || '');
+                const safeName = escapeHtml(user.firstName || user.lastName || 'Пользователь');
+                const safeInitial = escapeHtml((user.firstName || user.username || '?')[0].toUpperCase());
                 return `
-                    <div class="result-item" onclick="startChat('${user.id}', '${user.username}')">
-                        <div class="result-avatar">${(user.firstName || user.username)[0].toUpperCase()}</div>
+                    <div class="result-item" onclick="startChat('${safeId}', '${safeUsername}')">
+                        <div class="result-avatar">${safeInitial}</div>
                         <div class="result-info">
-                            <div class="result-name">${user.firstName || user.lastName || 'Пользователь'}</div>
-                            <div class="result-username">@${user.username}</div>
+                            <div class="result-name">${safeName}</div>
+                            <div class="result-username">@${escapeHtml(user.username || '')}</div>
                         </div>
                         <button class="action-btn">Написать</button>
                     </div>
