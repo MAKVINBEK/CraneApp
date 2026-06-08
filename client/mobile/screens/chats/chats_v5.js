@@ -569,14 +569,33 @@
             scrollToBottom();
         }
 
-        function bumpPostCommentCount(postId) {
+        function bumpPostCommentCount(postId, comment) {
             if (!postId) return;
             if (messagesData[postId]) {
                 messagesData[postId].commentCount = (messagesData[postId].commentCount || 0) + 1;
             }
-            if (typeof window.updatePostCommentCount === 'function') {
+            if (comment && typeof window.appendPostCommentPreview === 'function') {
+                window.appendPostCommentPreview(postId, comment);
+            } else if (typeof window.updatePostCommentCount === 'function') {
                 window.updatePostCommentCount(postId, messagesData[postId]?.commentCount || 0);
             }
+        }
+
+        function buildCommentPreviewFromMessages(messages) {
+            const preview = [];
+            const seen = new Set();
+            for (let i = messages.length - 1; i >= 0 && preview.length < 3; i--) {
+                const msg = messages[i];
+                if (!msg || !msg.senderId || seen.has(msg.senderId)) continue;
+                seen.add(msg.senderId);
+                preview.push({
+                    senderId: msg.senderId,
+                    senderFirstName: msg.senderFirstName,
+                    senderUsername: msg.senderUsername,
+                    senderAvatar: msg.senderAvatar
+                });
+            }
+            return preview;
         }
 
         window.isCommentThreadActive = isCommentThreadActive;
@@ -624,8 +643,13 @@
                 });
                 const data = await res.json();
                 const messages = data.messages || [];
+                const preview = buildCommentPreviewFromMessages(messages);
+                if (messagesData[postId]) {
+                    messagesData[postId].commentCount = messages.length;
+                    messagesData[postId].commentPreview = preview;
+                }
                 if (typeof window.updatePostCommentCount === 'function') {
-                    window.updatePostCommentCount(postId, messages.length);
+                    window.updatePostCommentCount(postId, messages.length, preview);
                 }
                 list.innerHTML = '';
                 if (!messages.length) {
@@ -1155,7 +1179,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
 
             const showPlaceholder = (icon, title, subtitle) => {
                 placeholder.innerHTML =
-                    '<div style="width:72px;height:72px;border-radius:20px;background:var(--rd-bg-elev,rgba(28,28,32,0.72));border:1px solid var(--rd-stroke,rgba(255,255,255,0.08));display:flex;align-items:center;justify-content:center;margin-bottom:16px;">' + icon + '</div>' +
+                    '<div class="section-placeholder-icon">' + icon + '</div>' +
                     '<div style="font-size:17px;font-weight:700;color:var(--rd-text,#fff);letter-spacing:-0.01em;margin-bottom:6px;">' + title + '</div>' +
                     '<div style="font-size:13px;color:var(--rd-text-3,rgba(235,235,245,0.46));max-width:260px;line-height:1.45;">' + subtitle + '</div>';
                 Array.from(list.children).forEach(ch => {
@@ -1175,8 +1199,8 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             const dmIcon = '✉';
             const groupIcon = '👥';
             const channelIconHtml = typeof window.chIcon === 'function'
-                ? '<span class="channels-empty-icon">' + window.chIcon('megaphone', 28) + '</span>'
-                : '<div class="channels-empty-icon"></div>';
+                ? '<div class="section-placeholder-icon">' + window.chIcon('broadcast', 28) + '</div>'
+                : '<div class="section-placeholder-icon"></div>';
             const commIcon = '💬';
             const meetIcon = '📹';
 
@@ -1193,12 +1217,19 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 if (visibleCount === 0) {
                     placeholder.style.display = 'flex';
                     if (!placeholder.parentElement) list.appendChild(placeholder);
+                    const channelsDesc = tr('channelsEmptyDesc', 'Подпишитесь на каналы или создайте свой');
+                    const channelsDescMatch = channelsDesc.match(/^(.+?)\s+или\s+(.+)$/i);
+                    const channelsDescHtml = channelsDescMatch
+                        ? escapeHtml(channelsDescMatch[1]) + '<br>или ' + escapeHtml(channelsDescMatch[2])
+                        : escapeHtml(channelsDesc);
                     placeholder.innerHTML =
                         channelIconHtml +
                         '<div style="font-size:17px;font-weight:700;color:var(--text-primary);margin-bottom:6px;">' + tr('channels', 'Каналы') + '</div>' +
-                        '<div style="font-size:13px;color:var(--text-muted);max-width:260px;line-height:1.45;margin-bottom:16px;">' + tr('channelsEmptyDesc', 'Подпишитесь на каналы или создайте свой') + '</div>' +
-                        '<button type="button" onclick="openCreateChannelModal()" style="height:42px;padding:0 20px;border-radius:12px;border:none;background:var(--accent-gradient);color:#fff;font-weight:600;font-size:14px;cursor:pointer;margin-bottom:8px;">' + tr('createChannel', 'Создать канал') + '</button>' +
-                        '<button type="button" onclick="openChannelDiscovery()" style="height:40px;padding:0 18px;border-radius:12px;border:1px solid var(--border-color);background:var(--bg-tertiary);color:var(--text-primary);font-size:13px;cursor:pointer;">' + tr('findChannels', 'Найти каналы') + '</button>';
+                        '<div class="channels-empty-desc">' + channelsDescHtml + '</div>' +
+                        '<div class="channels-empty-actions">' +
+                        '<button type="button" class="channels-empty-btn channels-empty-btn--primary" onclick="openCreateChannelModal()">' + tr('createChannel', 'Создать канал') + '</button>' +
+                        '<button type="button" class="channels-empty-btn channels-empty-btn--secondary" onclick="openChannelDiscovery()">' + tr('findChannels', 'Найти каналы') + '</button>' +
+                        '</div>';
                 }
             } else if (section === 'communities') {
                 showPlaceholder(commIcon, tr('communities', 'Сообщества'), tr('communitiesSectionDesc', 'Раздел в разработке. Скоро вы сможете объединять чаты и каналы в сообщества.'));
@@ -3739,7 +3770,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             delete messagesData[tempId];
             messagesData[serverMessage.id] = serverMessage;
             if (commentThreadPostId && serverMessage.parentMessageId === commentThreadPostId) {
-                bumpPostCommentCount(commentThreadPostId);
+                bumpPostCommentCount(commentThreadPostId, serverMessage);
             }
         }
 
@@ -4021,7 +4052,15 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             timeDiv.className = 'msg-time';
             const timeText = m.time || (m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '');
             const isOutgoingMsg = m.senderId === user.id || m.outgoing;
-            if (isOutgoingMsg) {
+            if (isChannelPostMessage(m)) {
+                timeDiv.className = 'msg-time channel-post-meta';
+                const views = m.viewsCount || 0;
+                if (typeof window.buildChannelPostMetaHtml === 'function') {
+                    timeDiv.innerHTML = window.buildChannelPostMetaHtml(views, timeText);
+                } else {
+                    timeDiv.textContent = timeText;
+                }
+            } else if (isOutgoingMsg) {
                 // Глазик: pending = часы, sent = одна галочка, read = две галочки
                 let statusIcon = '';
                 if (m.pending) {
@@ -4060,13 +4099,12 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 }
                 const footer = document.createElement('div');
                 footer.className = 'channel-post-footer';
-                const views = m.viewsCount || 0;
                 const comments = m.commentCount || 0;
+                const commentPreview = m.commentPreview || [];
                 if (typeof window.buildChannelPostFooter === 'function') {
-                    footer.innerHTML = window.buildChannelPostFooter(views, comments, m.id);
+                    footer.innerHTML = window.buildChannelPostFooter(comments, m.id, commentPreview);
                 } else {
-                    footer.innerHTML = '<span class="channel-post-stat">' + views + '</span>'
-                        + '<button type="button" class="channel-post-comments-btn"'
+                    footer.innerHTML = '<button type="button" class="channel-post-comments-btn"'
                         + (m.pending ? ' disabled' : '')
                         + ' onclick="event.stopPropagation();openChannelCommentsFromPost(this)">' + comments + '</button>';
                 }
@@ -5028,12 +5066,20 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                         const commentMsg = Object.assign({}, data.comment, {
                             parentMessageId: data.postId || data.comment.parentMessageId
                         });
+                        const parentId = data.postId || commentMsg.parentMessageId;
                         addMessage(commentMsg);
+                        if (parentId && isCommentThreadActive() && commentThreadPostId === parentId) {
+                            bumpPostCommentCount(parentId, data.comment);
+                        }
                     } else if (data.postId && typeof window.updatePostCommentCount === 'function') {
                         const post = messagesData[data.postId];
                         const nextCount = (post?.commentCount || 0) + 1;
                         if (post) post.commentCount = nextCount;
-                        window.updatePostCommentCount(data.postId, nextCount);
+                        if (data.comment && typeof window.appendPostCommentPreview === 'function') {
+                            window.appendPostCommentPreview(data.postId, data.comment);
+                        } else {
+                            window.updatePostCommentCount(data.postId, nextCount);
+                        }
                     }
                     break;
                     
@@ -5449,7 +5495,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             const parentId = msg.parentMessageId || msg.parent_message_id || null;
             if (parentId) {
                 if (!isCommentThreadActive() || commentThreadPostId !== parentId) {
-                    bumpPostCommentCount(parentId);
+                    bumpPostCommentCount(parentId, msg);
                     return;
                 }
             } else if (isCommentThreadActive()) {

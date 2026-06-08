@@ -4342,6 +4342,25 @@ body.chat-open .tab-bar  { display: none !important; }
     color: var(--text-muted);
     opacity: 1;
 }
+.channel-post-meta {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 4px;
+}
+.channel-post-views-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-muted);
+}
+.channel-post-views-count {
+    font-variant-numeric: tabular-nums;
+}
+.channel-post-time-text {
+    font-variant-numeric: tabular-nums;
+}
 .channel-post-signature {
     font-size: 13px;
     font-weight: 600;
@@ -4357,12 +4376,8 @@ body.chat-open .tab-bar  { display: none !important; }
     margin-bottom: 8px;
 }
 .channel-post-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-top: 10px;
-    padding: 10px 0 12px;
+    margin-top: 8px;
+    padding: 8px 0 10px;
     border-top: 1px solid var(--border-color);
 }
 .channel-post-stat {
@@ -4382,27 +4397,82 @@ body.chat-open .tab-bar  { display: none !important; }
     font-variant-numeric: tabular-nums;
 }
 .channel-post-comments-btn {
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    gap: 6px;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
     background: transparent;
     border: none;
     color: var(--text-secondary);
     font-size: 13px;
     font-family: inherit;
     cursor: pointer;
-    padding: 6px 10px;
+    padding: 4px 0;
     border-radius: 10px;
     transition: background 0.2s, color 0.2s;
+    text-align: left;
 }
-.channel-post-comments-btn .channel-post-stat-value {
-    color: inherit;
+.channel-post-comments-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
+}
+.channel-post-comment-avatars {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+.channel-post-comment-avatars--empty {
+    display: none;
+}
+.channel-post-comment-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 2px solid var(--bg-secondary);
+    margin-left: -8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    background: var(--bg-tertiary, var(--bg-primary));
+    color: var(--text-secondary);
+    position: relative;
+}
+.channel-post-comment-avatar:first-child {
+    margin-left: 0;
+}
+.channel-post-comment-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.channel-post-comments-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--accent-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.channel-post-comments-chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--accent-color);
 }
 .channel-post-comments-btn.active {
     color: var(--accent-color);
-    background: color-mix(in srgb, var(--accent-color) 10%, transparent);
 }
-.channel-post-comments-btn.active .channel-post-stat-icon {
+.channel-post-comments-btn.active .channel-post-comments-label,
+.channel-post-comments-btn.active .channel-post-comments-chevron {
     color: var(--accent-color);
 }
 .channel-post-comments-btn:disabled {
@@ -4432,36 +4502,16 @@ body.chat-open .tab-bar  { display: none !important; }
 .chat-view.channel-comments-mode .channel-comments-view {
     display: flex;
 }
-.channel-comments-header-avatar {
-    background: color-mix(in srgb, var(--accent-color) 16%, var(--bg-tertiary));
-    color: var(--accent-color);
-}
-.channel-comments-post-preview {
+.channel-comments-header .channel-comments-back-btn {
+    display: flex !important;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
     flex-shrink: 0;
-    padding: 10px 14px 12px;
-    background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border-color);
-}
-.channel-comments-post-preview-label {
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    margin-bottom: 6px;
-}
-.channel-comments-post-preview-text {
-    font-size: 14px;
-    line-height: 1.45;
     color: var(--text-primary);
-    word-break: break-word;
-    display: -webkit-box;
-    -webkit-line-clamp: 4;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
 }
-.channel-comments-post-preview-muted {
-    color: var(--text-muted);
+.channel-comments-header .channel-comments-back-btn svg {
+    display: block;
 }
 .channel-comments-messages-area {
     flex: 1;
@@ -4752,16 +4802,57 @@ body.chat-open .tab-bar  { display: none !important; }
     margin-right: 6px;
     color: var(--accent-color);
 }
-.channels-empty-icon {
+.section-placeholder-icon {
     width: 72px;
     height: 72px;
     border-radius: 20px;
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border-color);
+    background: var(--rd-bg-elev, rgba(28, 28, 32, 0.72));
+    border: 1px solid var(--rd-stroke, rgba(255, 255, 255, 0.08));
     display: flex;
     align-items: center;
     justify-content: center;
     margin-bottom: 16px;
-    color: var(--accent-color);
+    color: var(--rd-text-2, rgba(235, 235, 245, 0.72));
+    flex-shrink: 0;
+}
+.section-placeholder-icon svg {
+    display: block;
+}
+.channels-empty-desc {
+    font-size: 13px;
+    color: var(--text-muted);
+    width: 100%;
+    max-width: 260px;
+    line-height: 1.45;
+    margin-bottom: 16px;
+}
+.channels-empty-actions {
+    width: 100%;
+    max-width: 260px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.channels-empty-btn {
+    width: 100%;
+    height: 42px;
+    padding: 0 16px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+    box-sizing: border-box;
+}
+.channels-empty-btn--primary {
+    border: none;
+    background: var(--accent-gradient);
+    color: #fff;
+    font-weight: 600;
+}
+.channels-empty-btn--secondary {
+    border: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-weight: 600;
 }
 

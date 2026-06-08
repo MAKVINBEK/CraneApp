@@ -61,8 +61,10 @@
             settings: '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>',
             clock: '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
             chevron: '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
+            chevronRight: '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>',
             send: '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>',
             megaphone: '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v2a4 4 0 0 0 4 4h1"/><path d="M7 9V7a4 4 0 0 1 4-4h6l-4 8H7z"/><path d="M17 9v6"/></svg>',
+            broadcast: '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1.75" fill="currentColor" stroke="none"/><path d="M9.5 9.5a4.5 4.5 0 0 0 0 5"/><path d="M14.5 9.5a4.5 4.5 0 0 1 0 5"/><path d="M7 7a8 8 0 0 0 0 10"/><path d="M17 7a8 8 0 0 1 0 10"/></svg>',
             close: '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
             eyeOff: '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-10-8-10-8a18.45 18.45 0 0 1 5.06-6.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 8 10 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>',
             quote: '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h4v10H5c0-3 2-5 2-7V7zm10 0h4v10h-6c0-3 2-5 2-7V7z"/></svg>'
@@ -70,18 +72,71 @@
         return icons[name] || '';
     };
 
-    window.buildChannelPostFooter = function(views, comments, postId) {
-        return '<span class="channel-post-stat channel-post-views">'
-            + '<span class="channel-post-stat-icon" aria-hidden="true">' + chIcon('eye', 15) + '</span>'
-            + '<span class="channel-post-stat-label">' + escapeHtml(tr('views', 'просмотров')) + '</span>'
-            + '<span class="channel-post-stat-value">' + (views || 0) + '</span>'
+    window.formatCommentsCount = function(count) {
+        const n = count || 0;
+        const mod10 = n % 10;
+        const mod100 = n % 100;
+        let word = tr('commentsLower', 'комментариев');
+        if (mod100 < 11 || mod100 > 14) {
+            if (mod10 === 1) word = tr('commentOne', 'комментарий');
+            else if (mod10 >= 2 && mod10 <= 4) word = tr('commentsFew', 'комментария');
+        }
+        return n + ' ' + word;
+    };
+
+    function buildCommentAvatarsHtml(commenters) {
+        const list = Array.isArray(commenters) ? commenters.slice(0, 3) : [];
+        if (!list.length) {
+            return '<span class="channel-post-comment-avatars channel-post-comment-avatars--empty" aria-hidden="true"></span>';
+        }
+        const items = list.map(function(c, i) {
+            const name = c.senderFirstName || c.senderUsername || '?';
+            const initial = escapeHtml(name.charAt(0).toUpperCase());
+            const av = resolveAvatarUrl(c.senderAvatar);
+            const content = av
+                ? '<img src="' + escapeHtml(av) + '" alt="">'
+                : initial;
+            return '<span class="channel-post-comment-avatar" style="z-index:' + (3 - i) + '">' + content + '</span>';
+        }).join('');
+        return '<span class="channel-post-comment-avatars">' + items + '</span>';
+    }
+
+    window.buildChannelPostMetaHtml = function(views, timeText) {
+        return '<span class="channel-post-views-inline">'
+            + '<span class="channel-post-stat-icon" aria-hidden="true">' + chIcon('eye', 13) + '</span>'
+            + '<span class="channel-post-views-count">' + (views || 0) + '</span>'
             + '</span>'
-            + '<button type="button" class="channel-post-comments-btn"'
+            + '<span class="channel-post-time-text">' + escapeHtml(timeText || '') + '</span>';
+    };
+
+    window.buildChannelPostFooter = function(comments, postId, commentPreview) {
+        return '<button type="button" class="channel-post-comments-btn"'
             + (isChannelPostUuid(postId) ? '' : ' disabled')
             + ' onclick="event.stopPropagation();openChannelCommentsFromPost(this)">'
-            + '<span class="channel-post-stat-icon" aria-hidden="true">' + chIcon('comment', 15) + '</span>'
-            + '<span class="channel-post-stat-value">' + (comments || 0) + '</span>'
+            + '<span class="channel-post-comments-left">'
+            + buildCommentAvatarsHtml(commentPreview)
+            + '<span class="channel-post-comments-label">' + escapeHtml(formatCommentsCount(comments || 0)) + '</span>'
+            + '</span>'
+            + '<span class="channel-post-comments-chevron" aria-hidden="true">' + chIcon('chevronRight', 18) + '</span>'
             + '</button>';
+    };
+
+    window.appendPostCommentPreview = function(postId, comment) {
+        if (!postId || !comment) return;
+        const store = typeof messagesData !== 'undefined' ? messagesData : null;
+        if (!store || !store[postId]) return;
+        const post = store[postId];
+        if (!post.commentPreview) post.commentPreview = [];
+        const senderId = comment.senderId;
+        post.commentPreview = post.commentPreview.filter(function(c) { return c.senderId !== senderId; });
+        post.commentPreview.unshift({
+            senderId: senderId,
+            senderFirstName: comment.senderFirstName,
+            senderUsername: comment.senderUsername,
+            senderAvatar: comment.senderAvatar
+        });
+        post.commentPreview = post.commentPreview.slice(0, 3);
+        window.updatePostCommentCount(postId, post.commentCount, post.commentPreview);
     };
 
     window.cleanupChannelComposer = function() {
@@ -308,33 +363,19 @@
         return {};
     };
 
-    function buildPostPreviewHtml(postId) {
-        const m = typeof messagesData !== 'undefined' ? messagesData[postId] : null;
-        if (!m) {
-            return '<div class="channel-comments-post-preview-label">' + tr('commentingOnPost', 'Комментарии к посту') + '</div>'
-                + '<div class="channel-comments-post-preview-text channel-comments-post-preview-muted">' + tr('post', 'Пост') + '</div>';
-        }
-        let text = m.content || m.text || m.contentPlain || '';
-        if (m.type && m.type !== 'text' && !text) {
-            text = tr('mediaPost', 'Медиапост');
-        }
-        if (text.length > 200) text = text.slice(0, 200) + '…';
-        const formatted = typeof window.renderFormattedText === 'function'
-            ? window.renderFormattedText(text)
-            : escapeHtml(text);
-        return '<div class="channel-comments-post-preview-label">' + tr('commentingOnPost', 'Комментарии к посту') + '</div>'
-            + '<div class="channel-comments-post-preview-text">' + formatted + '</div>';
-    }
-
-    window.updatePostCommentCount = function(postId, count) {
+    window.updatePostCommentCount = function(postId, count, commentPreview) {
         const postEl = document.querySelector('[data-message-id="' + postId + '"]');
         if (!postEl) return;
-        const btn = postEl.querySelector('.channel-post-comments-btn .channel-post-stat-value');
-        if (btn) btn.textContent = String(count || 0);
+        const label = postEl.querySelector('.channel-post-comments-label');
+        if (label) label.textContent = formatCommentsCount(count || 0);
+        if (commentPreview !== undefined) {
+            const avatarsEl = postEl.querySelector('.channel-post-comment-avatars');
+            if (avatarsEl) avatarsEl.outerHTML = buildCommentAvatarsHtml(commentPreview);
+        }
         const subtitle = document.getElementById('channelCommentsSubtitle');
         const activePostId = typeof window.getCommentThreadPostId === 'function' ? window.getCommentThreadPostId() : null;
         if (subtitle && activePostId === postId) {
-            subtitle.textContent = (count || 0) + ' ' + tr('commentsLower', 'комментариев');
+            subtitle.textContent = formatCommentsCount(count || 0);
         }
     };
 
@@ -357,17 +398,14 @@
         if (chatView) chatView.classList.add('channel-comments-mode');
         if (commentsView) commentsView.setAttribute('aria-hidden', 'false');
 
-        const preview = document.getElementById('channelCommentsPostPreview');
-        if (preview) preview.innerHTML = buildPostPreviewHtml(postId);
-
         const title = document.getElementById('channelCommentsTitle');
-        if (title) title.textContent = tr('comments', 'Комментарии');
+        if (title) title.textContent = tr('discussion', 'Обсуждение');
 
         const count = (typeof messagesData !== 'undefined' && messagesData[postId])
             ? (messagesData[postId].commentCount || 0)
             : 0;
         const subtitle = document.getElementById('channelCommentsSubtitle');
-        if (subtitle) subtitle.textContent = count + ' ' + tr('commentsLower', 'комментариев');
+        if (subtitle) subtitle.textContent = formatCommentsCount(count);
 
         document.querySelectorAll('.channel-post-comments-btn.active').forEach(function(btn) {
             btn.classList.remove('active');

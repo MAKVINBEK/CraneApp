@@ -1182,16 +1182,14 @@
                 <!-- Channel post comments (full-screen chat-like view) -->
                 <div class="channel-comments-view" id="channelCommentsView" aria-hidden="true">
                     <div class="chat-header channel-comments-header">
-                        <button type="button" class="back-btn" id="channelCommentsBackBtn" onclick="closeChannelCommentsView()" aria-label="Назад">←</button>
-                        <div class="chat-header-avatar channel-comments-header-avatar" aria-hidden="true">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                        </div>
+                        <button type="button" class="back-btn channel-comments-back-btn" id="channelCommentsBackBtn" onclick="closeChannelCommentsView()" aria-label="Назад">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+                        </button>
                         <div class="chat-header-info">
-                            <div class="chat-header-name" id="channelCommentsTitle" data-i18n="comments">Комментарии</div>
+                            <div class="chat-header-name" id="channelCommentsTitle" data-i18n="discussion">Обсуждение</div>
                             <div class="chat-header-status" id="channelCommentsSubtitle"></div>
                         </div>
                     </div>
-                    <div class="channel-comments-post-preview" id="channelCommentsPostPreview"></div>
                     <div class="messages-area channel-comments-messages-area">
                         <div class="messages-container">
                             <div class="messages" id="channelCommentsMessages"></div>
@@ -1441,8 +1439,8 @@
     </div>
 
     <script src="./mentionNotifications.js"></script>
-    <script src="./chats_v5.js?v=20260607-channel-post-fix"></script>
-    <script src="./channels_client.js?v=20260607-send-fix"></script>
+    <script src="./chats_v5.js?v=20260607-placeholder-icon"></script>
+    <script src="./channels_client.js?v=20260607-placeholder-icon"></script>
 <script src="/client/mobile/scripts/cameraCheck.js"></script>
 
 </body>

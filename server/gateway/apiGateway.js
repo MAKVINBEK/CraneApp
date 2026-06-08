@@ -5871,6 +5871,52 @@ app.get('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
             await attachPollsToMessages(messages, req.user.id);
         }
 
+        if (chatTypeForList === 'channel' && !parentMessageId) {
+            const postIds = messages.filter(m => !m.parentMessageId).map(m => m.id);
+            if (postIds.length > 0) {
+                const previewRes = await query(`
+                    WITH latest_per_user AS (
+                        SELECT
+                            c.parent_message_id,
+                            c.sender_id,
+                            u.first_name AS sender_first_name,
+                            u.username AS sender_username,
+                            u.avatar_url AS sender_avatar,
+                            MAX(c.created_at) AS last_comment_at
+                        FROM messages c
+                        JOIN users u ON u.id = c.sender_id
+                        WHERE c.parent_message_id = ANY($1::uuid[]) AND c.is_deleted = FALSE
+                        GROUP BY c.parent_message_id, c.sender_id, u.first_name, u.username, u.avatar_url
+                    ),
+                    ranked AS (
+                        SELECT *,
+                            ROW_NUMBER() OVER (PARTITION BY parent_message_id ORDER BY last_comment_at DESC) AS rn
+                        FROM latest_per_user
+                    )
+                    SELECT parent_message_id, sender_id, sender_first_name, sender_username, sender_avatar
+                    FROM ranked
+                    WHERE rn <= 3
+                    ORDER BY parent_message_id, rn
+                `, [postIds]);
+                const previewByPost = {};
+                for (const row of previewRes.rows) {
+                    const pid = row.parent_message_id;
+                    if (!previewByPost[pid]) previewByPost[pid] = [];
+                    previewByPost[pid].push({
+                        senderId: row.sender_id,
+                        senderFirstName: row.sender_first_name,
+                        senderUsername: row.sender_username,
+                        senderAvatar: row.sender_avatar
+                    });
+                }
+                messages.forEach(m => {
+                    if (!m.parentMessageId) {
+                        m.commentPreview = previewByPost[m.id] || [];
+                    }
+                });
+            }
+        }
+
         if (chatTypeForList === 'channel') {
             for (const msg of messages) {
                 if (msg.senderId !== req.user.id) {
