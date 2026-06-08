@@ -8,10 +8,17 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"craneapp/backend-v2/internal/platform/config"
 	cryptoclient "craneapp/backend-v2/internal/platform/crypto"
 	"github.com/gorilla/websocket"
+)
+
+const (
+	wsPingInterval  = 30 * time.Second
+	wsReadDeadline  = 90 * time.Second
+	wsWriteDeadline = 10 * time.Second
 )
 
 var upgrader = websocket.Upgrader{
@@ -32,6 +39,7 @@ type Client struct {
 	UserID string
 	Conn   *websocket.Conn
 	Send   chan []byte
+	done   chan struct{}
 }
 
 type WSServer struct {
@@ -71,6 +79,7 @@ func (ws *WSServer) run() {
 			if conns, ok := ws.clients[client.UserID]; ok {
 				if _, ok := conns[client]; ok {
 					delete(conns, client)
+					close(client.done)
 					close(client.Send)
 					if len(conns) == 0 {
 						delete(ws.clients, client.UserID)
@@ -112,11 +121,14 @@ func (ws *WSServer) ServeWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := &Client{UserID: claims.Subject, Conn: conn, Send: make(chan []byte, 256)}
+	conn.SetReadDeadline(time.Now().Add(wsReadDeadline))
+
+	client := &Client{UserID: claims.Subject, Conn: conn, Send: make(chan []byte, 256), done: make(chan struct{})}
 	ws.register <- client
 
 	go ws.writePump(client)
 	go ws.readPump(client)
+	go ws.heartbeat(client)
 }
 
 func (ws *WSServer) readPump(client *Client) {
@@ -129,6 +141,9 @@ func (ws *WSServer) readPump(client *Client) {
 		if err != nil {
 			break
 		}
+		// Reset read deadline on any incoming message.
+		client.Conn.SetReadDeadline(time.Now().Add(wsReadDeadline))
+
 		var msg map[string]interface{}
 		if err := json.Unmarshal(message, &msg); err != nil {
 			continue
@@ -136,7 +151,7 @@ func (ws *WSServer) readPump(client *Client) {
 
 		msgType, _ := msg["type"].(string)
 		switch msgType {
-		case "ping":
+		case "ping", "pong":
 			client.Send <- []byte(`{"type":"pong"}`)
 		case "chat_message", "typing":
 			chatID, _ := msg["chatId"].(string)
@@ -157,14 +172,36 @@ func (ws *WSServer) readPump(client *Client) {
 	}
 }
 
+func (ws *WSServer) heartbeat(client *Client) {
+	ticker := time.NewTicker(wsPingInterval)
+	defer ticker.Stop()
+	ping, _ := json.Marshal(map[string]string{"type": "ping"})
+	for {
+		select {
+		case <-client.done:
+			return
+		case <-ticker.C:
+			select {
+			case client.Send <- ping:
+			case <-client.done:
+				return
+			default:
+				return
+			}
+		}
+	}
+}
+
 func (ws *WSServer) writePump(client *Client) {
 	defer client.Conn.Close()
 	for {
 		message, ok := <-client.Send
 		if !ok {
+			client.Conn.SetWriteDeadline(time.Now().Add(wsWriteDeadline))
 			client.Conn.WriteMessage(websocket.CloseMessage, []byte{})
 			return
 		}
+		client.Conn.SetWriteDeadline(time.Now().Add(wsWriteDeadline))
 		if err := client.Conn.WriteMessage(websocket.TextMessage, message); err != nil {
 			return
 		}
@@ -213,7 +250,11 @@ func (ws *WSServer) sendToUserLocked(userID string, message []byte) {
 func allowedWSOrigin(origin string) bool {
 	for _, allowed := range strings.Split(config.Value("ALLOWED_ORIGINS", "http://localhost:8080,http://127.0.0.1:8080"), ",") {
 		allowed = strings.TrimSpace(allowed)
-		if allowed == "*" || allowed == origin {
+		if allowed == "" || allowed == "*" {
+			// Wildcard is never permitted — it opens CSRF on WebSocket upgrades.
+			continue
+		}
+		if allowed == origin {
 			return true
 		}
 	}

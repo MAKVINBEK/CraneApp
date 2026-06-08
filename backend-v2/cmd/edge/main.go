@@ -3,17 +3,110 @@ package main
 import (
 	"context"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"craneapp/backend-v2/internal/platform/config"
 	"craneapp/backend-v2/internal/platform/httpx"
 )
+
+// tokenBucket is a simple per-IP rate limiter.
+type tokenBucket struct {
+	mu       sync.Mutex
+	buckets  map[string]*bucket
+	rate     float64 // tokens per second
+	capacity float64
+}
+
+type bucket struct {
+	tokens    float64
+	lastRefil time.Time
+}
+
+func newTokenBucket(rate, capacity float64) *tokenBucket {
+	tb := &tokenBucket{
+		buckets:  make(map[string]*bucket),
+		rate:     rate,
+		capacity: capacity,
+	}
+	go tb.cleanup()
+	return tb
+}
+
+func (tb *tokenBucket) Allow(ip string) bool {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	now := time.Now()
+	b, ok := tb.buckets[ip]
+	if !ok {
+		b = &bucket{tokens: tb.capacity, lastRefil: now}
+		tb.buckets[ip] = b
+	}
+	elapsed := now.Sub(b.lastRefil).Seconds()
+	b.tokens = min(tb.capacity, b.tokens+elapsed*tb.rate)
+	b.lastRefil = now
+	if b.tokens < 1 {
+		return false
+	}
+	b.tokens--
+	return true
+}
+
+func (tb *tokenBucket) cleanup() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		tb.mu.Lock()
+		cutoff := time.Now().Add(-10 * time.Minute)
+		for ip, b := range tb.buckets {
+			if b.lastRefil.Before(cutoff) {
+				delete(tb.buckets, ip)
+			}
+		}
+		tb.mu.Unlock()
+	}
+}
+
+func min(a, b float64) float64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func clientIP(r *http.Request) string {
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+		parts := strings.SplitN(fwd, ",", 2)
+		return strings.TrimSpace(parts[0])
+	}
+	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+	return ip
+}
+
+func rateLimitMiddleware(authLimiter, globalLimiter *tokenBucket, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ip := clientIP(r)
+		// Stricter limit for auth endpoints (login/register brute-force).
+		if strings.HasPrefix(r.URL.Path, "/api/v2/auth/") {
+			if !authLimiter.Allow(ip) {
+				httpx.ErrorJSON(w, r, http.StatusTooManyRequests, "rate_limited", "too many requests — slow down")
+				return
+			}
+		}
+		if !globalLimiter.Allow(ip) {
+			httpx.ErrorJSON(w, r, http.StatusTooManyRequests, "rate_limited", "too many requests")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
 
 func main() {
 	authURL, err := url.Parse(config.Value("AUTH_URL", "http://127.0.0.1:8081"))
@@ -66,7 +159,7 @@ func main() {
 		httpx.ErrorJSON(w, r, http.StatusBadGateway, "upstream_unavailable", "admin service unavailable")
 	}
 
-	frontendDir := config.Value("FRONTEND_DIR", "../../dist")
+	frontendDir := config.Value("FRONTEND_DIR", "../dist")
 	fs := http.FileServer(http.Dir(frontendDir))
 
 	mux := http.NewServeMux()
@@ -74,18 +167,44 @@ func main() {
 		httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
-	// Route new versions explicitly
+	// Auth service
+	mux.Handle("/api/v2/auth/2fa/", authProxy)
 	mux.Handle("/api/v2/auth/", authProxy)
+
+	// User service (includes encryption, MLS support routes, search, stickers, gifs routed here)
 	mux.Handle("/api/v2/users/", userProxy)
-	mux.Handle("/api/v2/chats/", chatProxy)
+	mux.Handle("/api/v2/encryption/", userProxy)
+	mux.Handle("/api/v2/support/", userProxy)
+
+	// Chat service
 	mux.Handle("/api/v2/chats", chatProxy)
-	mux.Handle("/api/v2/messages/", chatProxy)
+	mux.Handle("/api/v2/chats/", chatProxy)
 	mux.Handle("/api/v2/messages", chatProxy)
+	mux.Handle("/api/v2/messages/", chatProxy)
 	mux.Handle("/api/v2/calls/", chatProxy)
+	mux.Handle("/api/v2/mls/", chatProxy)
+	mux.Handle("/ws", chatProxy)
+
+	// Media service
 	mux.Handle("/api/v2/media", mediaProxy)
 	mux.Handle("/api/v2/media/", mediaProxy)
+
+	// Admin service
 	mux.Handle("/api/v2/admin/", adminProxy)
-	mux.Handle("/ws", chatProxy)
+
+	// ICE servers for WebRTC calls
+	mux.HandleFunc("/api/v2/calls/ice-servers", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			httpx.ErrorJSON(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+			return
+		}
+		stunServers := []map[string]any{
+			{"urls": "stun:stun.l.google.com:19302"},
+			{"urls": "stun:stun1.l.google.com:19302"},
+		}
+		httpx.JSON(w, http.StatusOK, map[string]any{"iceServers": stunServers})
+	})
+
 	mux.HandleFunc("/api/v2/emojis", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			httpx.ErrorJSON(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
@@ -104,14 +223,17 @@ func main() {
 
 		// Attempt to serve file
 		if _, err := http.Dir(frontendDir).Open(r.URL.Path); err != nil {
-			// Fallback to index.html for SPA routing
-			http.ServeFile(w, r, frontendDir+"/index.html")
+			http.ServeFile(w, r, frontendFallback(frontendDir, r.URL.Path))
 			return
 		}
 		fs.ServeHTTP(w, r)
 	})
 
-	handler := httpx.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// Auth: 5 req/s burst 10 per IP. Global: 50 req/s burst 100 per IP.
+	authLimiter := newTokenBucket(5, 10)
+	globalLimiter := newTokenBucket(50, 100)
+
+	handler := httpx.Middleware(rateLimitMiddleware(authLimiter, globalLimiter, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if origin := r.Header.Get("Origin"); origin != "" && allowedOrigin(origin) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
@@ -124,7 +246,7 @@ func main() {
 			}
 		}
 		mux.ServeHTTP(w, r)
-	}))
+	})))
 
 	server := &http.Server{Addr: config.Value("EDGE_ADDR", ":8080"), Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -139,6 +261,13 @@ func main() {
 	shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = server.Shutdown(shutdown)
+}
+
+func frontendFallback(frontendDir, requestPath string) string {
+	if requestPath == "/mobile" || strings.HasPrefix(requestPath, "/mobile/") {
+		return frontendDir + "/mobile.html"
+	}
+	return frontendDir + "/index.html"
 }
 
 func allowedOrigin(origin string) bool {

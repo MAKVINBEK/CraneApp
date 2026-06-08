@@ -1,0 +1,227 @@
+@media (min-width: 768px) {
+  .app-layout {
+    flex-direction: row;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+  
+  .app-main-content {
+    flex-direction: row;
+  }
+  
+  .app-sidebar-pane {
+    width: 360px;
+    min-width: 320px;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(14, 14, 18, 0.6);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    height: 100%;
+  }
+  
+  .app-chat-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    height: 100%;
+    background: rgba(7, 7, 10, 0.7);
+  }
+  
+  /* Overrides for children inside split panels */
+  .app-sidebar-pane .chats-page {
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+    min-height: 100%;
+    padding: 20px 16px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  
+  .app-sidebar-pane .chats-list {
+    flex: 1;
+    overflow-y: auto;
+  }
+  
+  .app-chat-pane .thread-page {
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+    min-height: 100%;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    background: transparent;
+  }
+  
+  .app-chat-pane .thread-messages {
+    flex: 1;
+    overflow-y: auto;
+  }
+  
+  /* Full screen width pages on desktop (settings, contacts, etc) */
+  .app-main-content > .contacts-page,
+  .app-main-content > .settings-page,
+  .app-main-content > .create-group-page {
+    flex: 1;
+    height: 100%;
+    overflow-y: auto;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 40px 20px;
+  }
+
+  /* Navigation Rail */
+  .nav-rail {
+    width: 72px;
+    min-width: 72px;
+    background: #0d0d12;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 0;
+    gap: 12px;
+    z-index: 100;
+  }
+  
+  .rail-burger {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: transparent;
+    border: none;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    margin-bottom: 16px;
+    transition: all 0.2s;
+  }
+  .rail-burger:hover {
+    background: rgba(255,255,255,0.06);
+  }
+  
+  .rail-tab {
+    width: 46px;
+    height: 46px;
+    border-radius: 12px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .rail-tab span {
+    display: none;
+  }
+  
+  .rail-tab:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.05);
+  }
+  
+  .rail-tab.active {
+    color: #b8a4ff;
+    background: rgba(155, 130, 255, 0.1);
+    border-color: rgba(155, 130, 255, 0.25);
+  }
+  
+  .rail-spacer {
+    flex: 1;
+  }
+  
+  .rail-help {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  
+  .rail-help:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.05);
+  }
+  
+  /* Tooltips for rail tabs on hover */
+  .rail-tab::after,
+  .rail-burger::after,
+  .rail-help::after {
+    content: attr(data-tip);
+    position: absolute;
+    left: calc(100% + 10px);
+    top: 50%;
+    transform: translateY(-50%) translateX(-4px);
+    background: #1c1c20;
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+    opacity: 0;
+    transition: all 0.15s ease;
+    z-index: 99999;
+  }
+  
+  .rail-tab:hover::after,
+  .rail-burger:hover::after,
+  .rail-help:hover::after {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+  }
+  
+  /* Empty state placeholder */
+  .empty-chat-placeholder {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 40px;
+    color: rgba(255, 255, 255, 0.4);
+  }
+  
+  .empty-chat-icon {
+    font-size: 56px;
+    margin-bottom: 12px;
+    opacity: 0.5;
+  }
+  
+  .empty-chat-placeholder h3 {
+    margin: 0 0 8px 0;
+    color: #fff;
+    font-size: 18px;
+    font-weight: 600;
+  }
+  
+  .empty-chat-placeholder p {
+    margin: 0;
+    max-width: 280px;
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+}

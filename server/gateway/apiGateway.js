@@ -35,6 +35,7 @@ const createMessageSocialRoutes = require('./routes/messageSocialRoutes');
 const createMessageWriteRoutes = require('./routes/messageWriteRoutes');
 const createStickerRoutes = require('./routes/stickerRoutes');
 const createSupportRoutes = require('./routes/supportRoutes');
+const createSpaRoutes = require('./routes/spaRoutes');
 const createUserProfileRoutes = require('./routes/userProfileRoutes');
 const createUserSettingsRoutes = require('./routes/userSettingsRoutes');
 const createUserDeviceRoutes = require('./routes/userDeviceRoutes');
@@ -49,6 +50,8 @@ const createLoginNotificationService = require('./services/loginNotificationServ
 const createGatewayStartupMigrations = require('./services/gatewayStartupMigrations');
 const createRealtimeGateway = require('./services/realtimeGateway');
 const createCraneAppBotService = require('./services/craneAppBotService');
+const createDuplicatePrivateChatCleanup = require('./services/duplicatePrivateChatCleanup');
+const registerProcessHandlers = require('./services/processHandlers');
 const createAuthMiddleware = require('./middleware/authMiddleware');
 const createTrafficProtectionMiddleware = require('./middleware/trafficProtectionMiddleware');
 const createGatewayRateLimiters = require('./middleware/rateLimiterMiddleware');
@@ -251,13 +254,7 @@ function handleFileUpload(base64Data, type, subDir = 'media') {
 // ГЛАВНАЯ СТРАНИЦА
 // ============================================
 
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../../dist/index.html'));
-});
-
-app.get(['/login', '/register', '/chats', '/chats/:chatId', '/rate-limit', '/settings', '/contacts', '/create-group'], (req, res) => {
-    res.sendFile(path.join(__dirname, '../../dist/index.html'));
-});
+app.use(createSpaRoutes({ distDir: path.join(__dirname, '../../dist') }));
 
 // ============================================
 // VIDEO CALLS — REST ENDPOINTS
@@ -376,6 +373,8 @@ const authMiddleware = createAuthMiddleware({ i18n, jwt, logger, query });
 
 const realtimeGateway = createRealtimeGateway({
     callRoom,
+    jwt,
+    jwtSecret: process.env.JWT_SECRET,
     logger,
     query,
     saveCallMessage,
@@ -403,6 +402,10 @@ const { createCraneAppBotChat, handleBotCommand } = botService;
 // ============================================
 
 const startupMigrations = createGatewayStartupMigrations({
+    logger,
+    query,
+});
+const duplicateChatCleanup = createDuplicatePrivateChatCleanup({
     createCraneAppBotChat,
     logger,
     query,
@@ -653,7 +656,7 @@ async function start() {
         await startupMigrations.autoMigrate();
         
         // Очищаем дубликаты при запуске
-        await startupMigrations.cleanDuplicatePrivateChats();
+        await duplicateChatCleanup.cleanDuplicatePrivateChats();
         
         server.listen(PORT, () => {
             logger.info('========================================');
@@ -671,39 +674,6 @@ async function start() {
 
 start();
 
-// ============================================
-// GRACEFUL SHUTDOWN
-// ============================================
-
-process.on('SIGTERM', () => { 
-    logger.info('🛑 SIGTERM received');
-    server.close(() => { 
-        pool.end(); 
-        logger.info('✅ Server closed');
-        process.exit(0); 
-    }); 
-});
-
-process.on('SIGINT', () => { 
-    logger.info('🛑 SIGINT received');
-    server.close(() => { 
-        pool.end(); 
-        logger.info('✅ Server closed');
-        process.exit(0); 
-    }); 
-});
-
-// ============================================
-// UNCAUGHT EXCEPTION HANDLER
-// ============================================
-
-process.on('uncaughtException', (error) => {
-    logger.error('❌ Uncaught Exception:', error);
-    process.exit(1);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-    logger.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
-});
+registerProcessHandlers({ logger, pool, server });
 
 module.exports = { app, server, wss };

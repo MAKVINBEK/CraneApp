@@ -177,7 +177,7 @@ export class MessageBubble {
 
   openMediaViewer() {
     if (this.mediaUrl) {
-      window.location.href = `/client/mobile/screens/chats/mediaPreview.html?url=${encodeURIComponent(this.mediaUrl)}`;
+      window.location.href = this.mediaUrl;
     }
   }
 

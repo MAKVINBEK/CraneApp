@@ -83,11 +83,14 @@ func publishPending(ctx context.Context, db *sql.DB, nats NATSConn) error {
 
 		if nats != nil {
 			if err := nats.Publish(subject, envelope); err != nil {
-				log.Printf("outbox relay: publish %s: %v", subject, err)
-				continue
+				log.Printf("outbox relay: publish %s: %v — will retry next tick", subject, err)
+				continue // do NOT mark as published; retry on next tick
 			}
 		} else {
+			// No NATS configured — log the event for observability but do not mark
+			// as published so the outbox stays intact until NATS becomes available.
 			log.Printf("outbox relay [no-nats]: %s %s", subject, string(envelope))
+			continue
 		}
 
 		if _, err := db.ExecContext(ctx, `UPDATE messages.outbox SET published_at = NOW() WHERE id = $1`, e.id); err != nil {

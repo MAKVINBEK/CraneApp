@@ -11,38 +11,33 @@ async function seed() {
     try {
         logger.info(' Starting database seeding...');
 
-        const adminId = '00000000-0000-4000-a000-000000002282';
-        const botId = '00000000-0000-4000-a000-000000000001';
-        const channelId = '00000000-0000-4000-a000-000000000002';
-        const chatId = '00000000-0000-4000-a000-000000000003';
-
         // Create admin user
         // NOTE: Change this password in production!
         const adminPassword = await bcrypt.hash(process.env.ADMIN_PASSWORD || 'ChangeMe123!', 10);
         await pool.query(
-            `INSERT INTO users (id, phone, username, first_name, last_name, is_bot, password_hash, created_at)
+            `INSERT INTO users (id, phone, username, first_name, last_name, is_bot, is_admin, created_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
              ON CONFLICT (id) DO NOTHING`,
-            [adminId, '+999000000000', 'admin2282', 'Crane', 'Admin', false, adminPassword]
+            ['admin-uuid-2282', '+999000000000', 'admin2282', 'Crane', 'Admin', false, true]
         );
 
         // Create CraneApp Bot
-        const botPassword = await bcrypt.hash('bot_no_password', 10);
         await pool.query(
-            `INSERT INTO users (id, phone, username, first_name, last_name, bio, is_bot, is_verified, password_hash, avatar_url, created_at)
+            `INSERT INTO users (id, phone, username, first_name, last_name, bio, is_bot, is_verified, badge, avatar_url, created_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
              ON CONFLICT (id) DO NOTHING`,
-            [botId, '+999000000001', 'craneapp_bot', 'CraneApp', 'Bot', 
-             'Официальный бот CraneApp. Уведомления о безопасности и поддержка.', true, true, botPassword, 'https://i.ibb.co/1Y4Pg7BF/94-20260317155000.png']
+            ['craneapp-bot-uuid', '+999000000001', 'craneapp_bot', 'CraneApp', 'Bot', 
+             'Официальный бот CraneApp. Уведомления о безопасности и поддержка.', true, true, 'verified', 'https://i.ibb.co/1Y4Pg7BF/94-20260317155000.png']
         );
 
         // Create News Channel
+        const channelId = 'news-channel-uuid';
         await pool.query(
             `INSERT INTO chats (id, type, title, description, owner_id, avatar_url, created_at)
              VALUES ($1, $2, $3, $4, $5, $6, NOW())
              ON CONFLICT (id) DO NOTHING`,
             [channelId, 'channel', 'Новости CraneApp', 'Официальные обновления и новости проекта', 
-             adminId, null]
+             'admin-uuid-2282', null]
         );
 
         // Add admin as channel member
@@ -50,7 +45,7 @@ async function seed() {
             `INSERT INTO chat_members (chat_id, user_id, role, joined_at)
              VALUES ($1, $2, 'owner', NOW())
              ON CONFLICT (chat_id, user_id) DO NOTHING`,
-            [channelId, adminId]
+            [channelId, 'admin-uuid-2282']
         );
 
         // Create welcome chat with CraneApp Bot
@@ -58,7 +53,7 @@ async function seed() {
             `INSERT INTO chats (id, type, title, owner_id, created_at)
              VALUES ($1, $2, $3, $4, NOW())
              ON CONFLICT (id) DO NOTHING`,
-            [chatId, 'private', 'CraneApp', botId]
+            ['craneapp-chat-uuid', 'private', 'CraneApp', 'craneapp-bot-uuid']
         );
 
         // Insert sample news posts
@@ -71,9 +66,10 @@ async function seed() {
 
         for (const post of newsPosts) {
             await pool.query(
-                `INSERT INTO messages (chat_id, sender_id, content, type, created_at)
-                 VALUES ($1, $2, $3, $4, NOW())`,
-                [channelId, adminId, post.content, post.type]
+                `INSERT INTO messages (id, chat_id, sender_id, content, type, created_at)
+                 VALUES ($1, $2, $3, $4, $5, NOW())
+                 ON CONFLICT (id) DO NOTHING`,
+                [`news-${Date.now()}-${Math.random()}`, channelId, 'admin-uuid-2282', post.content, post.type]
             );
         }
 

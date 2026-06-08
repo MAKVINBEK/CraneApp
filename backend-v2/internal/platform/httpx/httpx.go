@@ -40,6 +40,25 @@ func Middleware(next http.Handler) http.Handler {
 		w.Header().Set("X-Request-ID", requestID)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
+		w.Header().Set("Content-Security-Policy",
+			"default-src 'self'; "+
+				"script-src 'self' 'unsafe-inline'; "+
+				"style-src 'self' 'unsafe-inline'; "+
+				"img-src 'self' data: blob: https:; "+
+				"media-src 'self' blob:; "+
+				"connect-src 'self' wss: ws:; "+
+				"font-src 'self' data:; "+
+				"frame-ancestors 'none'",
+		)
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Printf("panic in handler [%s %s]: %v", r.Method, r.URL.Path, rec)
+				http.Error(w, `{"code":"internal_error","message":"internal server error"}`, http.StatusInternalServerError)
+			}
+		}()
 		next.ServeHTTP(w, r)
 	})
 }

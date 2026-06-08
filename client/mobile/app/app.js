@@ -30,9 +30,9 @@ class CraneApp {
       const isAuthenticated = authProvider.isAuthenticated();
       
       if (isAuthenticated) {
-        navigation.navigate('/client/mobile/screens/chats/chats.html');
+        navigation.navigate('/mobile/chats');
       } else {
-        navigation.navigate('/client/mobile/screens/auth/login.html');
+        navigation.navigate('/mobile/login');
       }
 
       this.initialized = true;

@@ -39,17 +39,20 @@ const databaseUrl = normalizeConnectionString(process.env.DATABASE_URL);
 const pool = new Pool({
     connectionString: databaseUrl,
     ssl: shouldUseSsl(databaseUrl) ? { rejectUnauthorized: false } : false,
-    max: 20,
+    max: 10,
     connectionTimeoutMillis: 5000,
     idleTimeoutMillis: 30000,
 });
 
-pool.on('connect', (client) => {
-    client.query('SET statement_timeout = 12000').catch(() => {});
-});
-
-async function query(text, params) {
-    return pool.query(text, params);
+async function query(text, params, timeoutMs = 12000) {
+    const client = await pool.connect();
+    try {
+        await client.query(`SET statement_timeout = ${timeoutMs}`);
+        const res = await client.query(text, params);
+        return res;
+    } finally {
+        client.release();
+    }
 }
 
 async function initDatabase() {
@@ -124,9 +127,9 @@ async function ensureTablesExist() {
         chat_id UUID REFERENCES chats(id) ON DELETE CASCADE,
         user_id UUID REFERENCES users(id) ON DELETE CASCADE,
         role VARCHAR(20) DEFAULT 'member' CHECK (role IN ('owner', 'admin', 'member')),
-        permissions JSONB DEFAULT '{}',
         joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         muted_until TIMESTAMP,
+        permissions JSONB DEFAULT '{}',
         pinned BOOLEAN DEFAULT FALSE,
         UNIQUE(chat_id, user_id)
     );
@@ -149,7 +152,7 @@ async function ensureTablesExist() {
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         chat_id UUID REFERENCES chats(id) ON DELETE CASCADE,
         user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-        banned_by UUID REFERENCES users(id) ON DELETE SET NULL,
+        banned_by UUID REFERENCES users(id),
         reason TEXT,
         banned_until TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -175,9 +178,11 @@ async function ensureTablesExist() {
         chat_id UUID REFERENCES chats(id) ON DELETE CASCADE,
         sender_id UUID REFERENCES users(id),
         content TEXT,
-        type VARCHAR(20) DEFAULT 'text' CHECK (type IN ('text', 'image', 'video', 'audio', 'voice', 'file', 'sticker', 'gif', 'contact', 'location', 'call', 'poll', 'system')),
+        type VARCHAR(20) DEFAULT 'text' CHECK (type IN ('text', 'image', 'video', 'audio', 'voice', 'file', 'sticker', 'gif', 'contact', 'location', 'call')),
         media_url TEXT,
         media_type VARCHAR(50),
+        media_encrypted BOOLEAN DEFAULT FALSE,
+        media_encryption JSONB,
         reply_to_message_id UUID,
         forwarded_from UUID REFERENCES messages(id),
         voice_duration INTEGER DEFAULT 0,
@@ -189,6 +194,8 @@ async function ensureTablesExist() {
         deleted_at TIMESTAMP,
         is_encrypted BOOLEAN DEFAULT FALSE,
         encryption_iv TEXT,
+        is_mls BOOLEAN DEFAULT FALSE,
+        mls_epoch INT DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_messages_chat ON messages(chat_id);
@@ -331,6 +338,8 @@ async function ensureTablesExist() {
         thumbnail_url TEXT,
         mime_type VARCHAR(100),
         size_bytes INTEGER DEFAULT 0,
+        encrypted BOOLEAN DEFAULT FALSE,
+        encryption JSONB,
         original_name VARCHAR(255),
         created_at TIMESTAMP DEFAULT NOW()
     );
@@ -352,6 +361,7 @@ async function ensureTablesExist() {
         user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
         public_key TEXT NOT NULL,
         key_id VARCHAR(64) NOT NULL,
+        pq_public_key TEXT,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
     );
@@ -363,9 +373,40 @@ async function ensureTablesExist() {
         user_id UUID REFERENCES users(id) ON DELETE CASCADE,
         encrypted_key TEXT NOT NULL,
         sender_key_id VARCHAR(64) NOT NULL,
+        pq_ciphertext TEXT,
         created_at TIMESTAMP DEFAULT NOW(),
         UNIQUE(chat_id, user_id)
     );
+
+    -- MLS KeyPackages
+    CREATE TABLE IF NOT EXISTS user_mls_keypackages (
+        id UUID PRIMARY KEY,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        keypackage_id VARCHAR(64) NOT NULL,
+        keypackage_bytes TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_mls_keypackages_user ON user_mls_keypackages(user_id);
+
+    -- MLS Group State
+    CREATE TABLE IF NOT EXISTS group_mls_state (
+        chat_id UUID PRIMARY KEY REFERENCES chats(id) ON DELETE CASCADE,
+        epoch BIGINT NOT NULL DEFAULT 0,
+        tree_structure TEXT NOT NULL,
+        updated_at TIMESTAMP DEFAULT NOW()
+    );
+
+    -- MLS Commits
+    CREATE TABLE IF NOT EXISTS group_mls_commits (
+        id UUID PRIMARY KEY,
+        chat_id UUID NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+        epoch BIGINT NOT NULL,
+        sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        commit_bytes TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(chat_id, epoch)
+    );
+    CREATE INDEX IF NOT EXISTS idx_group_mls_commits_chat_epoch ON group_mls_commits(chat_id, epoch);
 
     -- Reports table
     CREATE TABLE IF NOT EXISTS reports (
@@ -379,98 +420,10 @@ async function ensureTablesExist() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE INDEX IF NOT EXISTS idx_reports_reported ON reports(reported_user_id);
+    CREATE INDEX IF NOT EXISTS idx_reports_reporter ON reports(reporter_id);
+    CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status);
     CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(created_at DESC);
-
-    -- Phase 1 column migrations for groups
-    DO $$
-    BEGIN
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'chats' AND column_name = 'is_supergroup') THEN
-            ALTER TABLE chats ADD COLUMN is_supergroup BOOLEAN DEFAULT FALSE;
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'chats' AND column_name = 'history_visible') THEN
-            ALTER TABLE chats ADD COLUMN history_visible BOOLEAN DEFAULT TRUE;
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'chats' AND column_name = 'slow_mode_seconds') THEN
-            ALTER TABLE chats ADD COLUMN slow_mode_seconds INT DEFAULT 0;
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'chats' AND column_name = 'username') THEN
-            ALTER TABLE chats ADD COLUMN username VARCHAR(50) UNIQUE;
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'chats' AND column_name = 'join_approval_required') THEN
-            ALTER TABLE chats ADD COLUMN join_approval_required BOOLEAN DEFAULT FALSE;
-        END IF;
-
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'chat_members' AND column_name = 'custom_title') THEN
-            ALTER TABLE chat_members ADD COLUMN custom_title VARCHAR(50);
-        END IF;
-
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'messages' AND column_name = 'topic_id') THEN
-            ALTER TABLE messages ADD COLUMN topic_id UUID;
-        END IF;
-
-        -- Mega-Batch 3 migrations
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'chats' AND column_name = 'is_protected') THEN
-            ALTER TABLE chats ADD COLUMN is_protected BOOLEAN DEFAULT FALSE;
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'chats' AND column_name = 'ttl_seconds') THEN
-            ALTER TABLE chats ADD COLUMN ttl_seconds INT DEFAULT 0;
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'messages' AND column_name = 'expires_at') THEN
-            ALTER TABLE messages ADD COLUMN expires_at TIMESTAMP;
-        END IF;
-
-        -- Mega-Batch 4 migrations
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'status_emoji') THEN
-            ALTER TABLE users ADD COLUMN status_emoji VARCHAR(10) DEFAULT NULL;
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'messages' AND column_name = 'is_silent') THEN
-            ALTER TABLE messages ADD COLUMN is_silent BOOLEAN DEFAULT FALSE;
-        END IF;
-    END $$;
-
-    -- Chat invite links table
-    CREATE TABLE IF NOT EXISTS chat_invite_links (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        chat_id UUID REFERENCES chats(id) ON DELETE CASCADE,
-        creator_id UUID REFERENCES users(id) ON DELETE SET NULL,
-        link_code VARCHAR(20) UNIQUE NOT NULL,
-        expire_at TIMESTAMP,
-        usage_limit INT,
-        usage_count INT DEFAULT 0,
-        is_revoked BOOLEAN DEFAULT FALSE,
-        request_to_join BOOLEAN DEFAULT FALSE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE INDEX IF NOT EXISTS idx_chat_invite_links_chat ON chat_invite_links(chat_id);
-    CREATE INDEX IF NOT EXISTS idx_chat_invite_links_code ON chat_invite_links(link_code);
-
-    -- Chat join requests table
-    CREATE TABLE IF NOT EXISTS chat_join_requests (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        chat_id UUID REFERENCES chats(id) ON DELETE CASCADE,
-        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-        status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'declined')),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        decided_by UUID REFERENCES users(id) ON DELETE SET NULL,
-        decided_at TIMESTAMP,
-        UNIQUE(chat_id, user_id, status)
-    );
-    CREATE INDEX IF NOT EXISTS idx_chat_join_requests_chat ON chat_join_requests(chat_id);
-
-    -- Chat topics table
-    CREATE TABLE IF NOT EXISTS chat_topics (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        chat_id UUID REFERENCES chats(id) ON DELETE CASCADE,
-        title VARCHAR(100) NOT NULL,
-        icon_color VARCHAR(20),
-        icon_emoji VARCHAR(10),
-        creator_id UUID REFERENCES users(id) ON DELETE SET NULL,
-        is_closed BOOLEAN DEFAULT FALSE,
-        is_hidden BOOLEAN DEFAULT FALSE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE INDEX IF NOT EXISTS idx_chat_topics_chat ON chat_topics(chat_id);
-    CREATE INDEX IF NOT EXISTS idx_messages_topic ON messages(topic_id);
     `;
 
     try {

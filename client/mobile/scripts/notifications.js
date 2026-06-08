@@ -47,7 +47,7 @@
 
         n.onclick = () => {
             window.focus();
-            window.location.href = '/client/mobile/screens/chats/chats.html?openChat=' + encodeURIComponent(chatId);
+            window.location.href = '/mobile/chats/' + encodeURIComponent(chatId);
             n.close();
         };
 
@@ -102,7 +102,7 @@
         `;
 
         toast.onclick = () => {
-            window.location.href = '/client/mobile/screens/chats/chats.html?openChat=' + encodeURIComponent(chatId);
+            window.location.href = '/mobile/chats/' + encodeURIComponent(chatId);
         };
 
         container.appendChild(toast);
@@ -205,8 +205,7 @@
     // ── WebSocket ──────────────────────────────────────────────────────────
     function connect() {
         const token = getToken();
-        const userId = getUserId();
-        if (!token || !userId) return;
+        if (!token) return;
 
         // Не подключаемся на страницах авторизации
         const path = window.location.pathname;
@@ -217,7 +216,7 @@
 
         try {
             const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-            ws = new WebSocket(`${proto}://${location.host}/ws?userId=${userId}`);
+            ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`);
 
             ws.onopen = () => {
                 reconnectDelay = 2000;

@@ -88,7 +88,7 @@ Amvera спросит логин/пароль — введи данные от �
 
 Проверь health endpoint:
 ```
-https://craneapp.amvera.io/api/v1/health
+https://craneapp.amvera.io/api/v2/health
 ```
 Должен вернуть `{ "status": "ok" }`.
 

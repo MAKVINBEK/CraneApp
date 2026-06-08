@@ -29,18 +29,28 @@ func main() {
 	wsServer := chat.NewWSServer(pool, crypto)
 	handler := chat.NewHandler(chat.NewService(pool, wsServer))
 
-	// Start outbox relay (no-op if NATS_URL is not set).
+	// In production NATS is required. In other environments it is optional
+	// but outbox events will accumulate until NATS becomes available.
 	outboxCtx, outboxCancel := context.WithCancel(context.Background())
 	defer outboxCancel()
 	var natsConn chat.NATSConn
-	if natsURL := config.Value("NATS_URL", ""); natsURL != "" {
+	natsURL := config.Value("NATS_URL", "")
+	if natsURL == "" && config.Value("CRANE_ENV", "development") == "production" {
+		log.Fatal("NATS_URL is required in production (CRANE_ENV=production)")
+	}
+	if natsURL != "" {
 		var err error
 		natsConn, err = chat.DialNATS(natsURL)
 		if err != nil {
-			log.Printf("NATS unavailable, outbox relay will log only: %v", err)
+			if config.Value("CRANE_ENV", "development") == "production" {
+				log.Fatalf("NATS connection failed in production: %v", err)
+			}
+			log.Printf("NATS unavailable, outbox events will accumulate: %v", err)
 		} else {
 			defer natsConn.Close()
 		}
+	} else {
+		log.Printf("NATS_URL not set — outbox events will accumulate until NATS is configured")
 	}
 	go chat.OutboxRelay(outboxCtx, pool, natsConn)
 	authenticated := authctx.Middleware(crypto)
@@ -66,8 +76,13 @@ func main() {
 		}
 	})))
 	mux.Handle("/api/v2/messages/read", authenticated(http.HandlerFunc(handler.MessagesRead)))
+	mux.Handle("/api/v2/messages/search", authenticated(http.HandlerFunc(handler.Messages)))
+	mux.Handle("/api/v2/messages/favorites", authenticated(http.HandlerFunc(handler.Messages)))
 	mux.Handle("/api/v2/messages/", authenticated(http.HandlerFunc(handler.Messages)))
 	mux.Handle("/api/v2/calls/rooms", authenticated(http.HandlerFunc(handler.CallRoom)))
+	mux.Handle("/api/v2/mls/keypackages", authenticated(http.HandlerFunc(handler.MLSRoutes)))
+	mux.Handle("/api/v2/mls/keypackages/", authenticated(http.HandlerFunc(handler.MLSRoutes)))
+	mux.Handle("/api/v2/mls/group/", authenticated(http.HandlerFunc(handler.MLSRoutes)))
 
 	mux.HandleFunc("/ws", wsServer.ServeWS)
 

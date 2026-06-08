@@ -113,6 +113,42 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		httpx.JSON(w, http.StatusOK, map[string]any{"members": members})
+	case suffix == "/members" && r.Method == http.MethodPost:
+		var input struct {
+			UserID string `json:"userId"`
+		}
+		if !decode(w, r, &input) {
+			return
+		}
+		respondSuccess(w, r, h.service.AddMember(r.Context(), current.ID, chatID, input.UserID))
+	case suffix == "/members-online" && r.Method == http.MethodGet:
+		ids, err := h.service.MembersOnline(r.Context(), current.ID, chatID)
+		if errors.Is(err, ErrForbidden) {
+			httpx.ErrorJSON(w, r, http.StatusForbidden, "access_denied", "access denied")
+			return
+		}
+		if err != nil {
+			httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", "fetch failed")
+			return
+		}
+		if ids == nil {
+			ids = []string{}
+		}
+		httpx.JSON(w, http.StatusOK, map[string]any{"onlineUserIds": ids})
+	case suffix == "/bans" && r.Method == http.MethodGet:
+		bans, err := h.service.ListBans(r.Context(), current.ID, chatID)
+		if errors.Is(err, ErrForbidden) {
+			httpx.ErrorJSON(w, r, http.StatusForbidden, "access_denied", "access denied")
+			return
+		}
+		if err != nil {
+			httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", "fetch failed")
+			return
+		}
+		if bans == nil {
+			bans = []Ban{}
+		}
+		httpx.JSON(w, http.StatusOK, map[string]any{"bans": bans})
 	case strings.HasPrefix(suffix, "/members/"):
 		memberID, action := parseMemberAction(suffix)
 		if memberID == "" {
@@ -127,6 +163,26 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			respondSuccess(w, r, h.service.SetMemberRole(r.Context(), current.ID, chatID, memberID, input.Role))
+			return
+		}
+		if action == "/ban" && r.Method == http.MethodPost {
+			var input struct {
+				Reason string `json:"reason"`
+			}
+			_ = decode(w, r, &input)
+			respondSuccess(w, r, h.service.BanMember(r.Context(), current.ID, chatID, memberID, input.Reason))
+			return
+		}
+		if action == "/unban" && r.Method == http.MethodPost {
+			respondSuccess(w, r, h.service.UnbanMember(r.Context(), current.ID, chatID, memberID))
+			return
+		}
+		if action == "/mute" && r.Method == http.MethodPost {
+			respondSuccess(w, r, h.service.MuteMember(r.Context(), current.ID, chatID, memberID))
+			return
+		}
+		if action == "/unmute" && r.Method == http.MethodPost {
+			respondSuccess(w, r, h.service.UnmuteMember(r.Context(), current.ID, chatID, memberID))
 			return
 		}
 		if action == "" && r.Method == http.MethodDelete {
@@ -225,6 +281,48 @@ func (h *Handler) MessagesRead(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) Messages(w http.ResponseWriter, r *http.Request) {
 	current := authctx.MustUser(r)
+	// Handle special non-ID routes first.
+	if r.URL.Path == "/api/v2/messages/search" && r.Method == http.MethodGet {
+		q := r.URL.Query().Get("q")
+		if q == "" {
+			httpx.ErrorJSON(w, r, http.StatusBadRequest, "validation_failed", "q parameter required")
+			return
+		}
+		limit := 50
+		if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil {
+			limit = l
+		}
+		msgs, err := h.service.SearchMessages(r.Context(), current.ID, q, limit)
+		if err != nil {
+			httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", "search failed")
+			return
+		}
+		if msgs == nil {
+			msgs = []Message{}
+		}
+		httpx.JSON(w, http.StatusOK, map[string]any{"messages": msgs})
+		return
+	}
+	if r.URL.Path == "/api/v2/messages/favorites" && r.Method == http.MethodGet {
+		limit, offset := 50, 0
+		if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil {
+			limit = l
+		}
+		if o, err := strconv.Atoi(r.URL.Query().Get("offset")); err == nil {
+			offset = o
+		}
+		msgs, err := h.service.ListFavorites(r.Context(), current.ID, limit, offset)
+		if err != nil {
+			httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", "favorites fetch failed")
+			return
+		}
+		if msgs == nil {
+			msgs = []Message{}
+		}
+		httpx.JSON(w, http.StatusOK, map[string]any{"messages": msgs})
+		return
+	}
+
 	targetID, suffix := parseMessagePath(r.URL.Path)
 
 	switch {
@@ -332,6 +430,13 @@ func (h *Handler) Messages(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		httpx.JSON(w, http.StatusOK, map[string]any{"added": added, "reactions": reactions})
+	case suffix == "/favorite" && (r.Method == http.MethodPost || r.Method == http.MethodDelete):
+		added, err := h.service.ToggleFavorite(r.Context(), current.ID, targetID)
+		if err != nil {
+			httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", "favorite failed")
+			return
+		}
+		httpx.JSON(w, http.StatusOK, map[string]any{"favorited": added})
 	default:
 		methodNotAllowed(w, r)
 	}

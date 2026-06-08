@@ -27,4 +27,4 @@ BCRYPT_ROUNDS=12
 ## Проверка после деплоя
 
 - `GET /api/health` — должен вернуть `{"status":"healthy",...}`
-- `GET /api/v1/health` — то же самое
+- `GET /api/v2/health` — то же самое

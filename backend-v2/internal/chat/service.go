@@ -338,6 +338,164 @@ func (s *Service) MarkRead(ctx context.Context, userID, chatID string) error {
 	return err
 }
 
+type Ban struct {
+	UserID      string  `json:"userId"`
+	Username    string  `json:"username"`
+	FirstName   string  `json:"firstName"`
+	Reason      string  `json:"reason"`
+	BannedUntil *string `json:"bannedUntil,omitempty"`
+	CreatedAt   string  `json:"createdAt"`
+}
+
+func (s *Service) AddMember(ctx context.Context, actorID, chatID, userID string) error {
+	actorRole, err := s.memberRole(ctx, actorID, chatID)
+	if err != nil {
+		return err
+	}
+	if actorRole != "owner" && actorRole != "admin" {
+		return ErrForbidden
+	}
+	// Check if banned.
+	var dummy int
+	err = s.db.QueryRowContext(ctx,
+		`SELECT 1 FROM chats.bans WHERE chat_id = $1 AND user_id = $2 AND (banned_until IS NULL OR banned_until > NOW())`,
+		chatID, userID).Scan(&dummy)
+	if err == nil {
+		return ErrForbidden // user is banned
+	}
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO chats.members (chat_id, user_id, role) VALUES ($1, $2, 'member')
+		ON CONFLICT DO NOTHING
+	`, chatID, userID)
+	return err
+}
+
+func (s *Service) BanMember(ctx context.Context, actorID, chatID, userID, reason string) error {
+	actorRole, err := s.memberRole(ctx, actorID, chatID)
+	if err != nil {
+		return err
+	}
+	if actorRole != "owner" && actorRole != "admin" {
+		return ErrForbidden
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	// Remove from chat.
+	_, _ = tx.ExecContext(ctx, `DELETE FROM chats.members WHERE chat_id = $1 AND user_id = $2 AND role <> 'owner'`, chatID, userID)
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO chats.bans (chat_id, user_id, banned_by, reason)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (chat_id, user_id) DO UPDATE SET banned_by = EXCLUDED.banned_by, reason = EXCLUDED.reason, banned_until = NULL, created_at = NOW()
+	`, chatID, userID, actorID, reason)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Service) UnbanMember(ctx context.Context, actorID, chatID, userID string) error {
+	actorRole, err := s.memberRole(ctx, actorID, chatID)
+	if err != nil {
+		return err
+	}
+	if actorRole != "owner" && actorRole != "admin" {
+		return ErrForbidden
+	}
+	_, err = s.db.ExecContext(ctx, `DELETE FROM chats.bans WHERE chat_id = $1 AND user_id = $2`, chatID, userID)
+	return err
+}
+
+func (s *Service) ListBans(ctx context.Context, actorID, chatID string) ([]Ban, error) {
+	actorRole, err := s.memberRole(ctx, actorID, chatID)
+	if err != nil {
+		return nil, err
+	}
+	if actorRole != "owner" && actorRole != "admin" {
+		return nil, ErrForbidden
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT b.user_id::text, u.username, u.first_name, b.reason,
+		       CASE WHEN b.banned_until IS NOT NULL THEN b.banned_until::text END, b.created_at::text
+		FROM chats.bans b
+		JOIN auth.users u ON u.id = b.user_id
+		WHERE b.chat_id = $1 AND (b.banned_until IS NULL OR b.banned_until > NOW())
+	`, chatID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var bans []Ban
+	for rows.Next() {
+		var b Ban
+		if err := rows.Scan(&b.UserID, &b.Username, &b.FirstName, &b.Reason, &b.BannedUntil, &b.CreatedAt); err != nil {
+			return nil, err
+		}
+		bans = append(bans, b)
+	}
+	return bans, rows.Err()
+}
+
+func (s *Service) MuteMember(ctx context.Context, actorID, chatID, userID string) error {
+	actorRole, err := s.memberRole(ctx, actorID, chatID)
+	if err != nil {
+		return err
+	}
+	if actorRole != "owner" && actorRole != "admin" {
+		return ErrForbidden
+	}
+	_, err = s.db.ExecContext(ctx, `
+		UPDATE chats.members SET muted_until = NOW() + INTERVAL '365 days'
+		WHERE chat_id = $1 AND user_id = $2 AND role <> 'owner'
+	`, chatID, userID)
+	return err
+}
+
+func (s *Service) UnmuteMember(ctx context.Context, actorID, chatID, userID string) error {
+	actorRole, err := s.memberRole(ctx, actorID, chatID)
+	if err != nil {
+		return err
+	}
+	if actorRole != "owner" && actorRole != "admin" {
+		return ErrForbidden
+	}
+	_, err = s.db.ExecContext(ctx, `
+		UPDATE chats.members SET muted_until = NULL
+		WHERE chat_id = $1 AND user_id = $2
+	`, chatID, userID)
+	return err
+}
+
+func (s *Service) MembersOnline(ctx context.Context, userID, chatID string) ([]string, error) {
+	if ok, err := s.isMember(ctx, userID, chatID); err != nil || !ok {
+		if err != nil {
+			return nil, err
+		}
+		return nil, ErrForbidden
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT cm.user_id::text
+		FROM chats.members cm
+		JOIN users.profiles p ON p.user_id = cm.user_id
+		WHERE cm.chat_id = $1 AND p.is_online = TRUE
+	`, chatID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 func (s *Service) isMember(ctx context.Context, userID, chatID string) (bool, error) {
 	var ok bool
 	err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM chats.members WHERE user_id = $1 AND chat_id = $2)`, userID, chatID).Scan(&ok)
@@ -399,7 +557,7 @@ func (s *Service) ListMessages(ctx context.Context, userID, chatID string, limit
 		return nil, ErrForbidden
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id::text, chat_id::text, sender_id::text, content, type, 
+		SELECT id::text, chat_id::text, sender_id::text, content, type,
 		       reply_to::text, metadata, created_at::text, updated_at::text, deleted_at::text
 		FROM messages.messages
 		WHERE chat_id = $1 AND deleted_at IS NULL
@@ -410,6 +568,10 @@ func (s *Service) ListMessages(ctx context.Context, userID, chatID string, limit
 		return nil, err
 	}
 	defer rows.Close()
+	return scanMessages(rows)
+}
+
+func scanMessages(rows *sql.Rows) ([]Message, error) {
 	var messages []Message
 	for rows.Next() {
 		var msg Message
@@ -425,11 +587,8 @@ func (s *Service) ListMessages(ctx context.Context, userID, chatID string, limit
 		if deletedAt.Valid {
 			msg.DeletedAt = &deletedAt.String
 		}
-		// unmarshal metadata if needed, but the React frontend doesn't strictly require it
 		messages = append(messages, msg)
 	}
-	// The frontend expects oldest first or newest first? The legacy frontend usually expects newest first in paginated APIs, or oldest first.
-	// We'll return them as fetched (DESC) and let frontend handle it or reverse it here.
 	return messages, rows.Err()
 }
 
@@ -484,11 +643,14 @@ func (s *Service) EditMessage(ctx context.Context, userID, messageID, content st
 	var deletedAt sql.NullString
 	var metadataBytes []byte
 
+	// Require sender to be a current member of the chat to prevent editing after being kicked.
 	err := s.db.QueryRowContext(ctx, `
-		UPDATE messages.messages
+		UPDATE messages.messages AS m
 		SET content = $1, updated_at = NOW()
-		WHERE id = $2 AND sender_id = $3 AND deleted_at IS NULL
-		RETURNING id::text, chat_id::text, sender_id::text, content, type, reply_to::text, metadata, created_at::text, updated_at::text, deleted_at::text
+		FROM chats.members AS cm
+		WHERE m.id = $2 AND m.sender_id = $3 AND m.deleted_at IS NULL
+		  AND cm.chat_id = m.chat_id AND cm.user_id = $3
+		RETURNING m.id::text, m.chat_id::text, m.sender_id::text, m.content, m.type, m.reply_to::text, m.metadata, m.created_at::text, m.updated_at::text, m.deleted_at::text
 	`, content, messageID, userID).Scan(&msg.ID, &msg.ChatID, &msg.SenderID, &msg.Content, &msg.Type, &replyToStr, &metadataBytes, &msg.CreatedAt, &msg.UpdatedAt, &deletedAt)
 
 	if err == sql.ErrNoRows {
@@ -520,11 +682,14 @@ func (s *Service) EditMessage(ctx context.Context, userID, messageID, content st
 
 func (s *Service) DeleteMessage(ctx context.Context, userID, messageID string) error {
 	var chatID string
+	// Require sender to be a current member to prevent deletion after being kicked.
 	err := s.db.QueryRowContext(ctx, `
-		UPDATE messages.messages
+		UPDATE messages.messages AS m
 		SET deleted_at = NOW()
-		WHERE id = $1 AND sender_id = $2 AND deleted_at IS NULL
-		RETURNING chat_id::text
+		FROM chats.members AS cm
+		WHERE m.id = $1 AND m.sender_id = $2 AND m.deleted_at IS NULL
+		  AND cm.chat_id = m.chat_id AND cm.user_id = $2
+		RETURNING m.chat_id::text
 	`, messageID, userID).Scan(&chatID)
 
 	if err == sql.ErrNoRows {
@@ -751,4 +916,57 @@ func (s *Service) UnpinMessage(ctx context.Context, userID, chatID, messageID st
 		s.ws.BroadcastToChat(chatID, payload, "")
 	}
 	return nil
+}
+
+func (s *Service) SearchMessages(ctx context.Context, userID, query string, limit int) ([]Message, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT m.id::text, m.chat_id::text, m.sender_id::text, m.content, m.type,
+		       m.reply_to::text, m.metadata, m.created_at::text, m.updated_at::text, m.deleted_at::text
+		FROM messages.messages m
+		JOIN chats.members cm ON cm.chat_id = m.chat_id AND cm.user_id = $1
+		WHERE m.deleted_at IS NULL
+		  AND to_tsvector('simple', m.content) @@ plainto_tsquery('simple', $2)
+		ORDER BY m.created_at DESC
+		LIMIT $3
+	`, userID, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanMessages(rows)
+}
+
+func (s *Service) ToggleFavorite(ctx context.Context, userID, messageID string) (bool, error) {
+	var dummy int
+	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM messages.favorites WHERE user_id = $1 AND message_id = $2`, userID, messageID).Scan(&dummy)
+	if err == nil {
+		// Already favorited — remove.
+		_, err = s.db.ExecContext(ctx, `DELETE FROM messages.favorites WHERE user_id = $1 AND message_id = $2`, userID, messageID)
+		return false, err
+	}
+	_, err = s.db.ExecContext(ctx, `INSERT INTO messages.favorites (user_id, message_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, userID, messageID)
+	return true, err
+}
+
+func (s *Service) ListFavorites(ctx context.Context, userID string, limit, offset int) ([]Message, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT m.id::text, m.chat_id::text, m.sender_id::text, m.content, m.type,
+		       m.reply_to::text, m.metadata, m.created_at::text, m.updated_at::text, m.deleted_at::text
+		FROM messages.favorites f
+		JOIN messages.messages m ON m.id = f.message_id
+		WHERE f.user_id = $1 AND m.deleted_at IS NULL
+		ORDER BY f.created_at DESC
+		LIMIT $2 OFFSET $3
+	`, userID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanMessages(rows)
 }

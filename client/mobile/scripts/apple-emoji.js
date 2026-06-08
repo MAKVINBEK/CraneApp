@@ -37,7 +37,7 @@
         const token = localStorage.getItem('craneapp_auth_token');
         if (!token) { loading = false; return; }
 
-        fetch('/api/v1/emojis', { headers: { 'Authorization': 'Bearer ' + token } })
+        fetch('/api/v2/emojis', { headers: { 'Authorization': 'Bearer ' + token } })
             .then(r => r.json())
             .then(data => {
                 emojiMap = {};

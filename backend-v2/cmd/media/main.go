@@ -24,13 +24,27 @@ func main() {
 	}
 	defer pool.Close()
 
+	// In production, refuse to start with default dev credentials.
+	minioSecret := config.Value("MINIO_SECRET_KEY", "craneapp-local-secret")
+	if config.Value("CRANE_ENV", "development") == "production" && minioSecret == "craneapp-local-secret" {
+		log.Fatal("MINIO_SECRET_KEY must be set to a non-default value in production")
+	}
+
 	store := media.NewMinioStore(
 		config.Value("MINIO_ENDPOINT", "http://127.0.0.1:9000"),
 		config.Value("MINIO_ACCESS_KEY", "craneapp"),
-		config.Value("MINIO_SECRET_KEY", "craneapp-local-secret"),
+		minioSecret,
 		config.Value("MINIO_REGION", "us-east-1"),
 	)
 	bucket := config.Value("MEDIA_BUCKET", "crane-media")
+
+	// Ensure the bucket exists before accepting uploads.
+	initCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	if err := store.EnsureBucket(initCtx, bucket); err != nil {
+		cancel()
+		log.Fatalf("media: failed to ensure bucket %q: %v", bucket, err)
+	}
+	cancel()
 
 	svc := media.NewService(pool, store, bucket)
 	handler := media.NewHandler(svc)

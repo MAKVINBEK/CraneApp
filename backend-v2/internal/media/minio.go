@@ -35,6 +35,41 @@ func NewMinioStore(endpoint, accessKey, secretKey, region string) *MinioStore {
 	}
 }
 
+// EnsureBucket creates the bucket if it does not already exist.
+func (m *MinioStore) EnsureBucket(ctx context.Context, bucket string) error {
+	reqURL := fmt.Sprintf("%s/%s", m.endpoint, bucket)
+	// HEAD to check existence.
+	headReq, err := http.NewRequestWithContext(ctx, http.MethodHead, reqURL, nil)
+	if err != nil {
+		return err
+	}
+	m.signRequest(headReq, nil)
+	resp, err := m.client.Do(headReq)
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	if resp.StatusCode == http.StatusOK {
+		return nil // already exists
+	}
+	// PUT to create.
+	putReq, err := http.NewRequestWithContext(ctx, http.MethodPut, reqURL, nil)
+	if err != nil {
+		return err
+	}
+	putReq.ContentLength = 0
+	m.signRequest(putReq, nil)
+	resp2, err := m.client.Do(putReq)
+	if err != nil {
+		return err
+	}
+	defer resp2.Body.Close()
+	if resp2.StatusCode >= 300 {
+		return fmt.Errorf("minio create bucket %s: %s", bucket, resp2.Status)
+	}
+	return nil
+}
+
 func (m *MinioStore) Put(ctx context.Context, bucket, key string, r io.Reader, size int64, contentType string) error {
 	data, err := io.ReadAll(r)
 	if err != nil {

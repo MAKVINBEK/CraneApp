@@ -27,8 +27,9 @@ func main() {
 	db.SetMaxIdleConns(5)
 
 	crypto := cryptoclient.NewClient(config.Value("CRYPTO_URL", "http://127.0.0.1:5005"))
-	handler := auth.NewHandler(auth.NewService(db, crypto))
-	authenticated := authctx.Middleware(crypto)
+	svc := auth.NewService(db, crypto)
+	handler := auth.NewHandler(svc)
+	authenticated := authctx.Middleware(crypto, svc)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health/live", func(w http.ResponseWriter, _ *http.Request) {
 		httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -45,6 +46,14 @@ func main() {
 	mux.HandleFunc("/api/v2/auth/register", handler.Register)
 	mux.HandleFunc("/api/v2/auth/login", handler.Login)
 	mux.Handle("/api/v2/auth/public-key", authenticated(http.HandlerFunc(handler.PublicKey)))
+	mux.Handle("/api/v2/auth/logout", authenticated(http.HandlerFunc(handler.Logout)))
+	mux.Handle("/api/v2/auth/logout-all", authenticated(http.HandlerFunc(handler.LogoutAll)))
+	mux.Handle("/api/v2/auth/sessions", authenticated(http.HandlerFunc(handler.Sessions)))
+	mux.Handle("/api/v2/auth/change-password", authenticated(http.HandlerFunc(handler.ChangePassword)))
+	mux.Handle("/api/v2/auth/2fa/status", authenticated(http.HandlerFunc(handler.TwoFAStatus)))
+	mux.Handle("/api/v2/auth/2fa/enable", authenticated(http.HandlerFunc(handler.TwoFAEnable)))
+	mux.Handle("/api/v2/auth/2fa/disable", authenticated(http.HandlerFunc(handler.TwoFADisable)))
+	mux.Handle("/api/v2/auth/2fa/verify", authenticated(http.HandlerFunc(handler.TwoFAVerify)))
 
 	server := &http.Server{Addr: config.Value("AUTH_ADDR", ":8081"), Handler: httpx.Middleware(mux), ReadHeaderTimeout: 5 * time.Second}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

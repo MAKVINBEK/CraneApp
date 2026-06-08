@@ -8,6 +8,7 @@ import (
 )
 
 type jsonMap map[string]any
+type jsonArray []any
 
 func (m jsonMap) Value() (driver.Value, error) {
 	if m == nil {
@@ -31,6 +32,30 @@ func (m *jsonMap) Scan(value any) error {
 		return fmt.Errorf("unsupported json map type %T", value)
 	}
 	return json.Unmarshal(bytes, m)
+}
+
+func (a jsonArray) Value() (driver.Value, error) {
+	if a == nil {
+		return []byte("[]"), nil
+	}
+	return json.Marshal([]any(a))
+}
+
+func (a *jsonArray) Scan(value any) error {
+	if value == nil {
+		*a = jsonArray{}
+		return nil
+	}
+	var bytes []byte
+	switch typed := value.(type) {
+	case []byte:
+		bytes = typed
+	case string:
+		bytes = []byte(typed)
+	default:
+		return fmt.Errorf("unsupported json array type %T", value)
+	}
+	return json.Unmarshal(bytes, a)
 }
 
 type pqStringArray []string
