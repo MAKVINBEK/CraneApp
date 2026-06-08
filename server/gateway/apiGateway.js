@@ -18,6 +18,11 @@ const security = require('../middleware/security');
 const i18n = require('../i18n');
 const QRCode = require('qrcode');
 const callRoom = require('../services/call-service/callRoom');
+const {
+    registerChannelRoutes,
+    publishScheduledMessages,
+    canPostToChannel
+} = require('./channels');
 
 const MAX_LOGIN_ATTEMPTS = 5; // синхронизировано с security.js
 
@@ -747,6 +752,31 @@ async function autoMigrate() {
         await query(`ALTER TABLE chats ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP`);
         await query(`ALTER TABLE chats ADD COLUMN IF NOT EXISTS description TEXT DEFAULT ''`);
         await query(`ALTER TABLE chats ADD COLUMN IF NOT EXISTS avatar_url TEXT DEFAULT ''`);
+        await query(`ALTER TABLE chats ADD COLUMN IF NOT EXISTS username VARCHAR(32)`).catch(() => {});
+        await query(`ALTER TABLE chats ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT FALSE`).catch(() => {});
+        await query(`ALTER TABLE chats ADD COLUMN IF NOT EXISTS discussion_chat_id UUID REFERENCES chats(id) ON DELETE SET NULL`).catch(() => {});
+
+        await query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS parent_message_id UUID REFERENCES messages(id) ON DELETE CASCADE`).catch(() => {});
+        await query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS views_count INTEGER DEFAULT 0`).catch(() => {});
+        await query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMP`).catch(() => {});
+        await query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS published_at TIMESTAMP`).catch(() => {});
+        await query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_silent BOOLEAN DEFAULT FALSE`).catch(() => {});
+        await query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS author_signature VARCHAR(128)`).catch(() => {});
+        await query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS comment_count INTEGER DEFAULT 0`).catch(() => {});
+
+        await query(`
+            CREATE TABLE IF NOT EXISTS message_views (
+                message_id UUID REFERENCES messages(id) ON DELETE CASCADE,
+                user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                viewed_at TIMESTAMP DEFAULT NOW(),
+                PRIMARY KEY (message_id, user_id)
+            )
+        `).catch(() => {});
+
+        await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_chats_channel_username ON chats (LOWER(username)) WHERE type = 'channel' AND username IS NOT NULL`).catch(() => {});
+        await query(`CREATE INDEX IF NOT EXISTS idx_messages_scheduled ON messages(scheduled_at) WHERE scheduled_at IS NOT NULL AND published_at IS NULL`).catch(() => {});
+        await query(`CREATE INDEX IF NOT EXISTS idx_messages_parent ON messages(parent_message_id)`).catch(() => {});
+        await query(`CREATE INDEX IF NOT EXISTS idx_message_views_message ON message_views(message_id)`).catch(() => {});
         
         // Индексы для производительности
         await query(`CREATE INDEX IF NOT EXISTS idx_chats_pinned ON chats(is_pinned) WHERE is_pinned = TRUE`);
@@ -3706,6 +3736,8 @@ app.get('/api/v1/chats', authMiddleware, async (req, res) => {
                  SELECT content, type, sender_id, is_encrypted, encryption_iv, created_at
                  FROM messages
                  WHERE chat_id = c.id AND is_deleted = FALSE
+                   AND parent_message_id IS NULL
+                   AND (scheduled_at IS NULL OR published_at IS NOT NULL)
                  ORDER BY created_at DESC
                  LIMIT 1
              ) lm ON TRUE
@@ -3739,6 +3771,9 @@ app.get('/api/v1/chats', authMiddleware, async (req, res) => {
             title: c.title,
             ownerId: c.owner_id,
             avatarUrl: c.avatar_url,
+            username: c.username || null,
+            isPublic: c.is_public || false,
+            discussionChatId: c.discussion_chat_id || null,
             role: c.role,
             isSupergroup: c.is_supergroup || false,
             mutedUntil: c.user_muted_until || null,
@@ -3915,6 +3950,15 @@ app.post('/api/v1/chats/create-group', authMiddleware, async (req, res) => {
         logger.error('❌ Create group error:', error);
         res.status(500).json({ error: error.message });
     }
+});
+
+registerChannelRoutes(app, {
+    authMiddleware,
+    query,
+    uuidv4,
+    broadcastToChat,
+    handleFileUpload,
+    logger
 });
 
 // УЧАСТНИКИ ГРУППЫ + онлайн статус
@@ -5679,7 +5723,7 @@ app.get('/api/v1/chats/archived', authMiddleware, async (req, res) => {
 app.get('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
     try {
         const { chatId } = req.params;
-        const { limit = 50, offset = 0, topicId, includePolls = '1' } = req.query;
+        const { limit = 50, offset = 0, topicId, includePolls = '1', parentMessageId } = req.query;
 
         const memberCheck = await query(
             'SELECT 1 FROM chat_members WHERE chat_id = $1 AND user_id = $2',
@@ -5690,11 +5734,20 @@ app.get('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
             return res.status(403).json({ error: req.t('accessDenied') });
         }
 
-        const chatRes = await query('SELECT is_supergroup FROM chats WHERE id = $1', [chatId]);
+        const chatRes = await query('SELECT type, is_supergroup FROM chats WHERE id = $1', [chatId]);
+        const chatTypeForList = chatRes.rows[0]?.type || 'private';
         const isSupergroup = chatRes.rows[0]?.is_supergroup || false;
+
+        const memberRoleRes = await query(
+            'SELECT role FROM chat_members WHERE chat_id = $1 AND user_id = $2',
+            [chatId, req.user.id]
+        );
+        const isChannelAdmin = chatTypeForList === 'channel' && ['owner', 'admin'].includes(memberRoleRes.rows[0]?.role);
 
         let sql = `SELECT 
                 m.id, m.chat_id, m.sender_id, m.content, m.content_plain, m.type, m.reply_to_message_id,
+                m.parent_message_id, m.views_count, m.comment_count, m.is_silent, m.author_signature,
+                m.scheduled_at, m.published_at,
                 m.is_edited, m.edited_at, m.is_pinned, m.created_at,
                 m.media_url, m.media_type, m.voice_duration,
                 m.is_encrypted, m.encryption_iv,
@@ -5730,14 +5783,24 @@ app.get('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
         const params = [chatId];
         let paramIdx = 2;
 
-        if (topicId) {
+        if (parentMessageId) {
+            sql += ` AND m.parent_message_id = $${paramIdx++}`;
+            params.push(parentMessageId);
+        } else if (chatTypeForList === 'channel') {
+            sql += ` AND m.parent_message_id IS NULL`;
+            if (!isChannelAdmin) {
+                sql += ` AND (m.scheduled_at IS NULL OR m.published_at IS NOT NULL)`;
+            }
+        }
+
+        if (topicId && !parentMessageId) {
             if (topicId === 'null') {
                 sql += ` AND m.topic_id IS NULL`;
             } else {
                 sql += ` AND m.topic_id = $${paramIdx++}`;
                 params.push(topicId);
             }
-        } else if (isSupergroup) {
+        } else if (isSupergroup && !parentMessageId) {
             sql += ` AND m.topic_id IS NULL`;
         }
 
@@ -5774,6 +5837,13 @@ app.get('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
             encryptionIv: m.encryption_iv || null,
             mentionedUserIds: m.mentioned_user_ids || [],
             isRead: m.sender_id === req.user.id && !!m.is_read,
+            parentMessageId: m.parent_message_id || null,
+            viewsCount: m.views_count || 0,
+            commentCount: m.comment_count || 0,
+            isSilent: m.is_silent || false,
+            authorSignature: m.author_signature || null,
+            scheduledAt: m.scheduled_at || null,
+            publishedAt: m.published_at || null,
             createdAt: m.created_at
         }));
 
@@ -5801,7 +5871,26 @@ app.get('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
             await attachPollsToMessages(messages, req.user.id);
         }
 
-        res.json({ messages });
+        if (chatTypeForList === 'channel') {
+            for (const msg of messages) {
+                if (msg.senderId !== req.user.id) {
+                    query(
+                        `INSERT INTO message_views (message_id, user_id, viewed_at)
+                         VALUES ($1, $2, NOW()) ON CONFLICT (message_id, user_id) DO NOTHING`,
+                        [msg.id, req.user.id]
+                    ).then(async (ins) => {
+                        if (ins.rowCount > 0) {
+                            await query(
+                                'UPDATE messages SET views_count = COALESCE(views_count, 0) + 1 WHERE id = $1',
+                                [msg.id]
+                            );
+                        }
+                    }).catch(() => {});
+                }
+            }
+        }
+
+        res.json({ messages, chatType: chatTypeForList });
     } catch (error) {
         logger.error('❌ Get messages error:', error);
         res.status(500).json({ error: error.message });
@@ -5886,9 +5975,10 @@ async function resolveGroupMentions(chatId, plainText, senderId) {
 app.post('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
     try {
         const { chatId } = req.params;
-        const { content, type = 'text', replyTo, mediaUrl, mediaType, forwardFrom, voiceDuration, topicId } = req.body;
+        const { content, type = 'text', replyTo, mediaUrl, mediaType, forwardFrom, voiceDuration, topicId, parentMessageId } = req.body;
         const { iv: encryptionIv, isEncrypted, contentPlain } = req.body;
         const { question, options, isAnonymous, allowMultiple } = req.body;
+        const { scheduledAt, isSilent, authorSignature } = req.body;
 
         logger.info('📨 POST /api/v1/messages:', { chatId, type, mediaUrl: mediaUrl?.substring(0, 50), mediaType });
 
@@ -5921,6 +6011,31 @@ app.post('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
         const chatType = chatInfo.rows[0].type || 'private';
         const chatTitle = chatInfo.rows[0].title || null;
         const slowModeSeconds = chatInfo.rows[0].slow_mode_seconds || 0;
+
+        const isChannelComment = chatType === 'channel' && !!parentMessageId;
+
+        if (isChannelComment) {
+            const postCheck = await query(
+                `SELECT id FROM messages WHERE id = $1 AND chat_id = $2 AND parent_message_id IS NULL AND is_deleted = FALSE`,
+                [parentMessageId, chatId]
+            );
+            if (!postCheck.rows.length) {
+                return res.status(404).json({ error: 'Пост не найден' });
+            }
+            if (!content && !mediaUrl) {
+                return res.status(400).json({ error: 'Пустой комментарий' });
+            }
+            if (type === 'poll') {
+                return res.status(400).json({ error: 'Опросы в комментариях не поддерживаются' });
+            }
+        } else if (chatType === 'channel') {
+            if (!(await canPostToChannel(query, chatId, req.user.id))) {
+                return res.status(403).json({ error: 'Только администраторы канала могут публиковать посты' });
+            }
+            if (type === 'poll') {
+                return res.status(400).json({ error: 'Опросы в каналах не поддерживаются' });
+            }
+        }
 
         if (chatType === 'group' && slowModeSeconds > 0 && member.role === 'member') {
             const lastMessageResult = await query(
@@ -5995,11 +6110,38 @@ app.post('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
         // Если зашифровано, используем переданный contentPlain
         const plainText = isEncrypted ? (contentPlain || '') : messageContent;
 
+        let scheduledAtDb = null;
+        let publishedAtDb = null;
+        if (isChannelComment) {
+            publishedAtDb = new Date();
+        } else if (chatType === 'channel' && scheduledAt) {
+            const schedDate = new Date(scheduledAt);
+            if (!Number.isNaN(schedDate.getTime()) && schedDate.getTime() > Date.now() + 5000) {
+                scheduledAtDb = schedDate;
+                publishedAtDb = null;
+            }
+        }
+        if (!scheduledAtDb) {
+            publishedAtDb = new Date();
+        }
+
+        const channelSilent = chatType === 'channel' && !!isSilent;
+        const channelSignature = chatType === 'channel' && authorSignature
+            ? String(authorSignature).slice(0, 128)
+            : null;
+
         await query(
-            `INSERT INTO messages (id, chat_id, sender_id, content, content_plain, type, reply_to_message_id, topic_id, media_url, media_type, voice_duration, is_encrypted, encryption_iv, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())`,
-            [messageId, chatId, req.user.id, messageContent, plainText, type, replyTo || null, dbTopicId, mediaUrl || null, mediaType || null, voiceDuration || 0, isEncrypted || false, encryptionIv || null]
+            `INSERT INTO messages (id, chat_id, sender_id, content, content_plain, type, reply_to_message_id, parent_message_id, topic_id, media_url, media_type, voice_duration, is_encrypted, encryption_iv, scheduled_at, published_at, is_silent, author_signature, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, NOW())`,
+            [messageId, chatId, req.user.id, messageContent, plainText, type, replyTo || null, parentMessageId || null, dbTopicId, mediaUrl || null, mediaType || null, voiceDuration || 0, isEncrypted || false, encryptionIv || null, scheduledAtDb, publishedAtDb, channelSilent, channelSignature]
         );
+
+        if (parentMessageId) {
+            await query(
+                `UPDATE messages SET comment_count = COALESCE(comment_count, 0) + 1 WHERE id = $1`,
+                [parentMessageId]
+            );
+        }
 
         if (type === 'poll') {
             const pollId = uuidv4();
@@ -6078,14 +6220,32 @@ app.post('/api/v1/messages/:chatId', authMiddleware, async (req, res) => {
             encryptionIv: encryptionIv || null,
             mentionedUserIds,
             createdAt: new Date(),
-            topicId: dbTopicId
+            topicId: dbTopicId,
+            isSilent: channelSilent,
+            authorSignature: channelSignature,
+            scheduledAt: scheduledAtDb,
+            publishedAt: publishedAtDb,
+            viewsCount: 0,
+            commentCount: 0,
+            parentMessageId: parentMessageId || null
         };
 
         if (type === 'poll') {
             message.poll = await buildPollPayload(messageId, req.user.id);
         }
 
-        broadcastToChat(chatId, { type: 'new_message', chatId, chatType, chatTitle, message }, req.user.id);
+        if (!scheduledAtDb) {
+            if (parentMessageId) {
+                broadcastToChat(chatId, {
+                    type: 'channel_comment',
+                    chatId,
+                    postId: parentMessageId,
+                    comment: message
+                }, req.user.id);
+            } else {
+                broadcastToChat(chatId, { type: 'new_message', chatId, chatType, chatTitle, message }, req.user.id);
+            }
+        }
 
         // ── Обработка команд бота CraneApp ──────────────────────────────
         try {
@@ -7946,6 +8106,12 @@ async function start() {
         
         // Очищаем дубликаты при запуске
         await cleanDuplicatePrivateChats();
+
+        setInterval(() => {
+            publishScheduledMessages({ query, broadcastToChat, logger, uuidv4 }).catch((err) => {
+                logger.error('❌ Scheduled channel publish error:', err.message);
+            });
+        }, 15000);
         
         server.listen(PORT, () => {
             logger.info('========================================');

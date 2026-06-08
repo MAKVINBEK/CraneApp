@@ -488,7 +488,164 @@
         let currentMessageElement = null;
         let replyingTo = null;
         let messagesData = {};
+        let commentThreadPostId = null;
+        let inputAreaOriginalParent = null;
+        let inputAreaOriginalNextSibling = null;
         let currentPreviewMediaUrl = null;
+
+        function captureMainInputAreaHome() {
+            const inputArea = document.getElementById('mainInputArea');
+            if (!inputArea || !inputArea.parentNode) return;
+            if (inputAreaOriginalParent && inputArea.parentNode === inputAreaOriginalParent) return;
+            if (!inputAreaOriginalParent || inputArea.parentNode.id !== 'channelCommentsInputMount') {
+                inputAreaOriginalParent = inputArea.parentNode;
+                inputAreaOriginalNextSibling = inputArea.nextSibling;
+            }
+        }
+
+        function restoreMainInputArea() {
+            const inputArea = document.getElementById('mainInputArea');
+            if (!inputArea) return;
+            captureMainInputAreaHome();
+            if (!inputAreaOriginalParent || inputArea.parentNode === inputAreaOriginalParent) return;
+            if (inputAreaOriginalNextSibling && inputAreaOriginalNextSibling.parentNode === inputAreaOriginalParent) {
+                inputAreaOriginalParent.insertBefore(inputArea, inputAreaOriginalNextSibling);
+            } else {
+                inputAreaOriginalParent.appendChild(inputArea);
+            }
+            const mount = document.getElementById('channelCommentsInputMount');
+            if (mount) mount.innerHTML = '';
+        }
+
+        window.restoreChannelFeedUi = function() {
+            commentThreadPostId = null;
+            restoreMainInputArea();
+            const chatView = document.getElementById('chatView');
+            if (chatView) chatView.classList.remove('channel-comments-mode');
+            const commentsView = document.getElementById('channelCommentsView');
+            if (commentsView) commentsView.setAttribute('aria-hidden', 'true');
+            const messagesArea = document.getElementById('messagesArea');
+            if (messagesArea) messagesArea.style.display = 'flex';
+            document.querySelectorAll('.channel-post-comments-btn.active').forEach(function(btn) {
+                btn.classList.remove('active');
+            });
+        };
+
+        if (document.getElementById('mainInputArea')) {
+            captureMainInputAreaHome();
+        }
+
+        function isCommentThreadActive() {
+            if (!commentThreadPostId) return false;
+            const chatView = document.getElementById('chatView');
+            return !!(chatView && chatView.classList.contains('channel-comments-mode'));
+        }
+
+        function isChannelPostMessage(m) {
+            if (!activeChat || activeChat.type !== 'channel') return false;
+            const inCommentThread = isCommentThreadActive()
+                || !!(m && (m.parentMessageId || m.parent_message_id));
+            return !inCommentThread;
+        }
+
+        function getActiveMessagesEl() {
+            return isCommentThreadActive()
+                ? document.getElementById('channelCommentsMessages')
+                : document.getElementById('messages');
+        }
+
+        function getActiveMessagesContainer() {
+            return isCommentThreadActive()
+                ? document.querySelector('#channelCommentsView .messages-container')
+                : document.getElementById('messagesContainer');
+        }
+
+        function appendMessageToActiveList(msg) {
+            const listEl = getActiveMessagesEl();
+            if (!listEl) return;
+            const emptyState = listEl.querySelector('.channel-comments-state');
+            if (emptyState) emptyState.remove();
+            listEl.appendChild(createMessageElement(msg));
+            scrollToBottom();
+        }
+
+        function bumpPostCommentCount(postId) {
+            if (!postId) return;
+            if (messagesData[postId]) {
+                messagesData[postId].commentCount = (messagesData[postId].commentCount || 0) + 1;
+            }
+            if (typeof window.updatePostCommentCount === 'function') {
+                window.updatePostCommentCount(postId, messagesData[postId]?.commentCount || 0);
+            }
+        }
+
+        window.isCommentThreadActive = isCommentThreadActive;
+        window.getCommentThreadPostId = function() { return commentThreadPostId; };
+
+        window.enterCommentThreadMode = function(postId) {
+            commentThreadPostId = postId;
+            captureMainInputAreaHome();
+            const inputArea = document.getElementById('mainInputArea');
+            const mount = document.getElementById('channelCommentsInputMount');
+            if (inputArea && mount) {
+                mount.appendChild(inputArea);
+                inputArea.style.display = 'flex';
+            }
+            const tools = document.getElementById('channelAdminTools');
+            if (tools) tools.style.display = 'none';
+            const bar = document.getElementById('channelSubscriberBar');
+            if (bar) bar.style.display = 'none';
+            const pollBtn = document.getElementById('pollAttachBtn');
+            if (pollBtn) pollBtn.style.display = 'none';
+            const msgInput = document.getElementById('msgInput');
+            if (msgInput) {
+                msgInput.setAttribute('data-placeholder', tr('writeComment', 'Написать комментарий...'));
+            }
+            cancelReply();
+        };
+
+        window.exitCommentThreadMode = function() {
+            window.restoreChannelFeedUi();
+            const msgInput = document.getElementById('msgInput');
+            if (msgInput) {
+                msgInput.innerText = '';
+                msgInput.removeAttribute('data-placeholder');
+            }
+            updateSendButton();
+        };
+
+        window.loadCommentThread = async function(postId) {
+            const list = document.getElementById('channelCommentsMessages');
+            if (!list || !activeChat) return;
+            list.innerHTML = '<div class="channel-comments-state">' + tr('loading', 'Загрузка...') + '</div>';
+            try {
+                const res = await fetch('/api/v1/messages/' + activeChat.id + '?parentMessageId=' + encodeURIComponent(postId), {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const data = await res.json();
+                const messages = data.messages || [];
+                if (typeof window.updatePostCommentCount === 'function') {
+                    window.updatePostCommentCount(postId, messages.length);
+                }
+                list.innerHTML = '';
+                if (!messages.length) {
+                    list.innerHTML = '<div class="channel-comments-state">' + tr('noComments', 'Комментариев пока нет') + '</div>';
+                    return;
+                }
+                messages.forEach(function(m) {
+                    messagesData[m.id] = m;
+                    if (m.type === 'poll' && m.poll) rememberPollPayload(m.id, m.poll);
+                });
+                const frag = document.createDocumentFragment();
+                messages.forEach(function(m) {
+                    frag.appendChild(createMessageElement(m));
+                });
+                list.appendChild(frag);
+                scrollToBottom(false);
+            } catch (e) {
+                list.innerHTML = '<div class="channel-comments-state channel-comments-state-error">' + tr('loadError', 'Ошибка загрузки') + '</div>';
+            }
+        };
         
         let currentEmojiCategory = 'smileys';
 
@@ -1017,12 +1174,32 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
 
             const dmIcon = '✉';
             const groupIcon = '👥';
-            const channelIcon = '📢';
+            const channelIconHtml = typeof window.chIcon === 'function'
+                ? '<span class="channels-empty-icon">' + window.chIcon('megaphone', 28) + '</span>'
+                : '<div class="channels-empty-icon"></div>';
             const commIcon = '💬';
             const meetIcon = '📹';
 
             if (section === 'channels') {
-                showPlaceholder(channelIcon, tr('channels', 'Каналы'), tr('channelsSectionDesc', 'Раздел в разработке. Скоро вы сможете создавать каналы и подписываться на них.'));
+                restoreList();
+                const items = list.querySelectorAll('.chat-item');
+                let visibleCount = 0;
+                items.forEach(it => {
+                    const type = (it.dataset.chatType || '').toLowerCase();
+                    const show = type === 'channel';
+                    it.style.display = show ? '' : 'none';
+                    if (show) visibleCount++;
+                });
+                if (visibleCount === 0) {
+                    placeholder.style.display = 'flex';
+                    if (!placeholder.parentElement) list.appendChild(placeholder);
+                    placeholder.innerHTML =
+                        channelIconHtml +
+                        '<div style="font-size:17px;font-weight:700;color:var(--text-primary);margin-bottom:6px;">' + tr('channels', 'Каналы') + '</div>' +
+                        '<div style="font-size:13px;color:var(--text-muted);max-width:260px;line-height:1.45;margin-bottom:16px;">' + tr('channelsEmptyDesc', 'Подпишитесь на каналы или создайте свой') + '</div>' +
+                        '<button type="button" onclick="openCreateChannelModal()" style="height:42px;padding:0 20px;border-radius:12px;border:none;background:var(--accent-gradient);color:#fff;font-weight:600;font-size:14px;cursor:pointer;margin-bottom:8px;">' + tr('createChannel', 'Создать канал') + '</button>' +
+                        '<button type="button" onclick="openChannelDiscovery()" style="height:40px;padding:0 18px;border-radius:12px;border:1px solid var(--border-color);background:var(--bg-tertiary);color:var(--text-primary);font-size:13px;cursor:pointer;">' + tr('findChannels', 'Найти каналы') + '</button>';
+                }
             } else if (section === 'communities') {
                 showPlaceholder(commIcon, tr('communities', 'Сообщества'), tr('communitiesSectionDesc', 'Раздел в разработке. Скоро вы сможете объединять чаты и каналы в сообщества.'));
             } else if (section === 'meetings') {
@@ -1045,7 +1222,9 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 items.forEach(it => {
                     const type = (it.dataset.chatType || 'private').toLowerCase();
                     const isPrivate = type === 'private' || type === 'dm' || type === 'personal';
-                    const show = (section === 'dms' && isPrivate) || (section === 'chats' && !isPrivate);
+                    const isChannel = type === 'channel';
+                    const show = (section === 'dms' && isPrivate)
+                        || (section === 'chats' && !isPrivate && !isChannel);
                     it.style.display = show ? '' : 'none';
                     if (show) visibleCount++;
                 });
@@ -1808,6 +1987,10 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
         async function openGroupInfoModal(chatId) {
             const chat = allChats.find(c => c.id === chatId);
             if (!chat) return;
+
+            if (chat.type === 'channel' && typeof window.openChannelInfoModal === 'function') {
+                return window.openChannelInfoModal(chatId);
+            }
 
             let members = [];
             try {
@@ -3413,12 +3596,12 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 content: caption || '',
                 time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
                 senderName: user.firstName || 'Вы',
+                parentMessageId: isCommentThreadActive() ? commentThreadPostId : null,
                 pending: true
             };
             
             messagesData[tempId] = msg;
-            document.getElementById('messages').appendChild(createMessageElement(msg));
-            scrollToBottom();
+            appendMessageToActiveList(msg);
             
             uploadFile(dataUrl, type).then(function(url) {
                 if (url) {
@@ -3440,14 +3623,14 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                     content: caption || '',
                     time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
                     senderName: user.firstName || 'Вы',
+                    parentMessageId: isCommentThreadActive() ? commentThreadPostId : null,
                     pending: true
                 };
 
                 messagesData[tempId] = msg;
-                document.getElementById('messages').appendChild(createMessageElement(msg));
+                appendMessageToActiveList(msg);
                 
                 setTimeout(function() {
-                    scrollToBottom();
                     sendMediaToServer(dataUrl, 'gif', tempId, caption);
                 }, 100);
             }, 100);
@@ -3466,12 +3649,12 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 mediaUrl: stickerUrl,
                 time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
                 senderName: user.firstName || 'Вы',
+                parentMessageId: isCommentThreadActive() ? commentThreadPostId : null,
                 pending: true
             };
             
             messagesData[tempId] = msg;
-            document.getElementById('messages').appendChild(createMessageElement(msg));
-            scrollToBottom();
+            appendMessageToActiveList(msg);
             
             if (stickerUrl.startsWith('data:')) {
                 uploadFile(stickerUrl, 'sticker').then(function(url) {
@@ -3506,19 +3689,25 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
         function sendMediaToServer(mediaUrl, mediaType, tempId, caption) {
             if (!activeChat) return;
 
+            const mediaBody = {
+                content: caption || '',
+                type: mediaType,
+                mediaUrl: mediaUrl,
+                mediaType: mediaType,
+                topicId: activeTopic ? activeTopic.id : null
+            };
+            if (isCommentThreadActive() && commentThreadPostId) {
+                mediaBody.parentMessageId = commentThreadPostId;
+                delete mediaBody.topicId;
+            }
+
             fetch('/api/v1/messages/' + activeChat.id, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': 'Bearer ' + token
                 },
-                body: JSON.stringify({
-                    content: caption || '',
-                    type: mediaType,
-                    mediaUrl: mediaUrl,
-                    mediaType: mediaType,
-                    topicId: activeTopic ? activeTopic.id : null
-                })
+                body: JSON.stringify(mediaBody)
             }).then(function(res) {
                 return res.json();
             }).then(function(data) {
@@ -3540,8 +3729,18 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             if (span) {
                 span.innerHTML = '<svg width="12" height="10" viewBox="0 0 12 10" fill="none" style="opacity:.7"><path d="M1 5l3 3 7-7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
             }
+            if (tempEl.classList.contains('channel-post')) {
+                const commentsBtn = tempEl.querySelector('.channel-post-comments-btn');
+                if (commentsBtn) {
+                    commentsBtn.disabled = false;
+                    commentsBtn.dataset.postId = serverMessage.id;
+                }
+            }
             delete messagesData[tempId];
             messagesData[serverMessage.id] = serverMessage;
+            if (commentThreadPostId && serverMessage.parentMessageId === commentThreadPostId) {
+                bumpPostCommentCount(commentThreadPostId);
+            }
         }
 
         function createMessageElement(m) {
@@ -3549,8 +3748,13 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             const isOutgoing = m.senderId === user.id || m.outgoing;
             const isBotMessage = isCraneAppBotMessage(m);
             const isGroup = activeChat && activeChat.type === 'group';
+            const isChannel = activeChat && activeChat.type === 'channel';
+            const inCommentThread = isCommentThreadActive() || !!(m.parentMessageId || m.parent_message_id);
+            const isChannelPost = isChannelPostMessage(m);
 
             div.className = 'message ' + (isOutgoing ? 'outgoing' : 'incoming');
+            if (isChannelPost) div.classList.add('channel-post');
+            if (inCommentThread) div.classList.add('channel-comment-msg');
             if (m.pending) div.classList.add('pending');
             if (isBotMessage) div.classList.add('bot-message');
             if (m.isPinned) div.classList.add('pinned');
@@ -3580,8 +3784,8 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             div.addEventListener('touchend', function() { clearTimeout(pressTimer); });
             div.addEventListener('touchmove', function() { clearTimeout(pressTimer); });
 
-            // ── Аватарка и имя отправителя в группах ──────────────────
-            if (isGroup && !isOutgoing) {
+            // ── Аватарка и имя отправителя в группах и комментариях к постам ──
+            if ((isGroup || (isChannel && inCommentThread)) && !isOutgoing) {
                 const senderName = m.senderFirstName || m.sender?.firstName || m.senderName || '';
                 const senderIsBot = m.senderUsername === 'craneapp_bot' || m.isBot || m.sender?.isBot;
                 const senderBadgeHtml = renderBadges(
@@ -3837,6 +4041,36 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             if (m.reactions && m.reactions.length > 0) {
                 const reactionsEl = createReactionsElement(m.id, m.reactions);
                 div.appendChild(reactionsEl);
+            }
+
+            if (isChannelPostMessage(m)) {
+                if (m.authorSignature) {
+                    const sig = document.createElement('div');
+                    sig.className = 'channel-post-signature';
+                    sig.textContent = m.authorSignature;
+                    div.insertBefore(sig, div.firstChild);
+                }
+                if (m.scheduledAt && !m.publishedAt) {
+                    const sched = document.createElement('div');
+                    sched.className = 'channel-post-scheduled';
+                    const clockIcon = typeof window.chIcon === 'function' ? window.chIcon('clock', 13) : '';
+                    sched.innerHTML = '<span class="channel-post-stat-icon" aria-hidden="true">' + clockIcon + '</span>'
+                        + '<span>' + tr('scheduledPost', 'Отложенная публикация') + '</span>';
+                    div.insertBefore(sched, div.firstChild);
+                }
+                const footer = document.createElement('div');
+                footer.className = 'channel-post-footer';
+                const views = m.viewsCount || 0;
+                const comments = m.commentCount || 0;
+                if (typeof window.buildChannelPostFooter === 'function') {
+                    footer.innerHTML = window.buildChannelPostFooter(views, comments, m.id);
+                } else {
+                    footer.innerHTML = '<span class="channel-post-stat">' + views + '</span>'
+                        + '<button type="button" class="channel-post-comments-btn"'
+                        + (m.pending ? ' disabled' : '')
+                        + ' onclick="event.stopPropagation();openChannelCommentsFromPost(this)">' + comments + '</button>';
+                }
+                div.appendChild(footer);
             }
             
             return div;
@@ -4318,24 +4552,47 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
         function formatInputText(format) {
             const input = document.getElementById('msgInput');
             const selection = window.getSelection();
-            
-            if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
-                showToast('info', 'Выделите текст для форматирования', '✏️');
+
+            if (!selection || selection.rangeCount === 0) {
                 return;
             }
-            
+
             const selectedText = selection.toString();
-            let prefix = '', suffix = '';
-            
-            switch (format) {
-                case 'bold':   prefix = '**'; suffix = '**'; break;
-                case 'italic': prefix = '_';  suffix = '_';  break;
-                case 'spoiler':prefix = '||'; suffix = '||'; break;
+            const collapsed = selection.isCollapsed;
+
+            if (format === 'quote') {
+                if (collapsed) {
+                    document.execCommand('insertText', false, '> ');
+                } else {
+                    document.execCommand('insertText', false, selectedText.split('\n').map(function(line) {
+                        return '> ' + line;
+                    }).join('\n'));
+                }
+                input.focus();
+                return;
             }
-            
+
+            if (collapsed) {
+                showToast('info', tr('selectTextToFormat', 'Выделите текст для форматирования'), '✏️');
+                return;
+            }
+
+            let prefix = '';
+            let suffix = '';
+            switch (format) {
+                case 'bold': prefix = '**'; suffix = '**'; break;
+                case 'italic': prefix = '_'; suffix = '_'; break;
+                case 'underline': prefix = '__'; suffix = '__'; break;
+                case 'strikethrough': prefix = '~~'; suffix = '~~'; break;
+                case 'monospace': prefix = '`'; suffix = '`'; break;
+                case 'spoiler': prefix = '||'; suffix = '||'; break;
+                default: return;
+            }
+
             document.execCommand('insertText', false, prefix + selectedText + suffix);
             input.focus();
         }
+        window.formatInputText = formatInputText;
 
         // Горячие клавиши, Enter и навигация по подсказкам @
         document.getElementById('msgInput').addEventListener('keydown', function(e) {
@@ -4765,6 +5022,20 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 case 'settings_updated':
                     if (window.syncThemeWithServer) window.syncThemeWithServer();
                     break;
+
+                case 'channel_comment':
+                    if (activeChat && data.chatId === activeChat.id && data.comment) {
+                        const commentMsg = Object.assign({}, data.comment, {
+                            parentMessageId: data.postId || data.comment.parentMessageId
+                        });
+                        addMessage(commentMsg);
+                    } else if (data.postId && typeof window.updatePostCommentCount === 'function') {
+                        const post = messagesData[data.postId];
+                        const nextCount = (post?.commentCount || 0) + 1;
+                        if (post) post.commentCount = nextCount;
+                        window.updatePostCommentCount(data.postId, nextCount);
+                    }
+                    break;
                     
                 case 'new_message':
                     if (activeChat && data.chatId === activeChat.id) {
@@ -5175,8 +5446,21 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
         }
         
         function addMessage(msg) {
+            const parentId = msg.parentMessageId || msg.parent_message_id || null;
+            if (parentId) {
+                if (!isCommentThreadActive() || commentThreadPostId !== parentId) {
+                    bumpPostCommentCount(parentId);
+                    return;
+                }
+            } else if (isCommentThreadActive()) {
+                return;
+            }
+
             messagesData[msg.id] = msg;
-            const messagesEl = document.getElementById('messages');
+            const messagesEl = getActiveMessagesEl();
+            if (!messagesEl) return;
+            const emptyState = messagesEl.querySelector('.channel-comments-state');
+            if (emptyState) emptyState.remove();
             const div = createMessageElement(msg);
             messagesEl.appendChild(div);
             const senderId = msg.senderId || msg.sender_id || (msg.sender && msg.sender.id);
@@ -5365,7 +5649,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
         }
 
         function scrollToBottom(smooth) {
-            const container = document.getElementById('messagesContainer');
+            const container = getActiveMessagesContainer();
             if (!container) return;
             if (smooth) {
                 container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
@@ -6409,6 +6693,45 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                         console.error('User search error:', err);
                     }
                 }
+                // Ищем публичные каналы
+                try {
+                    const chRes = await fetch('/api/v1/channels/search?q=' + encodeURIComponent(q.replace('@', '')), {
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+                    if (chRes.ok) {
+                        const chData = await chRes.json();
+                        const channels = chData.channels || [];
+                        if (channels.length) {
+                            const list = document.getElementById('chatList');
+                            let section = document.getElementById('channelSearchResults');
+                            if (!section) {
+                                section = document.createElement('div');
+                                section.id = 'channelSearchResults';
+                                list.appendChild(section);
+                            }
+                            section.innerHTML = '<div style="padding:8px 16px 4px;font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-muted);">' + tr('channels', 'Каналы') + '</div>'
+                                + channels.map(function(ch) {
+                                    const subs = ch.subscriberCount || 0;
+                                    const av = ch.avatarUrl && ch.avatarUrl.indexOf('http') === 0
+                                        ? '<img src="' + ch.avatarUrl + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">'
+                                        : '<div style="width:100%;height:100%;background:linear-gradient(135deg,#00A0FF,#0066FF);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;">' + (ch.title ? ch.title[0] : '📢') + '</div>';
+                                    const btnLabel = ch.isSubscribed ? tr('open', 'Открыть') : tr('subscribe', 'Подписаться');
+                                    const btnAction = ch.isSubscribed
+                                        ? 'openChat(\'' + ch.id + '\', \'' + (ch.title || '').replace(/'/g, "\\'") + '\')'
+                                        : 'subscribeToChannelFromSearch(\'' + ch.id + '\', \'' + (ch.title || '').replace(/'/g, "\\'") + '\')';
+                                    return '<div class="chat-item" style="padding:12px 16px;display:flex;align-items:center;gap:12px;">'
+                                        + '<div style="width:48px;height:48px;border-radius:50%;overflow:hidden;flex-shrink:0;">' + av + '</div>'
+                                        + '<div style="flex:1;min-width:0;"><div style="font-weight:600;">' + escapeHtml(ch.title) + '</div>'
+                                        + '<div style="font-size:12px;color:var(--text-muted);">' + (ch.username ? '@' + ch.username + ' · ' : '') + subs + ' ' + tr('subscribers', 'подписчиков') + '</div></div>'
+                                        + '<button type="button" onclick="' + btnAction + '" style="padding:8px 12px;border-radius:10px;border:none;background:var(--accent-gradient);color:#fff;font-size:12px;font-weight:600;cursor:pointer;">' + btnLabel + '</button>'
+                                        + '</div>';
+                                }).join('');
+                        }
+                    }
+                } catch (err) {
+                    console.error('Channel search error:', err);
+                }
+
                 // Ищем по сообщениям
                 try {
                     const res = await fetch('/api/v1/messages/search?q=' + encodeURIComponent(q), {
@@ -6492,6 +6815,9 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
         // OPEN/CLOSE CHAT
         // ============================================
         async function openChat(id, name, topicId) {
+            if (typeof window.restoreChannelFeedUi === 'function') {
+                window.restoreChannelFeedUi();
+            }
             hideMentionSuggestions();
             // Сохраняем черновик предыдущего чата
             const advSettings = JSON.parse(localStorage.getItem('craneapp_advanced_settings') || '{}');
@@ -6523,9 +6849,22 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 currentUserGroupOnline = false;
             }
 
+            activeChat.channelMeta = null;
+            if (activeChat.type !== 'channel' && typeof window.cleanupChannelComposer === 'function') {
+                window.cleanupChannelComposer();
+            }
+            if (activeChat.type === 'channel' && typeof window.loadChannelMeta === 'function') {
+                window.loadChannelMeta(activeChat);
+            }
+
             // Показываем кнопку участников только для групп
             const membersBtn = document.getElementById('membersBtn');
             if (membersBtn) membersBtn.style.display = activeChat.type === 'group' ? 'flex' : 'none';
+
+            const audioCallBtn = document.getElementById('audioCallBtn');
+            const videoCallBtn = document.getElementById('videoCallBtn');
+            if (audioCallBtn) audioCallBtn.style.display = activeChat.type === 'channel' ? 'none' : '';
+            if (videoCallBtn) videoCallBtn.style.display = activeChat.type === 'channel' ? 'none' : '';
             updatePollButtonVisibility();
             setScrollBottomButtonEnabled(true);
             setMentionJumpButtonEnabled(activeChat.type === 'group');
@@ -6632,6 +6971,22 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 } else {
                     updateChatUserStatus(chatUser.id);
                 }
+            } else if (activeChat && activeChat.type === 'channel') {
+                statusEl.style.color = 'var(--text-muted)';
+                statusEl.textContent = tr('loading', 'Загрузка...');
+                fetch('/api/v1/channels/' + id, { headers: { 'Authorization': 'Bearer ' + token } })
+                    .then(r => r.ok ? r.json() : null)
+                    .then(data => {
+                        if (!data || !data.channel) return;
+                        activeChat.channelMeta = data.channel;
+                        activeChat.role = data.channel.role || activeChat.role;
+                        const subs = data.channel.subscriberCount || 0;
+                        const uname = data.channel.username ? '@' + data.channel.username : '';
+                        statusEl.textContent = (uname ? uname + ' · ' : '') + subs + ' ' + tr('subscribers', 'подписчиков');
+                        if (typeof window.applyChannelComposerState === 'function') {
+                            window.applyChannelComposerState(activeChat);
+                        }
+                    }).catch(() => { statusEl.textContent = ''; });
             } else if (activeChat && activeChat.type === 'group') {
                 statusEl.style.color = 'var(--text-muted)';
                 fetch('/api/v1/chats/' + id + '/members-online', {
@@ -6649,7 +7004,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             // Инициализируем view элементы
             const topicsArea = document.getElementById('topicsArea');
             const messagesArea = document.getElementById('messagesArea');
-            const inputArea = document.querySelector('.input-area');
+            const inputArea = document.getElementById('mainInputArea');
             const replyBar = document.getElementById('replyBar');
             const chatBackBtn = document.getElementById('chatBackBtn');
             const topicsBackBtn = document.getElementById('topicsBackBtn');
@@ -6699,12 +7054,18 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 activeTopic = null;
                 if (topicsArea) topicsArea.style.display = 'none';
                 if (messagesArea) messagesArea.style.display = 'flex';
-                if (inputArea) inputArea.style.display = 'flex';
+                if (inputArea && activeChat.type !== 'channel') {
+                    inputArea.style.display = 'flex';
+                }
                 if (chatBackBtn) chatBackBtn.style.display = 'block';
                 if (topicsBackBtn) topicsBackBtn.style.display = 'none';
 
                 loadMessages();
                 loadPinnedMessage(id);
+
+                if (activeChat.type === 'channel' && typeof window.applyChannelComposerState === 'function' && activeChat.channelMeta) {
+                    window.applyChannelComposerState(activeChat);
+                }
             }
 
             // E2E: инициализируем ключ для чата и показываем индикатор
@@ -6755,6 +7116,9 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
         }
 
         function closeChat() {
+            if (typeof window.closeChannelCommentsView === 'function') {
+                window.closeChannelCommentsView();
+            }
             if (activeChat) {
                 delete mentionJumpCursorByChat[activeChat.id];
             }
@@ -7513,31 +7877,53 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             let prefix = '', suffix = '';
             
             switch (format) {
-                case 'bold':   prefix = '**'; suffix = '**'; break;
-                case 'italic': prefix = '_';  suffix = '_';  break;
-                case 'spoiler':prefix = '||'; suffix = '||'; break;
+                case 'bold': prefix = '**'; suffix = '**'; break;
+                case 'italic': prefix = '_'; suffix = '_'; break;
+                case 'underline': prefix = '__'; suffix = '__'; break;
+                case 'strikethrough': prefix = '~~'; suffix = '~~'; break;
+                case 'monospace': prefix = '`'; suffix = '`'; break;
+                case 'spoiler': prefix = '||'; suffix = '||'; break;
+                case 'quote':
+                    document.execCommand('insertText', false, selectedText.split('\n').map(function(line) {
+                        return '> ' + line;
+                    }).join('\n'));
+                    input.focus();
+                    return;
             }
-            
+
             document.execCommand('insertText', false, prefix + selectedText + suffix);
             input.focus();
+        }
+
+        function applyInlineFormatting(escaped) {
+            escaped = escaped.replace(/`([^`\n]+?)`/g, '<code class="mono">$1</code>');
+            escaped = escaped.replace(/\*\*(.+?)\*\*/g, '<span class="bold">$1</span>');
+            escaped = escaped.replace(/__(.+?)__/g, '<span class="underline">$1</span>');
+            escaped = escaped.replace(/_(.+?)_/g, '<span class="italic">$1</span>');
+            escaped = escaped.replace(/~~(.+?)~~/g, '<span class="strikethrough">$1</span>');
+            escaped = escaped.replace(/\|\|(.+?)\|\|/g, '<span class="spoiler" onclick="this.classList.toggle(\'revealed\')">$1</span>');
+            return escaped;
         }
 
         // Функция для рендеринга форматированного текста в сообщениях
         function renderFormattedText(text) {
             if (!text) return '';
-            
-            // Экранируем HTML
-            let escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            
-            // Обрабатываем форматирование
-            // Жирный: **текст**
-            escaped = escaped.replace(/\*\*(.+?)\*\*/g, '<span class="bold">$1</span>');
-            
-            // Курсив: _текст_
-            escaped = escaped.replace(/_(.+?)_/g, '<span class="italic">$1</span>');
-            
-            // Скрытый текст: ||текст||
-            escaped = escaped.replace(/\|\|(.+?)\|\|/g, '<span class="spoiler" onclick="this.classList.toggle(\'revealed\')">$1</span>');
+
+            const lines = String(text).split('\n');
+            const rendered = lines.map(function(line) {
+                const quoteMatch = line.match(/^>\s?(.*)$/);
+                const escaped = (quoteMatch ? quoteMatch[1] : line)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+                const formatted = applyInlineFormatting(escaped);
+                if (quoteMatch) {
+                    return '<blockquote class="msg-quote">' + formatted + '</blockquote>';
+                }
+                return formatted;
+            });
+
+            let escaped = rendered.join('<br>');
 
             // 1. Обрабатываем полные ссылки http(s)://...
             escaped = escaped.replace(/(https?:\/\/[^\s<]+)/gi, function(url) {
@@ -7560,6 +7946,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             
             return escaped;
         }
+        window.renderFormattedText = renderFormattedText;
 
         function isMentionRelevantToMe(tagLower) {
             if (tagLower === 'everyone') return true;
@@ -8081,6 +8468,19 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             const input = document.getElementById('msgInput');
             const text = getInputText();
             if (!text || !activeChat) return;
+
+            const inCommentMode = isCommentThreadActive();
+            if (activeChat.type === 'channel' && !inCommentMode) {
+                const canPost = activeChat.channelMeta?.canPost === true
+                    || activeChat.channelMeta?.role === 'owner'
+                    || activeChat.channelMeta?.role === 'admin'
+                    || activeChat.role === 'owner'
+                    || activeChat.role === 'admin';
+                if (!canPost) {
+                    showToast('info', tr('channelReadOnly', 'Только администраторы могут публиковать посты'), 'ℹ️');
+                    return;
+                }
+            }
             
             hideMentionSuggestions();
             closeEmojiPicker();
@@ -8093,11 +8493,17 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
                 senderName: user.firstName || user.username || tr('you', 'Вы'),
                 replyToMessageId: replyingTo ? replyingTo.messageId : null,
+                parentMessageId: inCommentMode ? commentThreadPostId : null,
                 pending: true
             };
             
             messagesData[tempId] = tempMsg;
-            document.getElementById('messages').appendChild(createMessageElement(tempMsg));
+            const targetMessagesEl = getActiveMessagesEl();
+            if (targetMessagesEl) {
+                const emptyState = targetMessagesEl.querySelector('.channel-comments-state');
+                if (emptyState) emptyState.remove();
+                targetMessagesEl.appendChild(createMessageElement(tempMsg));
+            }
             scrollToBottom();
             
             input.innerText = '';
@@ -8108,10 +8514,18 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             try {
                 const body = { content: text, type: 'text' };
                 if (replyData) body.replyTo = replyData.messageId;
-                if (activeTopic) body.topicId = activeTopic.id;
+                if (inCommentMode && commentThreadPostId) {
+                    body.parentMessageId = commentThreadPostId;
+                } else if (activeTopic) {
+                    body.topicId = activeTopic.id;
+                }
+                if (!inCommentMode && activeChat.type === 'channel' && typeof window.getChannelPostExtras === 'function') {
+                    Object.assign(body, window.getChannelPostExtras());
+                }
 
                 // Если разработчик отвечает на support request через бота
                 const isBotChatLocal = activeChat && (activeChat.isBot || (activeChat.name === 'CraneApp'));
+                const isChannelFeedPost = activeChat.type === 'channel' && !inCommentMode;
                 const activeSupportRaw = localStorage.getItem('craneapp_active_support_request');
                 const devUsernames = ['adm1','admin','admin1','qzlfee'];
                 const isDevUser = devUsernames.includes((user.username||'').toLowerCase());
@@ -8138,8 +8552,8 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                         }
                     }
                 }
-                // E2E шифрование — не шифруем чат с ботом
-                if (window.E2E && !isBotChatLocal) {
+                // E2E шифрование — не шифруем чат с ботом и посты канала
+                if (window.E2E && !isBotChatLocal && !isChannelFeedPost) {
                     const enc = await window.E2E.encrypt(text, activeChat.id, token);
                     if (enc.isEncrypted) {
                         body.content = enc.content;
@@ -8164,7 +8578,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
 
                 if (res.ok && data.message) {
                     _confirmMessage(tempId, data.message);
-                    loadChats();
+                    if (!inCommentMode) loadChats();
                 } else if (res.status === 403) {
                     const el = document.querySelector('[data-message-id="' + tempId + '"]');
                     if (el) el.remove();
@@ -8189,6 +8603,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 showToast('error', tr('notSent', 'Не отправлено'), '❌');
             }
         }
+        window.send = send;
 
         // ============================================
         // INPUT TYPING
@@ -8563,16 +8978,42 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
 
         // Обновляем переключение кнопок при вводе текста
         function getInputText() {
-            return getInputTextRaw().trim();
+            const raw = getInputTextRaw().trim();
+            if (raw) return raw;
+            const input = document.getElementById('msgInput');
+            if (!input) return '';
+            return (input.innerText || input.textContent || '').replace(/\u00a0/g, ' ').trim();
         }
 
         function updateSendButton() {
+            const sendBtn = document.getElementById('sendBtn');
+            if (!sendBtn) return;
             const hasText = getInputText().length > 0;
-            document.getElementById('sendBtn').style.display = hasText ? 'flex' : 'none';
+            const inCommentMode = isCommentThreadActive();
+            const canComposeChannelPost = activeChat
+                && activeChat.type === 'channel'
+                && !inCommentMode
+                && (activeChat.channelMeta?.canPost === true
+                    || activeChat.channelMeta?.role === 'owner'
+                    || activeChat.channelMeta?.role === 'admin'
+                    || activeChat.role === 'owner'
+                    || activeChat.role === 'admin');
+            const canCompose = !activeChat
+                || activeChat.type !== 'channel'
+                || inCommentMode
+                || canComposeChannelPost;
+            sendBtn.style.display = (hasText && canCompose) ? 'flex' : 'none';
         }
         const _origInputHandler = document.getElementById('msgInput').oninput;
         document.getElementById('msgInput').addEventListener('input', updateSendButton);
         window._updateSendButton = updateSendButton;
+        const sendBtnEl = document.getElementById('sendBtn');
+        if (sendBtnEl) {
+            sendBtnEl.addEventListener('click', function(e) {
+                e.preventDefault();
+                send();
+            });
+        }
 
         
         async function startVideoNoteHold(e) {
@@ -8717,11 +9158,12 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 id: tempId, senderId: user.id, type: 'video_note',
                 mediaUrl: localUrl, voiceDuration: duration,
                 time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
-                senderName: user.firstName || 'Вы', pending: true
+                senderName: user.firstName || 'Вы',
+                parentMessageId: isCommentThreadActive() ? commentThreadPostId : null,
+                pending: true
             };
             messagesData[tempId] = msg;
-            document.getElementById('messages').appendChild(createMessageElement(msg));
-            scrollToBottom();
+            appendMessageToActiveList(msg);
 
             const reader = new FileReader();
             reader.onload = async function(e) {
@@ -8736,10 +9178,22 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                     const serverUrl = uploadData.url;
                     if (!serverUrl) { showToast('error', tr('loadingError', 'Ошибка загрузки'), '❌'); return; }
                     URL.revokeObjectURL(localUrl);
+                    const videoNoteBody = {
+                        content: '',
+                        type: 'video_note',
+                        mediaUrl: serverUrl,
+                        mediaType: 'video_note',
+                        voiceDuration: duration,
+                        topicId: activeTopic ? activeTopic.id : null
+                    };
+                    if (isCommentThreadActive() && commentThreadPostId) {
+                        videoNoteBody.parentMessageId = commentThreadPostId;
+                        delete videoNoteBody.topicId;
+                    }
                     const res = await fetch('/api/v1/messages/' + activeChat.id, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-                        body: JSON.stringify({ content: '', type: 'video_note', mediaUrl: serverUrl, mediaType: 'video_note', voiceDuration: duration, topicId: activeTopic ? activeTopic.id : null })
+                        body: JSON.stringify(videoNoteBody)
                     });
                     const data = await res.json();
                     if (data.message) { _confirmMessage(tempId, data.message); }
@@ -9226,9 +9680,9 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 if (mutePanel) mutePanel.style.display = 'none';
                 if (inputLeftBtns) inputLeftBtns.style.display = 'flex';
                 if (msgInput) msgInput.style.display = 'block';
-                if (sendBtn) sendBtn.style.display = 'none';
+                updateSendButton();
                 if (videoNoteBtn) {
-                    videoNoteBtn.style.display = 'block';
+                    videoNoteBtn.style.display = (activeChat && activeChat.type === 'channel') ? 'none' : 'block';
                 }
             }
         }
