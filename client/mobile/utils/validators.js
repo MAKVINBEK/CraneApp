@@ -43,6 +43,31 @@ export function sanitizeInput(input) {
   return div.innerHTML;
 }
 
+/**
+ * Escape HTML special characters to prevent XSS
+ * Escapes & < > " ' / characters
+ */
+export function escapeHtml(str) {
+  if (str == null) return '';
+  return String(str).replace(/[&<>"'\/]/g, function(c) {
+    return {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+      '/': '&#x2F;'
+    }[c];
+  });
+}
+
+/**
+ * Escape HTML for use in attribute values (also escapes quotes)
+ */
+export function escapeAttr(str) {
+  return escapeHtml(str);
+}
+
 export function truncateText(text, maxLength) {
   if (text.length <= maxLength) return text;
   return text.substring(0, maxLength) + '...';

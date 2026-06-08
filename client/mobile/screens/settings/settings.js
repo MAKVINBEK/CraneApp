@@ -173,7 +173,8 @@
             const avatarEl = document.getElementById('profileAvatar');
 
             const badgeHtml = renderSettingsBadges(user.badges || [], user.isPremium);
-            nameEl.innerHTML = (user.firstName || window.i18n?.t('user') || 'Пользователь') + badgeHtml;
+            const safeFirstName = (user.firstName || '').replace(/[&<>]/g, function(c) { return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]; });
+            nameEl.innerHTML = (safeFirstName || window.i18n?.t('user') || 'Пользователь') + badgeHtml;
             usernameEl.textContent = user.username ? '@' + user.username : '@username';
             accountEl.textContent = user.username ? '@' + user.username : '';
             bioEl.textContent = user.bio || '';
