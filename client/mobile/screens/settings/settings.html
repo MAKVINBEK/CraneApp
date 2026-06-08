@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Настройки - CraneApp</title>
+    <script src="/client/mobile/scripts/i18n.js"></script>
+    <script src="/client/mobile/scripts/theme.js"></script>
+    <link rel="stylesheet" href="./settings.css">
+</head>
+<body>
+    <div class="toast-container" id="toastContainer"></div>
+
+    <div class="app-wrapper">
+        <div class="header">
+            <div class="header-left">
+                <button class="back-btn mobile-back-btn" onclick="goToChats()">←</button>
+                <span class="header-title" data-i18n="settings">Настройки</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <div class="sync-indicator" id="syncIndicator">
+                    <span id="syncIcon">🔄</span>
+                    <span id="syncText" data-i18n="syncing">Синхронизация...</span>
+                </div>
+                <button class="header-btn pc-header-menu" id="pcMenuBtn">⋮</button>
+            </div>
+        </div>
+        
+        <div class="dropdown-menu" id="pcDropdown">
+            <div class="dropdown-item" onclick="location.href='./editProfile.html'">
+                <span>✏</span><span data-i18n="editProfile">Изменить профиль</span>
+            </div>
+            <div class="dropdown-item" onclick="syncNow()">
+                <span>🔄</span><span data-i18n="synchronize">Синхронизировать</span>
+            </div>
+            <div class="dropdown-item danger" id="pcLogoutBtn">
+                <span>🚪</span><span data-i18n="logoutAccount">Выйти из аккаунта</span>
+            </div>
+        </div>
+        
+        <div class="profile-section">
+            <div class="profile-avatar" id="profileAvatar" onclick="location.href='./editProfile.html'">
+                <span class="profile-avatar-placeholder">👤</span>
+            </div>
+            <div class="profile-info">
+                <div class="profile-name" id="profileName" data-i18n="loading">Загрузка...</div>
+                <div class="profile-username" id="profileUsername">@username</div>
+                <div class="profile-bio" id="profileBio"></div>
+                <div class="profile-status" data-i18n="online">онлайн</div>
+            </div>
+        </div>
+        
+        <!-- Основные -->
+        <div class="settings-group">
+            <a href="./editProfile.html" class="settings-item">
+                <div class="settings-icon" style="background:rgba(255,0,127,0.2);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF007F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </div>
+                <div class="settings-label" data-i18n="profile">Профиль</div>
+                <div class="settings-value" id="accountUsername"></div>
+                <div class="settings-arrow">›</div>
+            </a>
+            <a href="./favorites.html" class="settings-item">
+                <div class="settings-icon" style="background:rgba(255,215,0,0.2);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFD700" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                </div>
+                <div class="settings-label" data-i18n="favorites">Избранное</div>
+                <div class="settings-arrow">›</div>
+            </a>
+            <a href="./recentCalls.html" class="settings-item">
+                <div class="settings-icon" style="background:rgba(0,200,100,0.2);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00C864" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.99 12 19.79 19.79 0 0 1 1.92 3.37 2 2 0 0 1 3.9 1.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 8.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                </div>
+                <div class="settings-label" data-i18n="recentCalls">Недавние звонки</div>
+                <div class="settings-arrow">›</div>
+            </a>
+            <a href="./devices.html" class="settings-item">
+                <div class="settings-icon" style="background:rgba(42,171,238,0.2);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2AABEE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                </div>
+                <div class="settings-label" data-i18n="devices">Устройства</div>
+                <div class="settings-arrow">›</div>
+            </a>
+            <a href="./folders.html" class="settings-item">
+                <div class="settings-icon" style="background:rgba(157,0,255,0.2);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9D00FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                </div>
+                <div class="settings-label" data-i18n="chatFolders">Папки с чатами</div>
+                <div class="settings-arrow">›</div>
+            </a>
+        </div>
+
+        <!-- Настройки -->
+        <div class="settings-group">
+            <a href="./notifications.html" class="settings-item">
+                <div class="settings-icon" style="background:rgba(255,75,75,0.2);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF4B4B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                </div>
+                <div class="settings-label" data-i18n="notificationsAndSounds">Уведомления и звуки</div>
+                <div class="settings-arrow">›</div>
+            </a>
+            <a href="./privacy.html" class="settings-item">
+                <div class="settings-icon" style="background:rgba(255,165,0,0.2);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFA500" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                </div>
+                <div class="settings-label" data-i18n="privacy">Конфиденциальность</div>
+                <div class="settings-arrow">›</div>
+            </a>
+            <a href="./dataStorage.html" class="settings-item">
+                <div class="settings-icon" style="background:rgba(42,171,238,0.2);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2AABEE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+                </div>
+                <div class="settings-label" data-i18n="dataStorage">Данные и память</div>
+                <div class="settings-value" id="storageValue">—</div>
+                <div class="settings-arrow">›</div>
+            </a>
+            <a href="./appearance.html" class="settings-item">
+                <div class="settings-icon" style="background:rgba(255,0,127,0.2);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF007F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+                </div>
+                <div class="settings-label" data-i18n="appearance">Оформление</div>
+                <div class="settings-value" id="themeValue" data-i18n="dark">Dark</div>
+                <div class="settings-arrow">›</div>
+            </a>
+            <a href="./powerSaving.html" class="settings-item">
+                <div class="settings-icon" style="background:rgba(0,200,100,0.2);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00C864" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="16" height="10" rx="2"/><path d="M22 11v2"/></svg>
+                </div>
+                <div class="settings-label" data-i18n="energySaving">Энергосбережение</div>
+                <div class="settings-arrow">›</div>
+            </a>
+            <a href="./language.html" class="settings-item">
+                <div class="settings-icon" style="background:rgba(0,136,255,0.2);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0088FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                </div>
+                <div class="settings-label" data-i18n="language">Язык</div>
+                <div class="settings-value" id="languageValue">Russian</div>
+                <div class="settings-arrow">›</div>
+            </a>
+        </div>
+        
+        <!-- Дополнительно -->
+        <div class="settings-group">
+            <a href="./premium.html" class="settings-item">
+                <div class="settings-icon" style="background:rgba(255,215,0,0.2);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFD700" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                </div>
+                <div class="settings-label" data-i18n="craneAppPremium">CraneApp Премиум</div>
+                <div class="settings-arrow">›</div>
+            </a>
+            <a href="./help.html" class="settings-item">
+                <div class="settings-icon" style="background:rgba(0,200,100,0.2);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00C864" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                </div>
+                <div class="settings-label" data-i18n="help">Помощь</div>
+                <div class="settings-arrow">›</div>
+            </a>
+            <a href="./help.html#faq" class="settings-item">
+                <div class="settings-icon" style="background:rgba(42,171,238,0.2);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2AABEE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                </div>
+                <div class="settings-label" data-i18n="questions">Вопросы</div>
+                <div class="settings-arrow">›</div>
+            </a>
+            <a href="./features.html" class="settings-item">
+                <div class="settings-icon" style="background:rgba(157,0,255,0.2);">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9D00FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                </div>
+                <div class="settings-label" data-i18n="features">Возможности</div>
+                <div class="settings-arrow">›</div>
+            </a>
+        </div>
+        
+        <!-- Кнопка: Назад к чатам -->
+        <button class="back-to-chats-btn" onclick="goToChats()" data-i18n="backToChats">← Назад к чатам</button>
+        
+        <!-- Кнопка: Выйти из аккаунта (мобильный) -->
+        <button class="logout-btn logout-btn-mobile" id="logoutBtnMobile" data-i18n="logoutAccount">Выйти из аккаунта</button>
+        
+        <div class="tab-bar" id="tabBar"></div>
+    </div>
+
+    <script src="./settings.js"></script>
+</body>
+</html>

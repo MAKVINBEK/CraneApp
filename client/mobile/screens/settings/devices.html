@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title data-i18n="devicesTitleFull">Devices - CraneApp</title>
+    <script src="/client/mobile/scripts/i18n.js"></script>
+    <script src="/client/mobile/scripts/theme.js"></script>
+    <link rel="stylesheet" href="./devices.css">
+</head>
+<body>
+    <div class="toast-container" id="toastContainer"></div>
+
+    <div class="header">
+        <button class="back-btn" onclick="history.back()" data-i18n-aria-label="back">←</button>
+        <span class="header-title" data-i18n="devicesTitle">Devices</span>
+    </div>
+
+    <div class="content">
+        <div class="section-header" data-i18n="loginOnNewDevice">Log in on a new device</div>
+        <div class="device-card" style="cursor:pointer;" onclick="showQR()">
+            <div class="device-header">
+                <div class="device-icon" style="background:var(--accent-gradient);">📷</div>
+                <div class="device-info">
+                    <div class="device-name" data-i18n="loginByQr">Log in by QR code</div>
+                    <div class="device-status" data-i18n="scanCodeOnNewDevice">Scan the code on the new device</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="qrOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;">
+            <div style="background:var(--bg-secondary);border-radius:20px;padding:24px;margin:20px;text-align:center;max-width:320px;width:100%;">
+                <div style="font-size:18px;font-weight:700;margin-bottom:8px;" data-i18n="loginByQr">Log in by QR code</div>
+                <div style="font-size:13px;color:var(--text-secondary);margin-bottom:20px;" data-i18n="openAppAndScanQr">Open CraneApp on another device and scan the code</div>
+                <div id="qrContainer" style="background:#fff;border-radius:12px;padding:16px;display:inline-block;margin-bottom:16px;">
+                    <canvas id="qrCanvas" width="180" height="180"></canvas>
+                </div>
+                <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px;" id="qrExpiry" data-i18n="qrValidForFiveMinutes">Code valid for 5 minutes</div>
+                <button onclick="closeQR()" style="width:100%;padding:12px;border-radius:10px;border:none;background:var(--bg-tertiary);color:var(--text-primary);font-size:14px;font-weight:600;cursor:pointer;" data-i18n="close">Close</button>
+            </div>
+        </div>
+
+        <div class="section-header" data-i18n="thisDevice">This device</div>
+        <div class="device-card current" id="currentDevice">
+            <div class="device-header">
+                <div class="device-icon" id="currentIcon">📱</div>
+                <div class="device-info">
+                    <div class="device-name" id="currentName" data-i18n="loading">Loading...</div>
+                    <div class="device-status" data-i18n="onlineNow">Online now</div>
+                </div>
+                <span class="device-badge" data-i18n="thisDevice">This device</span>
+            </div>
+            <div class="device-details">
+                <div class="device-detail">
+                    <span class="device-detail-label" data-i18n="appLabel">Application</span>
+                    <span>CraneApp</span>
+                </div>
+                <div class="device-detail">
+                    <span class="device-detail-label" data-i18n="ipAddress">IP address</span>
+                    <span id="currentIP">—</span>
+                </div>
+                <div class="device-detail">
+                    <span class="device-detail-label" data-i18n="location">Location</span>
+                    <span id="currentLocation">—</span>
+                </div>
+                <div class="device-detail">
+                    <span class="device-detail-label" data-i18n="lastActivity">Last activity</span>
+                    <span id="currentLastActive">—</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="section-header" data-i18n="otherDevices">Other devices</div>
+        <div id="otherDevices">
+            <div class="loading-state">
+                <div class="spinner"></div>
+                <div data-i18n="loadingDevices">Loading devices...</div>
+            </div>
+        </div>
+
+        <button class="terminate-all-btn" id="terminateAllBtn" style="display:none;" data-i18n="terminateAllSessions" onclick="terminateAll()">
+            Terminate all other sessions
+        </button>
+    </div>
+
+    <script src="./devices.js"></script>
+</body>
+</html>

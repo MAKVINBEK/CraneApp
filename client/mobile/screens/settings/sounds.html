@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Звуки - CraneApp</title>
+    <script src="/client/mobile/scripts/i18n.js"></script>
+    <script src="/client/mobile/scripts/theme.js"></script>
+    <script src="/client/mobile/assets/sounds/sounds.js"></script>
+    
+    
+    <link rel="stylesheet" href="./sounds.css">
+</head>
+<body>
+    <div class="toast-container" id="toastContainer"></div>
+    
+    <div class="header">
+        <button class="back-btn" onclick="history.back()">←</button>
+        <span class="header-title" data-i18n="soundsTitle">Звуки</span>
+    </div>
+    
+    <div class="content">
+        <div class="section-header" data-i18n="volumeSection">Громкость</div>
+        <div class="section">
+            <div class="volume-slider">
+                <span class="volume-icon">🔔</span>
+                <div class="slider-container">
+                    <input type="range" id="notificationsVolume" min="0" max="100" value="80" oninput="updateVolume('notifications', this.value)" onchange="saveSettings()">
+                </div>
+                <span class="volume-value" id="notificationsVolumeValue">80%</span>
+            </div>
+            <div class="volume-slider">
+                <span class="volume-icon">🎵</span>
+                <div class="slider-container">
+                    <input type="range" id="mediaVolume" min="0" max="100" value="100" oninput="updateVolume('media', this.value)" onchange="saveSettings()">
+                </div>
+                <span class="volume-value" id="mediaVolumeValue">100%</span>
+            </div>
+        </div>
+        
+        <div class="section-header" data-i18n="notificationsSection2">Уведомления</div>
+        <div class="section">
+            <div class="item">
+                <div class="item-left">
+                    <div class="item-icon" style="background:rgba(255,75,75,0.2);">🔔</div>
+                    <div class="item-text">
+                        <div class="item-title" data-i18n="notificationSound">Звук уведомлений</div>
+                    </div>
+                </div>
+                <div class="toggle-switch active" id="toggleNotifications" onclick="toggleSetting(this, 'notificationsSound')"></div>
+            </div>
+            <div class="item" onclick="openSoundPicker('notification')">
+                <div class="item-left">
+                    <div class="item-icon" style="background:rgba(42,171,238,0.2);">🎵</div>
+                    <div class="item-text">
+                        <div class="item-title" data-i18n="notificationMelody">Мелодия уведомления</div>
+                    </div>
+                </div>
+                <span class="item-value" id="notificationSoundValue" data-i18n="soundDefault">Default</span>
+                <span class="item-arrow">›</span>
+            </div>
+        </div>
+        
+        <div class="section-header" data-i18n="messagesSection3">Сообщения</div>
+        <div class="section">
+            <div class="item">
+                <div class="item-left">
+                    <div class="item-icon" style="background:rgba(0,255,0,0.2);">💬</div>
+                    <div class="item-text">
+                        <div class="item-title" data-i18n="messageSound">Звук сообщений</div>
+                    </div>
+                </div>
+                <div class="toggle-switch active" id="toggleMessages" onclick="toggleSetting(this, 'messagesSound')"></div>
+            </div>
+            <div class="item">
+                <div class="item-left">
+                    <div class="item-icon" style="background:rgba(157,0,255,0.2);">📤</div>
+                    <div class="item-text">
+                        <div class="item-title" data-i18n="sendSound">Звук отправки</div>
+                    </div>
+                </div>
+                <div class="toggle-switch active" id="toggleSend" onclick="toggleSetting(this, 'sendSound')"></div>
+            </div>
+            <div class="item" onclick="openSoundPicker('message')">
+                <div class="item-left">
+                    <div class="item-icon" style="background:rgba(255,165,0,0.2);">🎵</div>
+                    <div class="item-text">
+                        <div class="item-title" data-i18n="messageMelody">Мелодия сообщения</div>
+                    </div>
+                </div>
+                <span class="item-value" id="messageSoundValue" data-i18n="soundDefault">Default</span>
+                <span class="item-arrow">›</span>
+            </div>
+        </div>
+        
+        <div class="section-header" data-i18n="callsSection2">Звонки</div>
+        <div class="section">
+            <div class="item">
+                <div class="item-left">
+                    <div class="item-icon" style="background:rgba(255,0,127,0.2);">📞</div>
+                    <div class="item-text">
+                        <div class="item-title" data-i18n="callSound">Звук звонка</div>
+                    </div>
+                </div>
+                <div class="toggle-switch active" id="toggleCalls" onclick="toggleSetting(this, 'callsSound')"></div>
+            </div>
+            <div class="item" onclick="openSoundPicker('ringtone')">
+                <div class="item-left">
+                    <div class="item-icon" style="background:rgba(255,215,0,0.2);">🎵</div>
+                    <div class="item-text">
+                        <div class="item-title" data-i18n="ringtone">Рингтон</div>
+                    </div>
+                </div>
+                <span class="item-value" id="ringtoneSoundValue" data-i18n="soundDefault">Default</span>
+                <span class="item-arrow">›</span>
+            </div>
+            <div class="item">
+                <div class="item-left">
+                    <div class="item-icon" style="background:rgba(0,136,255,0.2);">📳</div>
+                    <div class="item-text">
+                        <div class="item-title" data-i18n="vibrateOnCall">Вибрация при звонке</div>
+                    </div>
+                </div>
+                <div class="toggle-switch active" id="toggleVibrate" onclick="toggleSetting(this, 'vibrateOnCall')"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="./sounds.js"></script>
+</body>
+</html>

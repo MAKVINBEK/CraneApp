@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Уведомления и звуки - CraneApp</title>
+    <script src="/client/mobile/scripts/i18n.js"></script>
+    <script src="/client/mobile/scripts/theme.js"></script>
+    
+    <link rel="stylesheet" href="./notifications.css">
+</head>
+<body>
+    <div class="toast-container" id="toastContainer"></div>
+    <div class="header">
+        <button class="back-btn" onclick="history.back()">←</button>
+        <span class="header-title" data-i18n="notificationsAndSounds">Уведомления и звуки</span>
+    </div>
+    <div class="content">
+
+        <div class="section-header" data-i18n="messageNotifications">Уведомления о сообщениях</div>
+        <div class="section">
+            <div class="item">
+                <div class="item-left">
+                    <div class="item-icon" style="background:rgba(255,75,75,0.2);">👤</div>
+                    <div class="item-text"><div class="item-title" data-i18n="privateChats">Личные чаты</div></div>
+                </div>
+                <div class="toggle-switch active" id="togPrivate" onclick="tog(this,'privateChats')"></div>
+            </div>
+            <div class="item">
+                <div class="item-left">
+                    <div class="item-icon" style="background:rgba(42,171,238,0.2);">👥</div>
+                    <div class="item-text"><div class="item-title" data-i18n="groups">Группы</div></div>
+                </div>
+                <div class="toggle-switch active" id="togGroups" onclick="tog(this,'groups')"></div>
+            </div>
+            <div class="item">
+                <div class="item-left">
+                    <div class="item-icon" style="background:rgba(157,0,255,0.2);">📢</div>
+                    <div class="item-text"><div class="item-title" data-i18n="channels">Каналы</div></div>
+                </div>
+                <div class="toggle-switch active" id="togChannels" onclick="tog(this,'channels')"></div>
+            </div>
+            <div class="item">
+                <div class="item-left">
+                    <div class="item-icon" style="background:rgba(255,75,75,0.2);">❤️</div>
+                    <div class="item-text"><div class="item-title" data-i18n="reactions">Реакции</div></div>
+                </div>
+                <div class="toggle-switch active" id="togReactions" onclick="tog(this,'reactions')"></div>
+            </div>
+        </div>
+
+        <div class="section-header" data-i18n="inAppNotificationsSection">Уведомления в приложении</div>
+        <div class="section">
+            <div class="item">
+                <div class="item-left">
+                    <div class="item-icon" style="background:rgba(0,200,100,0.2);">🔔</div>
+                    <div class="item-text"><div class="item-title" data-i18n="sound">Звук</div></div>
+                </div>
+                <div class="toggle-switch active" id="togSound" onclick="tog(this,'notificationsSound')"></div>
+            </div>
+            <div class="item">
+                <div class="item-left">
+                    <div class="item-icon" style="background:rgba(0,136,255,0.2);">📳</div>
+                    <div class="item-text"><div class="item-title" data-i18n="vibration">Вибрация</div></div>
+                </div>
+                <div class="toggle-switch" id="togVibrate" onclick="tog(this,'vibrateOnCall')"></div>
+            </div>
+            <div class="item">
+                <div class="item-left">
+                    <div class="item-icon" style="background:rgba(255,165,0,0.2);">👁</div>
+                    <div class="item-text">
+                        <div class="item-title" data-i18n="showText">Показывать текст</div>
+                        <div class="item-subtitle" data-i18n="showTextDesc">Показывать текст сообщения в уведомлении</div>
+                    </div>
+                </div>
+                <div class="toggle-switch active" id="togPreview" onclick="tog(this,'messagePreview')"></div>
+            </div>
+        </div>
+
+        <div class="section-header" data-i18n="appBadgeCounter">Счётчик на иконке</div>
+        <div class="section">
+            <div class="item">
+                <div class="item-left">
+                    <div class="item-icon" style="background:rgba(157,0,255,0.2);">📢</div>
+                    <div class="item-text"><div class="item-title" data-i18n="channels">Каналы</div></div>
+                </div>
+                <div class="toggle-switch active" id="togBadgeChannels" onclick="tog(this,'badgeChannels')"></div>
+            </div>
+            <div class="item">
+                <div class="item-left">
+                    <div class="item-icon" style="background:rgba(255,0,127,0.2);">🔢</div>
+                    <div class="item-text">
+                        <div class="item-title" data-i18n="messageCount">Число сообщений</div>
+                        <div class="item-subtitle" data-i18n="messageCountDesc">Когда выкл — показывает число непрочитанных чатов</div>
+                    </div>
+                </div>
+                <div class="toggle-switch active" id="togBadgeCount" onclick="tog(this,'badgeCount')"></div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="item">
+                <div class="item-left">
+                    <div class="item-icon" style="background:rgba(0,200,100,0.2);">👋</div>
+                    <div class="item-text">
+                        <div class="item-title" data-i18n="newContacts">Новые контакты</div>
+                        <div class="item-subtitle" data-i18n="newContactsDesc">Уведомлять когда контакт появляется в CraneApp</div>
+                    </div>
+                </div>
+                <div class="toggle-switch active" id="togNewContacts" onclick="tog(this,'newContacts')"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="./notifications.js"></script>
+</body>
+</html>

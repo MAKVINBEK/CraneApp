@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Код-пароль - CraneApp</title>
+    <script src="/client/mobile/scripts/i18n.js"></script>
+    <script src="/client/mobile/scripts/theme.js"></script>
+    <link rel="stylesheet" href="./passcode.css">
+</head>
+<body>
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Passcode Input Overlay -->
+    <div class="passcode-overlay" id="passcodeOverlay">
+        <div class="passcode-title" id="overlayTitle" data-i18n="enterPasscode">Enter passcode</div>
+        <div class="passcode-subtitle" id="overlaySubtitle" data-i18n="fourDigitCode">4-digit code</div>
+        <div class="passcode-dots" id="passcodeDots">
+            <div class="passcode-dot" id="dot0"></div>
+            <div class="passcode-dot" id="dot1"></div>
+            <div class="passcode-dot" id="dot2"></div>
+            <div class="passcode-dot" id="dot3"></div>
+        </div>
+        <div class="numpad">
+            <button class="numpad-btn" onclick="numpadPress('1')">1</button>
+            <button class="numpad-btn" onclick="numpadPress('2')">2</button>
+            <button class="numpad-btn" onclick="numpadPress('3')">3</button>
+            <button class="numpad-btn" onclick="numpadPress('4')">4</button>
+            <button class="numpad-btn" onclick="numpadPress('5')">5</button>
+            <button class="numpad-btn" onclick="numpadPress('6')">6</button>
+            <button class="numpad-btn" onclick="numpadPress('7')">7</button>
+            <button class="numpad-btn" onclick="numpadPress('8')">8</button>
+            <button class="numpad-btn" onclick="numpadPress('9')">9</button>
+            <button class="numpad-btn empty"></button>
+            <button class="numpad-btn" onclick="numpadPress('0')">0</button>
+            <button class="numpad-btn delete" onclick="numpadDelete()">⌫</button>
+        </div>
+        <button class="passcode-cancel" id="overlayCancel" onclick="closeOverlay()" data-i18n="cancel">Cancel</button>
+    </div>
+
+    <!-- Picker -->
+    <div class="picker-overlay" id="pickerOverlay" onclick="closePicker()"></div>
+    <div class="picker-modal" id="pickerModal">
+        <div class="picker-header">
+            <span class="picker-title" data-i18n="lockAfter">Блокировать через</span>
+            <button class="picker-close" onclick="closePicker()">×</button>
+        </div>
+        <div id="pickerOptions"></div>
+    </div>
+
+    <div class="header">
+        <button class="back-btn" onclick="history.back()">←</button>
+        <span class="header-title" data-i18n="passcodeTitle">Код-пароль</span>
+    </div>
+
+    <div class="content">
+        <div class="section-header" data-i18n="protection">Защита</div>
+        <div class="section">
+            <div class="item" onclick="togglePasscode()">
+                <div class="item-left">
+                    <div class="item-icon" style="background:rgba(255,165,0,0.2);">🔐</div>
+                    <div class="item-text">
+                        <div class="item-title" data-i18n="passcodeLabel">Код-пароль</div>
+                        <div class="item-subtitle" id="passcodeStatusText" data-i18n="passcodeDesc">Protect the app with a 4-digit code</div>
+                    </div>
+                </div>
+                <div class="toggle-switch" id="passcodeToggle"></div>
+            </div>
+            <div class="item" id="changePasscodeItem" style="display:none;" onclick="openChangePasscode()">
+                <div class="item-left">
+                    <div class="item-icon" style="background:rgba(0,136,255,0.2);">🔑</div>
+                    <div class="item-text">
+                        <div class="item-title" data-i18n="changePasscode">Изменить код-пароль</div>
+                    </div>
+                </div>
+                <span class="item-arrow">›</span>
+            </div>
+        </div>
+
+        <div class="section" id="timeoutSection" style="display:none;">
+            <div class="section-header" style="padding-top:0;" data-i18n="autoLock">Автоблокировка</div>
+            <div class="item" onclick="openTimeoutPicker()">
+                <div class="item-left">
+                    <div class="item-icon" style="background:rgba(157,0,255,0.2);">⏱</div>
+                    <div class="item-text">
+                        <div class="item-title" data-i18n="lockAfter">Блокировать через</div>
+                        <div class="item-subtitle" data-i18n="lockAfterDesc">Время бездействия до блокировки</div>
+                    </div>
+                </div>
+                <span class="item-value" id="timeoutValue" data-i18n="oneMinute">1 minute</span>
+                <span class="item-arrow">›</span>
+            </div>
+        </div>
+
+        <div class="section-header" id="infoHeader" style="display:none;" data-i18n="passcodeInfo">О коде-пароле</div>
+        <div class="section" id="infoSection" style="display:none;">
+            <div class="item" style="cursor:default;">
+                <div class="item-left">
+                    <div class="item-icon" style="background:rgba(0,255,0,0.2);">ℹ</div>
+                    <div class="item-text">
+                        <div class="item-subtitle" style="font-size:13px;line-height:1.5;" data-i18n="passcodeInfoText">
+                            Passcode locks the app. After 5 incorrect attempts, you will need to log in again.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="./passcode.js"></script>
+</body>
+</html>

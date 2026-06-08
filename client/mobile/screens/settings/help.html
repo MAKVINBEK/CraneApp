@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title data-i18n="helpTitleFull">Help - CraneApp</title>
+    <script src="/client/mobile/scripts/i18n.js"></script>
+    <script src="/client/mobile/scripts/theme.js"></script>
+    <link rel="stylesheet" href="./help.css">
+</head>
+<body>
+    <div class="header">
+        <button class="back-btn" onclick="history.back()" data-i18n-aria-label="back">←</button>
+        <span class="header-title" data-i18n="helpTitle">Help</span>
+    </div>
+
+    <div class="content">
+        <div class="contact-card" onclick="openCraneAppBotChat()">
+            <div class="contact-icon">🤖</div>
+            <div class="contact-text">
+                <div class="contact-title">CraneApp Bot</div>
+                <div class="contact-desc" data-i18n="askBotInChat">Ask a question in chat with the bot</div>
+            </div>
+        </div>
+
+        <div class="section-header" data-i18n="faqSection">FAQ</div>
+
+        <div class="faq-item" onclick="toggleFaq(this)">
+            <div class="faq-question">
+                <span data-i18n="faqDeleteAccountQ">How do I delete my account?</span>
+                <span class="faq-arrow">▼</span>
+            </div>
+            <div class="faq-answer" data-i18n="faqDeleteAccountA">
+                Go to Settings → Account → Delete account. This action cannot be undone and deletes all your data.
+            </div>
+        </div>
+
+        <div class="faq-item" onclick="toggleFaq(this)">
+            <div class="faq-question">
+                <span data-i18n="faqEnable2FAQ">How do I enable two-factor authentication?</span>
+                <span class="faq-arrow">▼</span>
+            </div>
+            <div class="faq-answer" data-i18n="faqEnable2FAA">
+                Go to Settings → Privacy → Two-factor authentication and follow the instructions.
+            </div>
+        </div>
+
+        <div class="faq-item" onclick="toggleFaq(this)">
+            <div class="faq-question">
+                <span data-i18n="faqBlockUserQ">How do I block a user?</span>
+                <span class="faq-arrow">▼</span>
+            </div>
+            <div class="faq-answer" data-i18n="faqBlockUserA">
+                Open the user profile, tap the three dots, and choose "Block".
+            </div>
+        </div>
+
+        <div class="faq-item" onclick="toggleFaq(this)">
+            <div class="faq-question">
+                <span data-i18n="faqCreateGroupQ">How do I create a group?</span>
+                <span class="faq-arrow">▼</span>
+            </div>
+            <div class="faq-answer" data-i18n="faqCreateGroupA">
+                Tap the create button on the main screen and choose "Create group".
+            </div>
+        </div>
+
+        <div class="section-header" data-i18n="usefulLinks">Useful links</div>
+        <div class="section">
+            <a href="#" class="item" onclick="showDocs(); return false;">
+                <div class="item-left">
+                    <div class="item-icon" style="background:rgba(0,255,0,0.2);">📖</div>
+                    <div class="item-text">
+                        <div class="item-title" data-i18n="documentation">Documentation</div>
+                    </div>
+                </div>
+                <span class="item-arrow">›</span>
+            </a>
+            <a href="#" class="item" onclick="showPrivacy(); return false;">
+                <div class="item-left">
+                    <div class="item-icon" style="background:rgba(42,171,238,0.2);">🔒</div>
+                    <div class="item-text">
+                        <div class="item-title" data-i18n="privacyPolicy">Privacy policy</div>
+                    </div>
+                </div>
+                <span class="item-arrow">›</span>
+            </a>
+            <a href="#" class="item" onclick="showTerms(); return false;">
+                <div class="item-left">
+                    <div class="item-icon" style="background:rgba(157,0,255,0.2);">📋</div>
+                    <div class="item-text">
+                        <div class="item-title" data-i18n="termsOfUse">Terms of use</div>
+                    </div>
+                </div>
+                <span class="item-arrow">›</span>
+            </a>
+        </div>
+
+        <button class="support-btn" data-i18n="writeToSupport" onclick="contactSupport()">Contact support</button>
+    </div>
+
+    <div id="docModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle" data-i18n="title">Title</h2>
+                <button class="modal-close" onclick="closeModal()">×</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                ...
+            </div>
+        </div>
+    </div>
+
+    <script src="./help.js"></script>
+</body>
+</html>

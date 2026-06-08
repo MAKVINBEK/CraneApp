@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Оформление - CraneApp</title>
+    <script src="/client/mobile/scripts/i18n.js"></script>
+    
+    <!-- ОБЩИЙ СКРИПТ ТЕМЫ -->
+    <script src="/client/mobile/scripts/theme.js"></script>
+    <link rel="stylesheet" href="./appearance.css">
+</head>
+<body>
+    <div class="header">
+        <button class="back" onclick="history.back()">←</button>
+        <h2 data-i18n="appearanceTitle">Оформление</h2>
+    </div>
+    
+    <div class="preview">
+        <h3 data-i18n="preview">Предпросмотр</h3>
+        <p style="color:var(--text-secondary);margin:8px 0;" data-i18n="previewDesc">Изменения применяются сразу на всех страницах</p>
+        <button class="preview-btn" data-i18n="previewBtn">Пример кнопки</button>
+    </div>
+    
+        <div class="section">
+        <div class="item">
+            <div data-i18n="themeLabel">Тема</div>
+            <select id="themeSelect" onchange="changeTheme(this.value)">
+                <option value="dark" data-i18n="darkTheme">Тёмная</option>
+                <option value="light" data-i18n="lightTheme">Светлая</option>
+            </select>
+        </div>
+        <div class="item">
+            <div data-i18n="fontSizeLabel">Размер шрифта</div>
+            <select id="fontSizeSelect" onchange="changeFontSize(this.value)">
+                <option value="small" data-i18n="smallFont">Маленький</option>
+                <option value="medium" data-i18n="mediumFont">Средний</option>
+                <option value="large" data-i18n="largeFont">Большой</option>
+            </select>
+        </div>
+        <div class="item">
+            <div data-i18n="accentColorLabel">Цвет акцента</div>
+            <div style="display:flex;gap:8px;" id="colorOptions">
+                <div class="color-option" style="background:#FF007F" data-color="#FF007F" onclick="selectColor(this)"></div>
+                <div class="color-option" style="background:#9D00FF" data-color="#9D00FF" onclick="selectColor(this)"></div>
+                <div class="color-option" style="background:#0088FF" data-color="#0088FF" onclick="selectColor(this)"></div>
+                <div class="color-option" style="background:#00AA00" data-color="#00AA00" onclick="selectColor(this)"></div>
+                <div class="color-option" style="background:#FF8800" data-color="#FF8800" onclick="selectColor(this)"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="./appearance.js"></script>
+</body>
+</html>
