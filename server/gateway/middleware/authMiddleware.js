@@ -22,7 +22,7 @@ function createAuthMiddleware({ i18n, jwt, logger, query }) {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             const result = await query(
                 `SELECT u.id, u.username, u.first_name, u.last_name, u.avatar_url, u.bio, u.badge, u.badges,
-                        u.is_bot, u.is_blocked, u.is_muted, u.muted_until, u.is_premium,
+                        u.is_bot, u.is_blocked, u.is_muted, u.muted_until, u.is_premium, u.status_emoji,
                         u.block_reason, u.mute_reason, u.language, us.settings->>'language' AS settings_language
                  FROM users u
                  LEFT JOIN user_settings us ON us.user_id = u.id

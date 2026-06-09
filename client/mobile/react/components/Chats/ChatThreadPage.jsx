@@ -257,15 +257,64 @@ function updateMessage(items, messageId, patch) {
   return items.map((message) => (message.id === messageId ? { ...message, ...patch } : message));
 }
 
+function renderMessageContent(content) {
+  if (!content) return '';
+  const parts = [];
+  const regex = /(#[\wа-яА-ЯёЁ]+)/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = regex.exec(content)) !== null) {
+    const textBefore = content.substring(lastIndex, match.index);
+    if (textBefore) {
+      parts.push(textBefore);
+    }
+    const hashtag = match[0];
+    parts.push(
+      <span
+        key={match.index}
+        className="hashtag-link"
+        style={{ color: 'var(--rd-accent, #ff2d8b)', cursor: 'pointer', fontWeight: 'bold' }}
+        onClick={() => {
+          if (typeof window.handleUnifiedSearch === 'function') {
+            window.handleUnifiedSearch(hashtag);
+          } else {
+            alert(`Поиск по хэштегу: ${hashtag}`);
+          }
+        }}
+      >
+        {hashtag}
+      </span>
+    );
+    lastIndex = regex.lastIndex;
+  }
+
+  const textAfter = content.substring(lastIndex);
+  if (textAfter) {
+    parts.push(textAfter);
+  }
+
+  return parts.length > 0 ? parts : content;
+}
+
 function MessageBubble({ currentUserId, message, onDelete, onEdit, onReact, onReply, t }) {
   const mine = message.senderId === currentUserId;
 
   return (
     <article className={`message-bubble ${mine ? 'is-mine' : ''}`}>
-      {!mine ? <div className="message-sender">{message.senderFirstName || message.senderUsername || 'User'}</div> : null}
+      {!mine ? (
+        <div className="message-sender">
+          {message.senderFirstName || message.senderUsername || 'User'}
+          {message.senderStatusEmoji ? (
+            <span className="sender-status-emoji" style={{ marginLeft: 6 }}>
+              {message.senderStatusEmoji}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       {message.replyToContent ? <div className="message-reply-preview">{message.replyToContent}</div> : null}
       <MessageMedia message={message} t={t} />
-      <div className="message-content">{message.content}</div>
+      <div className="message-content">{renderMessageContent(message.content)}</div>
       {message.reactions?.length ? (
         <div className="message-reactions">
           {message.reactions.map((reaction) => (

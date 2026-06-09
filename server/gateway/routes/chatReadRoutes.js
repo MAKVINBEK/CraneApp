@@ -83,7 +83,7 @@ function createChatReadRoutes({ authMiddleware, logger, query }) {
 
             const result = await query(
                 `SELECT u.id, u.username, u.first_name, u.last_name, u.avatar_url, u.last_seen, u.badge, u.badges,
-                        u.is_bot, u.is_premium, u.is_blocked, cm.role, cm.permissions, cm.muted_until,
+                        u.is_bot, u.is_premium, u.is_blocked, u.status_emoji, cm.role, cm.permissions, cm.muted_until,
                         CASE WHEN u.last_seen > NOW() - INTERVAL '5 minutes' THEN TRUE ELSE FALSE END as is_online
                  FROM chat_members cm JOIN users u ON cm.user_id = u.id
                  WHERE cm.chat_id = $1`,
@@ -243,6 +243,7 @@ function mapMemberRow(member) {
         is_bot: member.is_bot || false,
         is_premium: member.is_premium || false,
         is_blocked: member.is_blocked || false,
+        statusEmoji: member.status_emoji || '',
     };
 }
 

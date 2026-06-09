@@ -24,6 +24,7 @@ class Message {
     voiceDuration = 0,
     senderUsername = null,
     senderFirstName = null,
+    senderStatusEmoji = null,
   }) {
     this.id = id;
     this.chatId = chatId;
@@ -49,6 +50,7 @@ class Message {
     this.voiceDuration = voiceDuration || 0;
     this.senderUsername = senderUsername;
     this.senderFirstName = senderFirstName;
+    this.senderStatusEmoji = senderStatusEmoji;
   }
 
   static fromAPI(data) {
@@ -77,6 +79,7 @@ class Message {
       voiceDuration: data.voiceDuration ?? data.voice_duration ?? 0,
       senderUsername: data.senderUsername ?? data.sender_username ?? null,
       senderFirstName: data.senderFirstName ?? data.sender_first_name ?? null,
+      senderStatusEmoji: data.senderStatusEmoji ?? data.sender_status_emoji ?? null,
     });
   }
 
@@ -106,6 +109,7 @@ class Message {
       voiceDuration: this.voiceDuration,
       senderUsername: this.senderUsername,
       senderFirstName: this.senderFirstName,
+      senderStatusEmoji: this.senderStatusEmoji,
     };
   }
 

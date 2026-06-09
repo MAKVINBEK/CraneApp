@@ -106,7 +106,7 @@ function createUserProfileRoutes({
         }
     });
 
-    router.put('/users/profile', async (req, res) => {
+    const profileUpdateHandler = async (req, res) => {
         try {
             const result = await updateProfile({ handleFileUpload, query, userId: req.user.id, body: req.body });
             if (!result) return res.status(400).json({ error: 'No fields to update' });
@@ -117,7 +117,10 @@ function createUserProfileRoutes({
             logger.error('❌ Update profile error:', error);
             res.status(500).json({ error: error.message });
         }
-    });
+    };
+
+    router.put('/users/profile', profileUpdateHandler);
+    router.put('/users/me', profileUpdateHandler);
 
     router.put('/users/avatar', async (req, res) => {
         try {
@@ -158,7 +161,7 @@ function createUserProfileRoutes({
     router.get('/users/:userId/profile', async (req, res) => {
         try {
             const result = await query(
-                'SELECT id, username, first_name, last_name, bio, avatar_url, is_blocked, is_muted, muted_until FROM users WHERE id = $1',
+                'SELECT id, username, first_name, last_name, bio, avatar_url, status_emoji, is_blocked, is_muted, muted_until FROM users WHERE id = $1',
                 [req.params.userId]
             );
             if (result.rows.length === 0) return res.status(404).json({ error: req.t('userNotFound') });
@@ -172,6 +175,7 @@ function createUserProfileRoutes({
                     lastName: user.last_name,
                     bio: user.bio,
                     avatarUrl: user.avatar_url,
+                    statusEmoji: user.status_emoji,
                     isBlocked: user.is_blocked,
                     isMuted: user.is_muted,
                     mutedUntil: user.muted_until,
@@ -213,6 +217,7 @@ function mapCurrentUser(user) {
         lastName: user.last_name,
         bio: user.bio || '',
         avatarUrl: user.avatar_url || '',
+        statusEmoji: user.status_emoji || '',
         badge: user.badge || null,
         badges: user.badges || [],
         isBot: user.is_bot || false,
@@ -258,6 +263,7 @@ function mapUpdatedUser(user) {
         lastName: user.last_name,
         bio: user.bio || '',
         avatarUrl: user.avatar_url || '',
+        statusEmoji: user.status_emoji || '',
     };
 }
 
@@ -266,6 +272,7 @@ async function updateProfile({ handleFileUpload, query, userId, body }) {
         ['firstName', 'first_name', body.firstName],
         ['lastName', 'last_name', body.lastName],
         ['bio', 'bio', body.bio],
+        ['statusEmoji', 'status_emoji', body.statusEmoji],
     ];
     const updates = [];
     const values = [];
@@ -288,7 +295,7 @@ async function updateProfile({ handleFileUpload, query, userId, body }) {
     return query(
         `UPDATE users SET ${updates.join(', ')}
          WHERE id = $${index}
-         RETURNING id, username, first_name, last_name, bio, avatar_url`,
+         RETURNING id, username, first_name, last_name, bio, avatar_url, status_emoji`,
         values
     );
 }

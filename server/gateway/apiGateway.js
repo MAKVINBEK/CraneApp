@@ -90,13 +90,13 @@ app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'wasm-unsafe-eval'"],
-            styleSrc: ["'self'", "'unsafe-inline'"],
-            imgSrc: ["'self'", 'data:', 'blob:'],
+            scriptSrc: ["'self'", "'unsafe-eval'", "'wasm-unsafe-eval'"],
+            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+            imgSrc: ["'self'", 'data:', 'blob:', 'https://i.ibb.co'],
             mediaSrc: ["'self'", 'blob:'],
             connectSrc: ["'self'", ...allowedOrigins, ...wsOrigins, 'wss:', 'ws:'],
             workerSrc: ["'self'", 'blob:'],
-            fontSrc: ["'self'", 'data:'],
+            fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com'],
             objectSrc: ["'none'"],
             baseUri: ["'self'"],
             frameAncestors: ["'self'"],
