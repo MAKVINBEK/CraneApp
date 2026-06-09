@@ -16,6 +16,17 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Apple Emoji Globals */
+img.apple-emoji {
+  width: 1.2em;
+  height: 1.2em;
+  vertical-align: -0.2em;
+  display: inline-block;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+
 html,
 body,
 #appRoot {
