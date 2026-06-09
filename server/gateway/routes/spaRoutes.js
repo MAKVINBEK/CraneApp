@@ -6,6 +6,13 @@ function createSpaRoutes({ distDir }) {
     const desktopHtml = path.join(distDir, 'index.html');
     const mobileHtml = path.join(distDir, 'mobile.html');
 
+    router.use((_req, res, next) => {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        next();
+    });
+
     router.get('/', (_req, res) => res.sendFile(desktopHtml));
     router.get(['/login', '/register', '/chats', '/chats/:chatId', '/rate-limit', '/settings', '/contacts', '/create-group'], (_req, res) => {
         res.sendFile(desktopHtml);
