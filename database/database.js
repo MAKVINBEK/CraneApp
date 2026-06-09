@@ -399,6 +399,9 @@ async function ensureTablesExist() {
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'chats' AND column_name = 'join_approval_required') THEN
             ALTER TABLE chats ADD COLUMN join_approval_required BOOLEAN DEFAULT FALSE;
         END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'chats' AND column_name = 'allowed_reactions') THEN
+            ALTER TABLE chats ADD COLUMN allowed_reactions JSONB DEFAULT '[]';
+        END IF;
 
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'chat_members' AND column_name = 'custom_title') THEN
             ALTER TABLE chat_members ADD COLUMN custom_title VARCHAR(50);

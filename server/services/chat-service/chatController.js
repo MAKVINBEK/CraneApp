@@ -3,10 +3,10 @@ const logger = require('../logger');
 
 const createChat = async (req, res) => {
   try {
-    const userId = req.user?.userId || 'temp-user';
-    const { type, participants, title } = req.body;
+    const userId = req.user?.id || req.user?.userId;
+    const { type, participants, title, ...extra } = req.body;
 
-    const chat = await chatService.createChat(userId, type, participants, title);
+    const chat = await chatService.createChat(userId, type, participants, title, extra);
 
     res.status(200).json({
       success: true,
@@ -24,7 +24,7 @@ const createChat = async (req, res) => {
 
 const getChats = async (req, res) => {
   try {
-    const userId = req.user?.userId || 'temp-user';
+    const userId = req.user?.id || req.user?.userId;
     const chats = await chatService.getChats(userId);
 
     res.status(200).json({

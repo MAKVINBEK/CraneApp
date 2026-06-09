@@ -23,6 +23,7 @@ const {
     publishScheduledMessages,
     canPostToChannel
 } = require('./channels');
+const chatRoutes = require('../services/chat-service/chatRoutes');
 
 const MAX_LOGIN_ATTEMPTS = 5; // синхронизировано с security.js
 
@@ -249,6 +250,8 @@ app.use(security.sqlInjectionMiddleware);
 
 // Применяем API лимит ко всем /api/ роутам
 app.use('/api/', apiLimiter);
+
+app.use('/api/chats', chatRoutes);
 
 // call.html разрешаем встраивать в iframe с того же домена (CSP frame-ancestors имеет приоритет над X-Frame-Options в браузерах)
 app.use('/client/mobile/screens/calls/call.html', (req, res, next) => {

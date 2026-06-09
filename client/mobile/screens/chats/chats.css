@@ -35,3 +35,31 @@
       .ic-toast-btn.reject{background:linear-gradient(135deg,#ff4b62,#d92847);box-shadow:0 6px 16px rgba(217,40,71,0.4);}
       .ic-toast-btn.accept{background:linear-gradient(135deg,#34d399,#10b981);box-shadow:0 6px 16px rgba(16,185,129,0.4);}
       .ic-toast-btn svg{width:20px;height:20px;}
+/* Channel info modal */
+.channel-action-btn:hover {
+    background: var(--bg-secondary) !important;
+}
+.channel-action-btn span {
+    transition: transform 0.2s;
+}
+.channel-action-btn:active span {
+    transform: scale(0.9);
+}
+.menu-item {
+    padding: 10px 16px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.2s;
+}
+.menu-item:hover {
+    background: var(--bg-tertiary);
+}
+.menu-item.danger:hover {
+    background: rgba(255, 75, 75, 0.1);
+}
+.channel-tab {
+    transition: all 0.2s;
+}
+.channel-tab:not(.active):hover {
+    color: var(--text-primary) !important;
+}
