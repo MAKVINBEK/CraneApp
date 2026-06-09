@@ -34,27 +34,16 @@ export function ChatsPage({ t = fallbackTranslate }) {
   return (
     <main className="chats-page">
       <header className="chats-header">
-        <div>
-          <p className="chats-kicker">CraneApp</p>
-          <h1>{t('chats', 'Чаты')}</h1>
-        </div>
-        <div
-          className="chats-user"
-          style={{ cursor: 'pointer' }}
-          title={currentUser?.username || ''}
-          onClick={() => navigate('/settings')}
-        >
-          {getInitials(currentUser)}
-        </div>
+        <h1>{t('chats', 'Чаты')}</h1>
+        <Link className="chats-icon-button" to="/create-group" title={t('createGroup', 'Создать группу')}>
+          +
+        </Link>
       </header>
 
       <section className="chats-toolbar">
         <Link className="chats-search" to="/contacts" style={{ textDecoration: 'none', color: 'inherit' }}>
           <span aria-hidden="true">⌕</span>
-          <input disabled placeholder={t('search', 'Поиск')} type="search" style={{ cursor: 'pointer' }} />
-        </Link>
-        <Link className="chats-icon-button" to="/create-group" title={t('createGroup', 'Создать группу')}>
-          +
+          <input disabled placeholder={t('search', 'Поиск чатов и людей...')} type="search" style={{ cursor: 'pointer' }} />
         </Link>
       </section>
 
