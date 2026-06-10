@@ -3542,4 +3542,13 @@
     const init = () => window.i18n.translatePage();
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });
     else init();
+
+    // Apple Emoji на всех экранах с i18n
+    (function loadAppleEmoji() {
+        if (document.getElementById('apple-emoji-script')) return;
+        const s = document.createElement('script');
+        s.id = 'apple-emoji-script';
+        s.src = '/client/mobile/scripts/apple-emoji.js';
+        document.head.appendChild(s);
+    })();
 })();

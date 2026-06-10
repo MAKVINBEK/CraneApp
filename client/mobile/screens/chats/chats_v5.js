@@ -1460,6 +1460,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
         function reportUser() {
             toggleProfileMenu();
             if (!currentProfileUser) return;
+            if (currentProfileUser.isBot || currentProfileUser.username === 'craneapp_bot') return;
             
             // Открываем модальное окно с формой жалобы
             document.getElementById('reportReason').value = 'spam';
@@ -1903,6 +1904,12 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 chatBtn.onclick = () => profileStartChat(userData.id, userData.name || userData.username, existingChat);
             } else if (chatBtn) {
                 chatBtn.style.display = 'none';
+            }
+
+            const profileReportBtn = document.querySelector('#profileMenu > button:nth-child(1)');
+            const isProfileBot = !!(userData.isBot || userData.username === 'craneapp_bot');
+            if (profileReportBtn) {
+                profileReportBtn.style.display = isProfileBot ? 'none' : 'flex';
             }
 
             // Кнопка копирования юзернейма — скрываем для заблокированных
@@ -2752,31 +2759,210 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
         }
 
         function openFilePicker() {
+            if (!activeChat) return;
             closeAttachmentPanel();
-            document.getElementById('fileInput').click();
+            const input = document.getElementById('fileInput');
+            if (input) input.click();
         }
+
+        let _pendingLocation = null;
 
         function shareLocation() {
             closeAttachmentPanel();
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    (pos) => {
-                        const locationUrl = `https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}`;
-                        const locationText = tr('myLocationMessage', '📍 Моя геопозиция: {url}', { url: locationUrl });
-                        sendMessage(locationText);
-                    },
-                    (err) => showToast('error', tr('geolocationError', 'Не удалось получить геопозицию'), '❌')
-                );
-            } else {
+            if (!activeChat) return;
+            if (!navigator.geolocation) {
                 showToast('error', tr('geolocationUnsupported', 'Геолокация не поддерживается'), '❌');
+                return;
             }
+            showToast('info', tr('gettingLocation', 'Определяем местоположение...'), '📍');
+            navigator.geolocation.getCurrentPosition(
+                function(pos) {
+                    _pendingLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                    showLocationPicker(_pendingLocation);
+                },
+                function() {
+                    showToast('error', tr('geolocationError', 'Не удалось получить геопозицию'), '❌');
+                },
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+            );
+        }
+
+        function showLocationPicker(loc) {
+            const mapEl = document.getElementById('locationMapPreview');
+            const coordsEl = document.getElementById('locationCoords');
+            const modal = document.getElementById('locationPickerModal');
+            if (!mapEl || !coordsEl || !modal) return;
+
+            const lat = loc.lat;
+            const lng = loc.lng;
+            const mapUrl = 'https://staticmap.openstreetmap.de/staticmap.php?center=' + lat + ',' + lng + '&zoom=15&size=480x240&markers=' + lat + ',' + lng + ',red';
+            const linkUrl = 'https://www.openstreetmap.org/?mlat=' + lat + '&mlon=' + lng + '#map=16/' + lat + '/' + lng;
+            mapEl.innerHTML = '<a href="' + linkUrl + '" target="_blank" rel="noopener"><img src="' + mapUrl + '" alt=""></a>';
+            coordsEl.textContent = lat.toFixed(5) + ', ' + lng.toFixed(5);
+            modal.classList.add('active');
+        }
+
+        function closeLocationPicker() {
+            const modal = document.getElementById('locationPickerModal');
+            if (modal) modal.classList.remove('active');
+            _pendingLocation = null;
+        }
+
+        function confirmLocationSend() {
+            if (!_pendingLocation || !activeChat) return;
+            const payload = {
+                lat: _pendingLocation.lat,
+                lng: _pendingLocation.lng,
+                label: tr('myLocation', 'Моя геопозиция')
+            };
+            closeLocationPicker();
+            sendStructuredMessage('location', payload);
         }
 
         function shareContact() {
             closeAttachmentPanel();
-            // Открываем модал выбора контакта
+            if (!activeChat) return;
             showContactPicker();
         }
+
+        function getRecentChatContacts() {
+            const seen = new Set();
+            const result = [];
+            (allChats || []).forEach(function(c) {
+                if (c.type && c.type !== 'private') return;
+                const cu = chatUsers[c.id];
+                if (!cu || cu.id === user.id || cu.isBot || cu.isBlocked) return;
+                if (seen.has(cu.id)) return;
+                seen.add(cu.id);
+                result.push({
+                    id: cu.id,
+                    name: cu.name,
+                    username: cu.username || '',
+                    av: cu.av
+                });
+            });
+            return result;
+        }
+
+        function showContactPicker() {
+            const list = document.getElementById('contactPickerList');
+            const modal = document.getElementById('contactPickerModal');
+            if (!list || !modal) return;
+
+            const contacts = getRecentChatContacts();
+            list.innerHTML = '';
+            if (!contacts.length) {
+                list.innerHTML = '<div class="attachment-picker-empty">' + tr('noRecentContacts', 'Нет недавних собеседников') + '</div>';
+            } else {
+                contacts.forEach(function(c) {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'contact-picker-item';
+                    const ph = typeof c.av === 'string' && c.av.length <= 2 ? c.av : (c.name ? c.name[0].toUpperCase() : '?');
+                    const avatarHtml = (c.av && (c.av.startsWith('http') || c.av.startsWith('/') || c.av.startsWith('data:')))
+                        ? '<img src="' + c.av + '" alt="">'
+                        : escapeHtml(ph);
+                    btn.innerHTML = '<span class="contact-picker-avatar">' + avatarHtml + '</span>'
+                        + '<span class="contact-picker-meta">'
+                        + '<span class="contact-picker-name">' + escapeHtml(c.name) + '</span>'
+                        + (c.username ? '<span class="contact-picker-username">@' + escapeHtml(c.username) + '</span>' : '')
+                        + '</span>';
+                    btn.onclick = function() { pickContactToShare(c); };
+                    list.appendChild(btn);
+                });
+            }
+            modal.classList.add('active');
+        }
+
+        function closeContactPicker() {
+            const modal = document.getElementById('contactPickerModal');
+            if (modal) modal.classList.remove('active');
+        }
+
+        function pickContactToShare(contact) {
+            closeContactPicker();
+            sendStructuredMessage('contact', {
+                userId: contact.id,
+                name: contact.name,
+                username: contact.username || ''
+            });
+        }
+
+        function formatFileSize(bytes) {
+            if (!bytes || bytes < 1024) return bytes ? bytes + ' B' : '';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        function parseMessagePayload(m) {
+            const raw = m && (m.content || m.text);
+            if (!raw) return null;
+            if (typeof raw === 'object') return raw;
+            try { return JSON.parse(raw); } catch (_) { return null; }
+        }
+
+        async function sendStructuredMessage(type, content, extras) {
+            if (!activeChat) return;
+
+            const inCommentMode = isCommentThreadActive();
+            const contentStr = typeof content === 'object' ? JSON.stringify(content) : String(content || '');
+            const tempId = 'temp-' + Date.now();
+            const tempMsg = Object.assign({
+                id: tempId,
+                content: contentStr,
+                type: type,
+                senderId: user.id,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                senderName: user.firstName || user.username || tr('you', 'Вы'),
+                parentMessageId: inCommentMode ? commentThreadPostId : null,
+                pending: true
+            }, extras || {});
+
+            messagesData[tempId] = tempMsg;
+            appendMessageToActiveList(tempMsg);
+
+            const body = { content: contentStr, type: type };
+            if (extras && extras.mediaUrl) {
+                body.mediaUrl = extras.mediaUrl;
+                body.mediaType = 'file';
+            }
+            if (inCommentMode && commentThreadPostId) {
+                body.parentMessageId = commentThreadPostId;
+            } else if (activeTopic) {
+                body.topicId = activeTopic.id;
+            }
+
+            try {
+                const res = await fetch('/api/v1/messages/' + activeChat.id, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                if (data.message) {
+                    const merged = Object.assign({}, data.message, extras || {});
+                    if (extras && extras.fileName) merged.fileName = extras.fileName;
+                    if (extras && extras.fileSize) merged.fileSize = extras.fileSize;
+                    _confirmMessage(tempId, merged);
+                    loadChats();
+                } else {
+                    showToast('error', data.error || tr('sendError', 'Ошибка отправки'), '❌');
+                }
+            } catch (_) {
+                showToast('error', tr('sendError', 'Ошибка отправки'), '❌');
+            }
+        }
+
+        window.openFilePicker = openFilePicker;
+        window.shareLocation = shareLocation;
+        window.shareContact = shareContact;
+        window.closeLocationPicker = closeLocationPicker;
+        window.confirmLocationSend = confirmLocationSend;
+        window.closeContactPicker = closeContactPicker;
+        window.pickContactToShare = pickContactToShare;
 
         const _pollPendingSelections = {};
         const _pollPayloadCache = new Map();
@@ -3465,6 +3651,31 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             reader.readAsDataURL(file);
         }
 
+        async function handleDocumentSelect(input) {
+            const file = input.files[0];
+            if (!file || !activeChat) return;
+            input.value = '';
+
+            if (file.size > MAX_FILE_SIZE) {
+                showToast('error', tr('fileTooLarge50', 'Файл слишком большой. Максимум 50 МБ'), '❌');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const url = await uploadFile(e.target.result, 'file');
+                if (!url) return;
+                await sendStructuredMessage('file', file.name, {
+                    mediaUrl: url,
+                    fileName: file.name,
+                    fileSize: formatFileSize(file.size)
+                });
+            };
+            reader.readAsDataURL(file);
+        }
+
+        window.handleDocumentSelect = handleDocumentSelect;
+
         function handleGifSelect(input) {
             const file = input.files[0];
             if (!file) return;
@@ -3989,6 +4200,63 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 div.appendChild(m.poll
                     ? createPollElement(m.id, m.poll)
                     : createPollPlaceholder(m.id, m.content || m.contentPlain));
+            } else if (m.type === 'file') {
+                const fileName = m.fileName || m.content || tr('fileMedia', 'Файл');
+                const fileUrl = m.mediaUrl || m.fileUrl || '';
+                const fileSize = m.fileSize || '';
+                const fileEl = document.createElement('a');
+                fileEl.className = 'message-file';
+                fileEl.href = fileUrl || '#';
+                fileEl.target = '_blank';
+                fileEl.rel = 'noopener';
+                fileEl.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg-tertiary);border-radius:12px;text-decoration:none;color:var(--text-primary);';
+                fileEl.innerHTML = '<span style="font-size:24px;">📎</span><span><div style="font-weight:600;font-size:14px;">'
+                    + escapeHtml(fileName) + '</div>'
+                    + (fileSize ? '<div style="font-size:12px;color:var(--text-muted);">' + escapeHtml(fileSize) + '</div>' : '')
+                    + '</span>';
+                if (!fileUrl) fileEl.onclick = function(e) { e.preventDefault(); };
+                div.appendChild(fileEl);
+            } else if (m.type === 'location') {
+                const loc = parseMessagePayload(m) || {};
+                const lat = Number(loc.lat);
+                const lng = Number(loc.lng);
+                if (Number.isFinite(lat) && Number.isFinite(lng)) {
+                    const locEl = document.createElement('a');
+                    locEl.className = 'message-location';
+                    locEl.href = 'https://www.openstreetmap.org/?mlat=' + lat + '&mlon=' + lng + '#map=16/' + lat + '/' + lng;
+                    locEl.target = '_blank';
+                    locEl.rel = 'noopener';
+                    const mapUrl = 'https://staticmap.openstreetmap.de/staticmap.php?center=' + lat + ',' + lng + '&zoom=15&size=360x180&markers=' + lat + ',' + lng + ',red';
+                    locEl.innerHTML = '<img src="' + mapUrl + '" alt="" style="width:100%;max-width:320px;border-radius:12px;display:block;">'
+                        + '<div style="margin-top:6px;font-size:13px;font-weight:600;">📍 '
+                        + escapeHtml(loc.label || tr('geoPosition', 'Геопозиция')) + '</div>';
+                    div.appendChild(locEl);
+                } else {
+                    const textSpan = document.createElement('span');
+                    textSpan.className = 'message-text';
+                    textSpan.textContent = m.content || tr('geoPosition', 'Геопозиция');
+                    div.appendChild(textSpan);
+                }
+            } else if (m.type === 'contact') {
+                const contact = parseMessagePayload(m) || {};
+                const card = document.createElement('div');
+                card.className = 'message-contact';
+                const initial = contact.name ? contact.name[0].toUpperCase() : '👤';
+                card.innerHTML = '<span class="contact-picker-avatar">' + escapeHtml(initial) + '</span>'
+                    + '<span class="contact-picker-meta">'
+                    + '<span class="contact-picker-name">' + escapeHtml(contact.name || tr('contact', 'Контакт')) + '</span>'
+                    + (contact.username ? '<span class="contact-picker-username">@' + escapeHtml(contact.username) + '</span>' : '')
+                    + '</span>';
+                if (contact.userId) {
+                    card.onclick = function() {
+                        openUserProfileModal({
+                            id: contact.userId,
+                            name: contact.name,
+                            username: contact.username
+                        });
+                    };
+                }
+                div.appendChild(card);
             } else if (m.type === 'call') {
                 let callData = {};
                 try { callData = JSON.parse(m.content || '{}'); } catch(_) {}
@@ -4117,6 +4385,18 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
         // ============================================
         // EMOJI PICKER
         // ============================================
+        function positionEmojiPicker() {
+            const picker = document.getElementById('emojiPicker');
+            const inputArea = document.getElementById('mainInputArea');
+            const chatView = document.getElementById('chatView');
+            if (!picker || !inputArea || !chatView) return;
+
+            const viewRect = chatView.getBoundingClientRect();
+            const inputRect = inputArea.getBoundingClientRect();
+            const offset = Math.max(0, Math.round(viewRect.bottom - inputRect.top));
+            picker.style.bottom = offset + 'px';
+        }
+
         function toggleEmojiPicker() {
             const picker = document.getElementById('emojiPicker');
             const btn = document.getElementById('emojiBtn');
@@ -4129,38 +4409,38 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             if (picker.classList.contains('active')) {
                 closeEmojiPicker();
             } else {
-                picker.classList.add('active');
-                btn.classList.add('active');
-
-                // Закрываем другие панели
                 closeAttachmentPanel();
+                positionEmojiPicker();
+                picker.classList.add('active');
+                if (btn) btn.classList.add('active');
                 renderEmojiPicker();
             }
         }
 
         function closeEmojiPicker() {
-            document.getElementById('emojiPicker').classList.remove('active');
-            document.getElementById('emojiBtn').classList.remove('active');
+            const picker = document.getElementById('emojiPicker');
+            const btn = document.getElementById('emojiBtn');
+            if (picker) picker.classList.remove('active');
+            if (btn) btn.classList.remove('active');
         }
 
         function switchEmojiTab(tab, btn) {
-            console.log('Switching to tab:', tab);
-            // Update tab buttons
             document.querySelectorAll('.emoji-tab').forEach(function(b) {
                 b.classList.remove('active');
             });
             if (btn) btn.classList.add('active');
 
-            const emojiTab = document.getElementById('emojiTabContent');
-            const gifTab = document.getElementById('gifTabContent');
-            const stickerTab = document.getElementById('stickerTabContent');
-            emojiTab.style.display = tab === 'emoji' ? 'flex' : 'none';
-            gifTab.style.display = tab === 'gif' ? 'flex' : 'none';
-            stickerTab.style.display = tab === 'sticker' ? 'flex' : 'none';
-            if (tab === 'gif') {
-                console.log('Loading GIFs...');
-                loadGifs('');
-            }
+            const panels = {
+                emoji: document.getElementById('emojiTabContent'),
+                gif: document.getElementById('gifTabContent'),
+                sticker: document.getElementById('stickerTabContent')
+            };
+            Object.keys(panels).forEach(function(key) {
+                const panel = panels[key];
+                if (panel) panel.classList.toggle('active', key === tab);
+            });
+
+            if (tab === 'gif') loadGifs('');
             if (tab === 'sticker') loadStickers();
         }
 
@@ -4173,17 +4453,8 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             const btnAll = document.getElementById('gifTabAll');
             const btnFav = document.getElementById('gifTabFavorites');
 
-            if (tab === 'all') {
-                btnAll.style.background = 'var(--accent-color)';
-                btnAll.style.color = '#fff';
-                btnFav.style.background = 'var(--bg-tertiary)';
-                btnFav.style.color = 'var(--text-primary)';
-            } else {
-                btnFav.style.background = 'var(--accent-color)';
-                btnFav.style.color = '#fff';
-                btnAll.style.background = 'var(--bg-tertiary)';
-                btnAll.style.color = 'var(--text-primary)';
-            }
+            if (btnAll) btnAll.classList.toggle('active', tab === 'all');
+            if (btnFav) btnFav.classList.toggle('active', tab === 'favorites');
 
             loadGifs(document.getElementById('gifSearch') ? document.getElementById('gifSearch').value : '');
         }
@@ -4508,80 +4779,118 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             'symbols': ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','💟','☮️','✝️','☪️','🕉️','☸️','✡️','🔯','🕎','☯️','☦️','🛐','⛎','♈','♉','♊','♋','♌','♍','♎','♏','♐','♑','♒','♓','🆔','⚛️','🉑','☢️','☣️','📴','📳','🈶','🈚','🈸','🈺','🈷️','✴️','🆚','💮','🉐','㊙️','㊗️','🈴','🈵','🈹','🈲','🅰️','🅱️','🆎','🆑','🅾️','🆘','❌','⭕','🛑','⛔','📛','🚫','💯','💢','♨️','🚷','🚯','🚳','🚱','🔞','📵','🚭','❗','❕','❓','❔','‼️','⁉️','🔅','🔆','〽️','⚠️','🚸','🔱','⚜️','🔰','♻️','✅','🈯','💹','❇️','✳️','❎','🌐','💠','Ⓜ️','🌀','💤','🏧','🚾','♿','🅿️','🈳','🈂','🛂','🛃','🛄','🛅','🛗','🚹','🚺','🚼','⚧️','🚻','🚮','🎦','📶','🈁','🔣','ℹ️','🔤','🔡','🔠','🆖','🆗','🆙','🆒','🆕','🆓','0️⃣','1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟','🔢','#️⃣','*️⃣','⏏️','▶️','⏸️','⏯️','⏹️','⏺️','⏭️','⏮️','⏩','⏪','⏫','⏬','◀️','🔼','🔽','➡️','⬅️','⬆️','⬇️','↗️','↘️','↙️','↖️','↕️','↔️','↪️','↩️','⤴️','⤵️','🔀','🔁','🔂','🔄','🔃','🎵','🎶','➕','➖','➗','✖️','💲','💱','™️','©️','®️','〰️','➰','➿','🔚','🔙','🔛','🔝','🔜','✔️','☑️','🔘','🔴','🟠','🟡','🟢','🔵','🟣','⚫','⚪','🟤','🔺','🔻','🔸','🔹','🔶','🔷','🔳','🔲','▪️','▫️','◾','◽','◼️','◻️','⬛','⬜','🟥','🟧','🟨','🟩','🟦','🟪','🟫','🔈','🔇','🔉','🔊','🔔','🔕','📣','📢','💬','💭','🗯️','♠️','♣️','♥️','♦️','🃏','🎴','🀄','🕐','🕑','🕒','🕓','🕔','🕕','🕖','🕗','🕘','🕙','🕚','🕛','🕜','🕝','🕞','🕟','🕠','🕡','🕢','🕣','🕤','🕥','🕦','🕧']
         };
 
+        function getEmojisForCategory(category) {
+            if (category === 'recent') {
+                return window.getRecentEmojis ? window.getRecentEmojis() : [];
+            }
+            if (window.EmojiData && window.EmojiData[category]) {
+                return window.EmojiData[category];
+            }
+            return DEFAULT_EMOJIS[category] || [];
+        }
+
+        function createEmojiPickerItem(emoji) {
+            const item = document.createElement('div');
+            item.className = 'emoji-item';
+            item.setAttribute('role', 'button');
+            item.setAttribute('tabindex', '0');
+            item.setAttribute('aria-label', emoji);
+            item.textContent = emoji;
+            item.addEventListener('click', function() { insertEmoji(emoji); });
+            return item;
+        }
+
+        function paintEmojiGrid(grid, emojis) {
+            grid.innerHTML = '';
+            const unique = [];
+            const seen = new Set();
+            emojis.forEach(function(emoji) {
+                if (!emoji || seen.has(emoji)) return;
+                seen.add(emoji);
+                unique.push(emoji);
+            });
+
+            if (!unique.length) {
+                grid.innerHTML = '<div class="emoji-grid-empty">' + tr('noEmojis', 'Эмодзи не найдены') + '</div>';
+                return;
+            }
+
+            unique.forEach(function(emoji) {
+                grid.appendChild(createEmojiPickerItem(emoji));
+            });
+
+            if (window.appleEmoji && window.appleEmoji.getEmojiMap) {
+                window.appleEmoji.getEmojiMap(function() {
+                    if (grid.isConnected && window.appleEmoji.processNode) {
+                        window.appleEmoji.processNode(grid);
+                    }
+                });
+            }
+        }
+
         function renderEmojis(category, filter) {
             const grid = document.getElementById('emojiGrid');
-            grid.innerHTML = '';
-            
-            let emojis = [];
-            
-            if (category === 'recent') {
-                emojis = window.getRecentEmojis ? window.getRecentEmojis() : [];
-                if (emojis.length === 0) {
-                    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--text-muted);font-size:14px;">Недавние эмодзи появятся здесь</div>';
-                    return;
-                }
-            } else {
-                // Используем window.EmojiData если есть, иначе DEFAULT_EMOJIS
-                emojis = (window.EmojiData && window.EmojiData[category]) 
-                    ? window.EmojiData[category] 
-                    : (DEFAULT_EMOJIS[category] || []);
+            if (!grid) return;
+
+            let emojis = getEmojisForCategory(category || currentEmojiCategory || 'smileys');
+
+            if (category === 'recent' && emojis.length === 0) {
+                grid.innerHTML = '<div class="emoji-grid-empty">' + tr('recentEmojisEmpty', 'Недавние эмодзи появятся здесь') + '</div>';
+                return;
             }
-            
+
             if (filter) {
                 emojis = emojis.filter(function(e) { return e.indexOf(filter) >= 0; });
             }
-            
-            emojis.forEach(function(emoji) {
-                const item = document.createElement('div');
-                item.className = 'emoji-item';
-                item.textContent = emoji;
-                item.onclick = function() { insertEmoji(emoji); };
-                grid.appendChild(item);
-            });
+
+            paintEmojiGrid(grid, emojis);
         }
 
         function filterEmojis(query) {
-            if (!query) {
+            const q = (query || '').trim();
+            if (!q) {
                 renderEmojis(currentEmojiCategory);
                 return;
             }
 
             const grid = document.getElementById('emojiGrid');
-            grid.innerHTML = '';
+            if (!grid) return;
 
             const allCategories = ['smileys', 'animals', 'food', 'activities', 'travel', 'objects', 'symbols'];
             let allEmojis = [];
 
             allCategories.forEach(function(cat) {
-                if (window.EmojiData && window.EmojiData[cat]) {
-                    allEmojis = allEmojis.concat(window.EmojiData[cat]);
-                }
+                allEmojis = allEmojis.concat(getEmojisForCategory(cat));
             });
 
-            allEmojis = [...new Set(allEmojis)];
-
-            // Фильтруем эмодзи по запросу
-            const filtered = allEmojis.filter(function(emoji) {
-                return emoji.includes(query);
-            });
-
-            filtered.forEach(function(emoji) {
-                const item = document.createElement('div');
-                item.className = 'emoji-item';
-                item.textContent = emoji;
-                item.onclick = function() { insertEmoji(emoji); };
-                grid.appendChild(item);
-            });
+            paintEmojiGrid(grid, allEmojis.filter(function(emoji) {
+                return emoji.includes(q);
+            }));
         }
 
         function insertEmoji(emoji) {
             const input = document.getElementById('msgInput');
+            if (!input || !emoji) return;
+
             input.focus();
-            document.execCommand('insertText', false, emoji);
-            
-            if (window.addToRecent) {
-                window.addToRecent(emoji);
+
+            const selection = window.getSelection();
+            if (selection && selection.rangeCount > 0 && input.contains(selection.anchorNode)) {
+                document.execCommand('insertText', false, emoji);
+            } else {
+                const range = document.createRange();
+                range.selectNodeContents(input);
+                range.collapse(false);
+                selection.removeAllRanges();
+                selection.addRange(range);
+                document.execCommand('insertText', false, emoji);
             }
+
+            if (window.addToRecent) window.addToRecent(emoji);
+            if (window.appleEmoji && window.appleEmoji.processContentEditable) {
+                window.appleEmoji.processContentEditable(input);
+            }
+            if (typeof window._updateSendButton === 'function') window._updateSendButton();
         }
 
         // ============================================
@@ -4701,12 +5010,17 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             }
         });
 
+        window.addEventListener('resize', function() {
+            const picker = document.getElementById('emojiPicker');
+            if (picker && picker.classList.contains('active')) positionEmojiPicker();
+        });
+
         document.addEventListener('click', function(e) {
             const picker = document.getElementById('emojiPicker');
             const btn = document.getElementById('emojiBtn');
             
-            if (picker.classList.contains('active')) {
-                if (!picker.contains(e.target) && !btn.contains(e.target)) {
+            if (picker && picker.classList.contains('active')) {
+                if (!picker.contains(e.target) && !(btn && btn.contains(e.target))) {
                     closeEmojiPicker();
                 }
             }
@@ -5466,7 +5780,11 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                     icon = message.mediaUrl;
                 }
             } else if (message.type === 'file') {
-                body = '📎 Файл';
+                body = '📎 ' + tr('fileMedia', 'Файл');
+            } else if (message.type === 'location') {
+                body = '📍 ' + tr('geoPosition', 'Геопозиция');
+            } else if (message.type === 'contact') {
+                body = '👤 ' + tr('contact', 'Контакт');
             } else {
                 body = message.content || 'Новое сообщение';
             }
@@ -6195,6 +6513,9 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             if (c.lastMessageType === 'video_note') return '⭕ ' + tr('videoNoteMessage', 'Кружок');
             if (c.lastMessageType === 'call' || c.type === 'call') return formatCallLastMessage(c, text);
             if (c.lastMessageType === 'poll') return pollIconSvg(14) + tr('pollMessage', 'Опрос');
+            if (c.lastMessageType === 'file') return '📎 ' + tr('fileMedia', 'Файл');
+            if (c.lastMessageType === 'location') return '📍 ' + tr('geoPosition', 'Геопозиция');
+            if (c.lastMessageType === 'contact') return '👤 ' + tr('contact', 'Контакт');
             return text || '';
         }
 
@@ -6918,8 +7239,9 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
 
             const audioCallBtn = document.getElementById('audioCallBtn');
             const videoCallBtn = document.getElementById('videoCallBtn');
-            if (audioCallBtn) audioCallBtn.style.display = activeChat.type === 'channel' ? 'none' : '';
-            if (videoCallBtn) videoCallBtn.style.display = activeChat.type === 'channel' ? 'none' : '';
+            const hideCallButtons = activeChat.type === 'channel' || !!(chatUsers[id]?.isBot || chatInfo?.isBot);
+            if (audioCallBtn) audioCallBtn.style.display = hideCallButtons ? 'none' : '';
+            if (videoCallBtn) videoCallBtn.style.display = hideCallButtons ? 'none' : '';
             updatePollButtonVisibility();
             setScrollBottomButtonEnabled(true);
             setMentionJumpButtonEnabled(activeChat.type === 'group');

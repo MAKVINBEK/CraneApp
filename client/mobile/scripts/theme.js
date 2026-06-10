@@ -449,10 +449,8 @@
         document.head.appendChild(s);
     })();
 
-    // Подключаем Apple Emoji
+    // Подключаем Apple Emoji на всех экранах
     (function loadAppleEmoji() {
-        const path = window.location.pathname;
-        if (path.includes('/auth/') || path.includes('login.html') || path.includes('register.html')) return;
         if (document.getElementById('apple-emoji-script')) return;
         const s = document.createElement('script');
         s.id = 'apple-emoji-script';
