@@ -1651,7 +1651,7 @@ app.post('/api/v1/upload', uploadLimiter, authMiddleware, async (req, res) => {
 });
 
 // Отдача медиафайлов из БД
-app.get('/api/v1/media/:mediaId', async (req, res) => {
+app.get(['/api/v1/media/:mediaId', '/api/v2/media/:mediaId'], async (req, res) => {
     try {
         const { mediaId } = req.params;
         const result = await query(
@@ -3723,6 +3723,7 @@ app.get('/api/v1/chats', authMiddleware, async (req, res) => {
                     COALESCE(ucs.is_archived, FALSE)  AS user_is_archived,
                     COALESCE(unread.unread_count, 0)   AS unread_count,
                     lm.content      AS last_message_content,
+                    lm.content_plain AS last_message_plain,
                     lm.type         AS last_message_type,
                     lm.sender_id    AS last_message_sender_id,
                     lm.is_encrypted AS last_message_encrypted,
@@ -3736,7 +3737,7 @@ app.get('/api/v1/chats', authMiddleware, async (req, res) => {
              JOIN chat_members cm ON cm.chat_id = c.id AND cm.user_id = $1
              LEFT JOIN user_chat_settings ucs ON ucs.chat_id = c.id AND ucs.user_id = $1
              LEFT JOIN LATERAL (
-                 SELECT content, type, sender_id, is_encrypted, encryption_iv, created_at
+                 SELECT content, content_plain, type, sender_id, is_encrypted, encryption_iv, created_at
                  FROM messages
                  WHERE chat_id = c.id AND is_deleted = FALSE
                    AND parent_message_id IS NULL
@@ -3785,6 +3786,7 @@ app.get('/api/v1/chats', authMiddleware, async (req, res) => {
             pinnedAt: c.user_pinned_at,
             lastMessageAt: c.last_message_at,
             lastMessage: c.last_message_content || '',
+            lastMessagePlain: c.last_message_plain || null,
             lastMessageEncrypted: c.last_message_encrypted || false,
             lastMessageIv: c.last_message_iv || null,
             lastMessageType: c.last_message_type || 'text',

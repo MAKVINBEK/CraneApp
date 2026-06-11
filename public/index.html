@@ -157,19 +157,13 @@
     </div>
 
     <script>
-        // Красивая последовательность загрузки
         const loadingText = document.getElementById('loading-text');
+        loadingText.textContent = 'Подготовка...';
         
-        setTimeout(() => { loadingText.textContent = 'Подготовка...'; }, 800);
-        setTimeout(() => { loadingText.textContent = 'Почти готово...'; }, 1600);
-        setTimeout(() => { 
-            loadingText.textContent = 'Перенаправление...';
-        }, 2200);
-        
-        // Редирект через 2.5 секунды
+        // Быстрый редирект
         setTimeout(() => {
             window.location.href = '/client/mobile/screens/auth/login.html';
-        }, 2500);
+        }, 100);
     </script>
 </body>
 </html>

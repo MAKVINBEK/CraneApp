@@ -127,3 +127,15 @@ function showToast(type, msg, icon) {
     c.appendChild(t);
     setTimeout(() => { t.style.opacity='0'; t.style.transition='opacity 0.3s'; setTimeout(()=>t.remove(),300); }, 3000);
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+    const p2 = document.getElementById('password2');
+    if (p2) {
+        p2.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                doRegister();
+            }
+        });
+    }
+});

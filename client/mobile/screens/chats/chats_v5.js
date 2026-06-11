@@ -454,8 +454,9 @@
 
         // Инициализируем E2E шифрование
         if (token && window.E2E) {
-            window.E2E.init(token).then(ok => {
+            window.e2eInitPromise = window.E2E.init(token).then(ok => {
                 if (ok) console.log('🔐 E2E encryption ready');
+                return ok;
             });
         }
 
@@ -1937,6 +1938,19 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             } else if (adminActions) {
                 adminActions.style.display = 'none';
             }
+
+            // Hide the Report button for bots
+            const profileMenu = document.getElementById('profileMenu');
+            if (profileMenu) {
+                const reportBtn = Array.from(profileMenu.querySelectorAll('.profile-menu-item')).find(btn => btn.getAttribute('onclick') === 'reportUser()');
+                if (reportBtn) {
+                    if (userData.username === 'craneapp_bot' || userData.is_bot) {
+                        reportBtn.style.display = 'none';
+                    } else {
+                        reportBtn.style.display = 'flex';
+                    }
+                }
+            }
             
             // Закрываем меню если открыто
             const menu = document.getElementById('profileMenu');
@@ -2763,7 +2777,8 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                     (pos) => {
                         const locationUrl = `https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}`;
                         const locationText = tr('myLocationMessage', '📍 Моя геопозиция: {url}', { url: locationUrl });
-                        sendMessage(locationText);
+                        document.getElementById('msgInput').textContent = locationText;
+                        send();
                     },
                     (err) => showToast('error', tr('geolocationError', 'Не удалось получить геопозицию'), '❌')
                 );
@@ -2774,8 +2789,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
 
         function shareContact() {
             closeAttachmentPanel();
-            // Открываем модал выбора контакта
-            showContactPicker();
+            showToast('info', tr('featureSoon', 'Функция скоро будет доступна'), 'ℹ️');
         }
 
         const _pollPendingSelections = {};
@@ -3459,7 +3473,9 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             const reader = new FileReader();
             reader.onload = function(e) {
                 const dataUrl = e.target.result;
-                const type = file.type.startsWith('video') ? 'video' : 'image';
+                let type = 'file';
+                if (file.type.startsWith('video')) type = 'video';
+                else if (file.type.startsWith('image')) type = 'image';
                 showMediaSendPreview(dataUrl, type);
             };
             reader.readAsDataURL(file);
@@ -4040,6 +4056,18 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 }
                 textSpan.innerHTML = renderFormattedText(displayContent);
                 
+                // Check if message is purely emoji (1 to 3 emojis)
+                const stripped = displayContent.replace(/[\s\n\r]/g, '');
+                if (stripped.length > 0 && stripped.length <= 15 && !m.forwardFrom && !m.replyToMessageId && !m.replyToData) {
+                    const noEmojis = stripped.replace(/(\p{Emoji_Presentation}|\p{Extended_Pictographic}|\u200d|[\uFE00-\uFE0F])/gu, '');
+                    if (noEmojis.length === 0) {
+                        const emojiMatch = stripped.match(/(\p{Emoji_Presentation}|\p{Extended_Pictographic})/gu);
+                        if (emojiMatch && emojiMatch.length > 0 && emojiMatch.length <= 3) {
+                            div.classList.add('emoji-only-msg');
+                        }
+                    }
+                }
+                
                 // Add spacer for time to prevent overlapping in shrink-to-fit layout
                 const spacer = document.createElement('span');
                 spacer.className = 'msg-time-spacer';
@@ -4120,6 +4148,12 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
         function toggleEmojiPicker() {
             const picker = document.getElementById('emojiPicker');
             const btn = document.getElementById('emojiBtn');
+            const input = document.getElementById('msgInput');
+            
+            // Prevent losing focus if we want to keep caret
+            if (document.activeElement === input) {
+                // Focus will be retained if button is clicked, but wait: button click already happened.
+            }
 
             if (!picker) {
                 console.error('emojiPicker element not found');
@@ -4535,6 +4569,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 const item = document.createElement('div');
                 item.className = 'emoji-item';
                 item.textContent = emoji;
+                item.onmousedown = function(e) { e.preventDefault(); };
                 item.onclick = function() { insertEmoji(emoji); };
                 grid.appendChild(item);
             });
@@ -4569,6 +4604,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                 const item = document.createElement('div');
                 item.className = 'emoji-item';
                 item.textContent = emoji;
+                item.onmousedown = function(e) { e.preventDefault(); };
                 item.onclick = function() { insertEmoji(emoji); };
                 grid.appendChild(item);
             });
@@ -5095,6 +5131,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                                     } else {
                                         msg.content = decrypted;
                                     }
+                                    msg._isDecrypted = true;
                                 } catch (_) {}
                             }
                             if (msg.replyToEncrypted && msg.replyToIv && window.E2E) {
@@ -6233,6 +6270,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             entry.latestMentionAt = entry.latestMentionAt || c.latestMentionAt || null;
             entry.oldestMentionMessageId = entry.oldestMentionMessageId || c.oldestMentionMessageId || null;
             entry.mentionReadAt = entry.mentionReadAt || c.mentionReadAt || null;
+            entry.lastMessagePlain = base.lastMessagePlain || c.lastMessagePlain || null;
             if (c.lastMessageEncrypted && c.lastMessageIv) {
                 entry._rawEncrypted = c.lastMessage;
                 entry._rawIv = c.lastMessageIv;
@@ -6408,11 +6446,19 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
 
                 // Расшифровываем lastMessage для зашифрованных чатов
                 if (window.E2E) {
+                    if (window.e2eInitPromise) {
+                        try { await window.e2eInitPromise; } catch (_) {}
+                    }
                     await Promise.all(allChats.map(async c => {
                         if (c._rawEncrypted && c._rawIv) {
                             try {
                                 const plain = await window.E2E.decrypt(c._rawEncrypted, c._rawIv, c.id, token);
-                                const localizedPlain = isCraneAppBotLastMessage(c) ? localizeBotMessageText(plain) : plain;
+                                let localizedPlain;
+                                if (plain === '🔒 [зашифровано]' && c.lastMessagePlain) {
+                                    localizedPlain = isCraneAppBotLastMessage(c) ? localizeBotMessageText(c.lastMessagePlain) : c.lastMessagePlain;
+                                } else {
+                                    localizedPlain = isCraneAppBotLastMessage(c) ? localizeBotMessageText(plain) : plain;
+                                }
                                 c.lastMessage = formatLastMessageType(c, localizedPlain);
                             } catch (_) {}
                             delete c._rawEncrypted;
@@ -6918,8 +6964,10 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
 
             const audioCallBtn = document.getElementById('audioCallBtn');
             const videoCallBtn = document.getElementById('videoCallBtn');
-            if (audioCallBtn) audioCallBtn.style.display = activeChat.type === 'channel' ? 'none' : '';
-            if (videoCallBtn) videoCallBtn.style.display = activeChat.type === 'channel' ? 'none' : '';
+            const isBotChat = activeChat.type === 'private' && activeChat.otherUser && (activeChat.otherUser.is_bot || activeChat.otherUser.username === 'craneapp_bot');
+            const hideCallBtns = activeChat.type === 'channel' || isBotChat;
+            if (audioCallBtn) audioCallBtn.style.display = hideCallBtns ? 'none' : '';
+            if (videoCallBtn) videoCallBtn.style.display = hideCallBtns ? 'none' : '';
             updatePollButtonVisibility();
             setScrollBottomButtonEnabled(true);
             setMentionJumpButtonEnabled(activeChat.type === 'group');
@@ -6955,7 +7003,6 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
             // Кнопка support requests — только разработчикам в чате с ботом
             const supportBtn = document.getElementById('supportRequestsBtn');
             const reportsBtn = document.getElementById('reportsBtn');
-            const isBotChat = chatUserForBadge && chatUserForBadge.isBot;
             const isDevUser = ['adm1','admin','admin1','qzlfee'].includes((user.username||'').toLowerCase());
             if (isBotChat && isDevUser) {
                 supportBtn.style.display = 'flex';
@@ -7273,6 +7320,7 @@ kindIcon.innerHTML = isAudio ? '📞' : '📹';
                                 } else {
                                     m.content = dec;
                                 }
+                                m._isDecrypted = true;
                             } catch (_) {}
                         }
                         // Расшифровываем replyToContent

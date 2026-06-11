@@ -14,6 +14,7 @@
     <link rel="stylesheet" href="../../styles/redesign.css">
     <script src="/client/mobile/scripts/theme.js"></script>
     <script src="/client/mobile/scripts/emojis.js"></script>
+    <script src="/client/mobile/scripts/apple-emoji.js"></script>
     <script src="/client/mobile/scripts/e2e-crypto.js"></script>
     <script src="/client/mobile/scripts/lucide.min.js"></script>
     <link rel="stylesheet" href="./chats.css?v=1.0.4">
@@ -863,6 +864,7 @@
     <!-- Hidden File Inputs -->
     <input type="file" id="cameraInput" accept="image/*,video/*" capture="environment" style="display:none" onchange="handleFileSelect(this)">
     <input type="file" id="galleryInput" accept="image/*,video/*" style="display:none" onchange="handleFileSelect(this)">
+    <input type="file" id="fileInput" style="display:none" onchange="handleFileSelect(this)">
 
     <!-- Photo Editor Iframe Modal -->
     <div id="photoEditorModal" style="display:none; position:fixed; inset:0; z-index:10000; background:#000;">
@@ -1085,13 +1087,13 @@
                         <button class="input-btn" id="mediaBtn" onclick="toggleAttachmentPanel()" title="Вложения" data-i18n-title="attachments">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
                         </button>
-                        <button class="input-btn" id="emojiBtn" onclick="toggleEmojiPicker()" title="Эмодзи" data-i18n-title="emoji">
+                        <button class="input-btn" id="emojiBtn" onmousedown="event.preventDefault()" onclick="toggleEmojiPicker()" title="Эмодзи" data-i18n-title="emoji">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
                         </button>
                     </div>
                     
                     <!-- Attachment Panel (как в Telegram) -->
-                    <div id="attachmentPanel" class="attachment-panel">
+                    <div id="attachmentPanel" class="attachment-panel" onmousedown="event.preventDefault()">
                         <div class="attachment-grid">
                             <button class="attachment-btn" onclick="openGallery()">
                                 <div class="attachment-icon" style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%)">
@@ -1138,7 +1140,7 @@
                     </button>
                     
                     <!-- Emoji Picker -->
-                    <div class="emoji-picker" id="emojiPicker">
+                    <div class="emoji-picker" id="emojiPicker" onmousedown="event.preventDefault()">
                         <div class="emoji-picker-tabs">
                             <button class="emoji-tab active" onclick="switchEmojiTab('emoji',this)" data-i18n="emojiTabLabel">😊 Эмодзи</button>
                             <button class="emoji-tab" onclick="switchEmojiTab('gif',this)">GIF</button>
