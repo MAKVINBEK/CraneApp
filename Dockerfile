@@ -5,11 +5,12 @@ RUN apk add --no-cache python3 make g++ vips-dev
 
 WORKDIR /app
 
-# Копируем package.json первым для кэширования слоя
-COPY package.json ./
+# Копируем манифесты зависимостей первыми для кэширования слоя
+COPY package.json package-lock.json ./
 
-# Устанавливаем зависимости
-RUN npm install --omit=dev
+# Устанавливаем production-зависимости строго по lockfile и проверяем критичные runtime imports
+RUN npm ci --omit=dev \
+  && node -e "require('express'); require('bcrypt'); require('bcryptjs'); require('sharp')"
 
 # Копируем весь проект
 COPY . .
@@ -19,5 +20,8 @@ ENV NODE_ENV=production
 ENV PORT=3000
 
 EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD wget -qO- "http://127.0.0.1:${PORT}/api/v2/health" >/dev/null || exit 1
 
 CMD ["node", "--max-old-space-size=512", "server/gateway/apiGateway.js"]

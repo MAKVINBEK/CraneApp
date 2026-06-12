@@ -672,8 +672,9 @@ async function start() {
     }
 }
 
-start();
+if (require.main === module) {
+    start();
+    registerProcessHandlers({ logger, pool, server });
+}
 
-registerProcessHandlers({ logger, pool, server });
-
-module.exports = { app, server, wss };
+module.exports = { app, server, wss, start };

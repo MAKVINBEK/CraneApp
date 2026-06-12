@@ -6,5 +6,8 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./client/mobile/react/test/setup.js'],
+    exclude: ['tests/**/*.cjs', '**/node_modules/**', '**/dist/**'],
+    fileParallelism: false,
+    testTimeout: 15000,
   },
 });

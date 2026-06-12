@@ -17,7 +17,6 @@
     "check:architecture": "node scripts/checkArchitecture.js"
   },
   "dependencies": {
-    "@noble/post-quantum": "^0.6.1",
     "applemojis": "^0.0.3",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
@@ -36,7 +35,6 @@
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.16.0",
     "sharp": "^0.33.2",
-    "ts-mls": "^1.6.2",
     "uuid": "^9.0.1",
     "ws": "^8.14.2"
   },
