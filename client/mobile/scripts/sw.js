@@ -1,4 +1,4 @@
-const OFFLINE_URL = '/client/mobile/screens/error/server-down.html';
+const OFFLINE_URL = '/server-down.html';
 
 self.addEventListener('install', e => {
     e.waitUntil(

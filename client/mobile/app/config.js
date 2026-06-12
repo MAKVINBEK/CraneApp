@@ -2,21 +2,18 @@
  * Application Configuration
  */
 
-const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const envApiBaseUrl = import.meta.env?.VITE_API_BASE_URL;
+const envSocketUrl = import.meta.env?.VITE_SOCKET_URL;
 
 export const config = {
   version: '1.0.0',
   appName: 'CraneApp',
 
   // API Configuration
-  apiBaseUrl: isDevelopment
-    ? 'http://localhost:3000/api/v1'
-    : `${window.location.origin}/api/v1`,
+  apiBaseUrl: envApiBaseUrl || `${window.location.origin}/api/v2`,
 
   // WebSocket Configuration
-  socketUrl: isDevelopment
-    ? 'ws://localhost:3000/ws'
-    : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`,
+  socketUrl: envSocketUrl || `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`,
 
   // Media Configuration
   maxFileSize: 50 * 1024 * 1024, // 50MB

@@ -10,7 +10,7 @@ const validate = (req, res, next) => {
 };
 
 router.post('/register', [
-    body('username').isLength({ min: 5, max: 32 }).matches(/^[a-zA-Z0-9_]+$/),
+    body('username').isLength({ min: 3, max: 32 }).matches(/^[a-zA-Z0-9_]+$/),
     body('password').isLength({ min: 6 }),
     body('firstName').notEmpty(),
     validate

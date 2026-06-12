@@ -48,7 +48,7 @@ export const authProvider = {
   logout() {
     authStore.logout();
     this.currentUser = null;
-    window.location.href = '/client/mobile/screens/auth/login.html';
+    window.location.href = '/mobile/login';
   },
 
   updateUser(userData) {

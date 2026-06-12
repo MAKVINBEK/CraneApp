@@ -1,25 +1,89 @@
 version: '3.8'
 
 services:
-  app:
-    build: .
+  edge:
+    build:
+      context: ./backend-v2
+      args:
+        SERVICE: edge
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
-      - PORT=3000
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/craneapp
+      - EDGE_ADDR=:3000
+      - AUTH_URL=http://auth:8081
+      - USER_URL=http://user:8082
+      - CHAT_URL=http://chat:8083
+      - FRONTEND_DIR=/dist
+    depends_on:
+      - auth
+      - user
+      - chat
+    restart: unless-stopped
+    volumes:
+      - ./dist:/dist:ro
+
+  auth:
+    build:
+      context: ./backend-v2
+      args:
+        SERVICE: auth
+    environment:
+      - AUTH_ADDR=:8081
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/craneapp?sslmode=disable
       - REDIS_URL=redis://redis:6379
+      - CRYPTO_URL=http://crypto:5005
     depends_on:
       - db
       - redis
-    volumes:
-      - ./uploads:/app/uploads
-      - ./logs:/app/logs
+      - crypto
+    restart: unless-stopped
+
+  user:
+    build:
+      context: ./backend-v2
+      args:
+        SERVICE: user
+    environment:
+      - USER_ADDR=:8082
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/craneapp?sslmode=disable
+      - REDIS_URL=redis://redis:6379
+      - CRYPTO_URL=http://crypto:5005
+    depends_on:
+      - db
+      - redis
+      - crypto
+    restart: unless-stopped
+
+  chat:
+    build:
+      context: ./backend-v2
+      args:
+        SERVICE: chat
+    environment:
+      - CHAT_ADDR=:8083
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/craneapp?sslmode=disable
+      - REDIS_URL=redis://redis:6379
+      - CRYPTO_URL=http://crypto:5005
+    depends_on:
+      - db
+      - redis
+      - crypto
+    restart: unless-stopped
+
+  crypto:
+    build:
+      context: ./server/crypto-rust
+    ports:
+      - "5005:5005"
+    environment:
+      - CRYPTO_SIGNING_SECRET=local-signing-secret-change-me-32ch
+      - CRYPTO_ENCRYPTION_SECRET=local-encryption-secret-change-me-32
     restart: unless-stopped
 
   db:
     image: postgres:15-alpine
+    ports:
+      - "5433:5432"
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
@@ -30,6 +94,8 @@ services:
 
   redis:
     image: redis:7-alpine
+    ports:
+      - "6380:6379"
     volumes:
       - redis_data:/data
     restart: unless-stopped

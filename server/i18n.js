@@ -21,7 +21,7 @@ const messages = {
     accountBlockedSupport: 'Ваш аккаунт заблокирован. Обратитесь в поддержку.',
     usernamePasswordRequired: 'Введите юзернейм и пароль',
     invalidUsernamePassword: 'Неверный юзернейм или пароль',
-    usernameLength: 'Юзернейм должен содержать 5-32 символа',
+    usernameLength: 'Юзернейм должен содержать 3-32 символа',
     usernameFormat: 'Юзернейм может содержать только буквы, цифры и подчёркивания',
     usernameTaken: 'Юзернейм уже занят',
     passwordMin: 'Пароль должен быть не короче 6 символов',
@@ -33,15 +33,6 @@ const messages = {
     muted: 'Вы замучены',
     mutedCannotSend: 'Вы замучены и не можете отправлять сообщения',
     replyNotFound: 'Сообщение для ответа не найдено',
-    pollGroupOnly: 'Опросы доступны только в групповых чатах',
-    pollQuestionRequired: 'Укажите вопрос опроса',
-    pollOptionsCount: 'В опросе должно быть от 2 до 10 вариантов',
-    pollNotFound: 'Опрос не найден',
-    pollNotPollMessage: 'Сообщение не является опросом',
-    pollInvalidOption: 'Недопустимый вариант ответа',
-    pollSingleOptionOnly: 'Можно выбрать только один вариант',
-    pollOptionIdsRequired: 'Укажите варианты для голосования',
-    messageNotFound: 'Сообщение не найдено',
     titleRequired: 'Введите название',
     membersRequired: 'Добавьте участников',
     groupAddPrivacyNone: '{name} не разрешает добавлять себя в группы',
@@ -129,7 +120,7 @@ const messages = {
     accountBlockedSupport: 'Your account is blocked. Contact support.',
     usernamePasswordRequired: 'Enter username and password',
     invalidUsernamePassword: 'Invalid username or password',
-    usernameLength: 'Username must be 5-32 characters',
+    usernameLength: 'Username must be 3-32 characters',
     usernameFormat: 'Username can only contain letters, numbers, and underscores',
     usernameTaken: 'Username already taken',
     passwordMin: 'Password must be at least 6 characters',
@@ -141,15 +132,6 @@ const messages = {
     muted: 'You are muted',
     mutedCannotSend: 'You are muted and cannot send messages',
     replyNotFound: 'Reply message not found',
-    pollGroupOnly: 'Polls are only available in group chats',
-    pollQuestionRequired: 'Poll question is required',
-    pollOptionsCount: 'A poll must have 2 to 10 options',
-    pollNotFound: 'Poll not found',
-    pollNotPollMessage: 'Message is not a poll',
-    pollInvalidOption: 'Invalid poll option',
-    pollSingleOptionOnly: 'Only one option is allowed',
-    pollOptionIdsRequired: 'optionIds are required',
-    messageNotFound: 'Message not found',
     titleRequired: 'Enter a title',
     membersRequired: 'Add members',
     groupAddPrivacyNone: '{name} does not allow being added to groups',
@@ -224,16 +206,7 @@ const messages = {
     accountBlocked: 'Konto gesperrt', usernamePasswordRequired: 'Benutzername und Passwort eingeben',
     invalidUsernamePassword: 'Ungültiger Benutzername oder Passwort', invalid2FA: 'Ungültiges 2FA-Passwort',
     unknown: 'Unbekannt', browser: 'Browser', localNetwork: 'Lokales Netzwerk',
-    loginNotification: '🔐 Neue Anmeldung bei deinem Konto\n\n📱 Gerät: {device}\n🌍 Standort: {location}\n🌐 IP-Adresse: {ip}\n🕐 Zeit: {time}\n\nWenn du das nicht warst, ändere sofort dein Passwort.',
-    pollGroupOnly: 'Umfragen sind nur in Gruppenchats verfügbar',
-    pollQuestionRequired: 'Umfragefrage erforderlich',
-    pollOptionsCount: 'Eine Umfrage muss 2 bis 10 Optionen haben',
-    pollNotFound: 'Umfrage nicht gefunden',
-    pollNotPollMessage: 'Nachricht ist keine Umfrage',
-    pollInvalidOption: 'Ungültige Umfrageoption',
-    pollSingleOptionOnly: 'Nur eine Option ist erlaubt',
-    pollOptionIdsRequired: 'optionIds sind erforderlich',
-    messageNotFound: 'Nachricht nicht gefunden'
+    loginNotification: '🔐 Neue Anmeldung bei deinem Konto\n\n📱 Gerät: {device}\n🌍 Standort: {location}\n🌐 IP-Adresse: {ip}\n🕐 Zeit: {time}\n\nWenn du das nicht warst, ändere sofort dein Passwort.'
   },
   fr: {
     accessDenied: 'Accès refusé', noToken: 'Aucun jeton fourni', invalidToken: 'Jeton invalide',
@@ -242,16 +215,7 @@ const messages = {
     accountBlocked: 'Compte bloqué', usernamePasswordRequired: 'Entrez le nom d’utilisateur et le mot de passe',
     invalidUsernamePassword: 'Nom d’utilisateur ou mot de passe invalide', invalid2FA: 'Mot de passe 2FA invalide',
     unknown: 'Inconnu', browser: 'Navigateur', localNetwork: 'Réseau local',
-    loginNotification: '🔐 Nouvelle connexion à votre compte\n\n📱 Appareil : {device}\n🌍 Emplacement : {location}\n🌐 Adresse IP : {ip}\n🕐 Heure : {time}\n\nSi ce n’était pas vous, changez immédiatement votre mot de passe.',
-    pollGroupOnly: 'Les sondages sont disponibles uniquement dans les groupes',
-    pollQuestionRequired: 'La question du sondage est requise',
-    pollOptionsCount: 'Un sondage doit avoir de 2 à 10 options',
-    pollNotFound: 'Sondage introuvable',
-    pollNotPollMessage: 'Ce message n’est pas un sondage',
-    pollInvalidOption: 'Option de sondage invalide',
-    pollSingleOptionOnly: 'Une seule option est autorisée',
-    pollOptionIdsRequired: 'optionIds requis',
-    messageNotFound: 'Message introuvable'
+    loginNotification: '🔐 Nouvelle connexion à votre compte\n\n📱 Appareil : {device}\n🌍 Emplacement : {location}\n🌐 Adresse IP : {ip}\n🕐 Heure : {time}\n\nSi ce n’était pas vous, changez immédiatement votre mot de passe.'
   },
   es: {
     accessDenied: 'Acceso denegado', noToken: 'No se proporcionó token', invalidToken: 'Token no válido',
@@ -260,16 +224,7 @@ const messages = {
     accountBlocked: 'Cuenta bloqueada', usernamePasswordRequired: 'Introduce usuario y contraseña',
     invalidUsernamePassword: 'Usuario o contraseña inválidos', invalid2FA: 'Contraseña 2FA inválida',
     unknown: 'Desconocido', browser: 'Navegador', localNetwork: 'Red local',
-    loginNotification: '🔐 Nuevo inicio de sesión en tu cuenta\n\n📱 Dispositivo: {device}\n🌍 Ubicación: {location}\n🌐 Dirección IP: {ip}\n🕐 Hora: {time}\n\nSi no fuiste tú, cambia tu contraseña inmediatamente.',
-    pollGroupOnly: 'Las encuestas solo están disponibles en grupos',
-    pollQuestionRequired: 'La pregunta de la encuesta es obligatoria',
-    pollOptionsCount: 'La encuesta debe tener entre 2 y 10 opciones',
-    pollNotFound: 'Encuesta no encontrada',
-    pollNotPollMessage: 'El mensaje no es una encuesta',
-    pollInvalidOption: 'Opción de encuesta no válida',
-    pollSingleOptionOnly: 'Solo se permite una opción',
-    pollOptionIdsRequired: 'Se requieren optionIds',
-    messageNotFound: 'Mensaje no encontrado'
+    loginNotification: '🔐 Nuevo inicio de sesión en tu cuenta\n\n📱 Dispositivo: {device}\n🌍 Ubicación: {location}\n🌐 Dirección IP: {ip}\n🕐 Hora: {time}\n\nSi no fuiste tú, cambia tu contraseña inmediatamente.'
   },
   it: {
     accessDenied: 'Accesso negato', noToken: 'Token non fornito', invalidToken: 'Token non valido',
@@ -278,16 +233,7 @@ const messages = {
     accountBlocked: 'Account bloccato', usernamePasswordRequired: 'Inserisci username e password',
     invalidUsernamePassword: 'Username o password non validi', invalid2FA: 'Password 2FA non valida',
     unknown: 'Sconosciuto', browser: 'Browser', localNetwork: 'Rete locale',
-    loginNotification: '🔐 Nuovo accesso al tuo account\n\n📱 Dispositivo: {device}\n🌍 Posizione: {location}\n🌐 Indirizzo IP: {ip}\n🕐 Ora: {time}\n\nSe non eri tu, cambia subito la password.',
-    pollGroupOnly: 'I sondaggi sono disponibili solo nei gruppi',
-    pollQuestionRequired: 'La domanda del sondaggio è obbligatoria',
-    pollOptionsCount: 'Un sondaggio deve avere da 2 a 10 opzioni',
-    pollNotFound: 'Sondaggio non trovato',
-    pollNotPollMessage: 'Il messaggio non è un sondaggio',
-    pollInvalidOption: 'Opzione del sondaggio non valida',
-    pollSingleOptionOnly: 'È consentita una sola opzione',
-    pollOptionIdsRequired: 'optionIds obbligatori',
-    messageNotFound: 'Messaggio non trovato'
+    loginNotification: '🔐 Nuovo accesso al tuo account\n\n📱 Dispositivo: {device}\n🌍 Posizione: {location}\n🌐 Indirizzo IP: {ip}\n🕐 Ora: {time}\n\nSe non eri tu, cambia subito la password.'
   },
   pt: {
     accessDenied: 'Acesso negado', noToken: 'Token não fornecido', invalidToken: 'Token inválido',
@@ -296,16 +242,7 @@ const messages = {
     accountBlocked: 'Conta bloqueada', usernamePasswordRequired: 'Informe usuário e senha',
     invalidUsernamePassword: 'Usuário ou senha inválidos', invalid2FA: 'Senha 2FA inválida',
     unknown: 'Desconhecido', browser: 'Navegador', localNetwork: 'Rede local',
-    loginNotification: '🔐 Novo login na sua conta\n\n📱 Dispositivo: {device}\n🌍 Localização: {location}\n🌐 Endereço IP: {ip}\n🕐 Hora: {time}\n\nSe não foi você, altere sua senha imediatamente.',
-    pollGroupOnly: 'Enquetes estão disponíveis apenas em grupos',
-    pollQuestionRequired: 'A pergunta da enquete é obrigatória',
-    pollOptionsCount: 'A enquete deve ter de 2 a 10 opções',
-    pollNotFound: 'Enquete não encontrada',
-    pollNotPollMessage: 'A mensagem não é uma enquete',
-    pollInvalidOption: 'Opção de enquete inválida',
-    pollSingleOptionOnly: 'Apenas uma opção é permitida',
-    pollOptionIdsRequired: 'optionIds são obrigatórios',
-    messageNotFound: 'Mensagem não encontrada'
+    loginNotification: '🔐 Novo login na sua conta\n\n📱 Dispositivo: {device}\n🌍 Localização: {location}\n🌐 Endereço IP: {ip}\n🕐 Hora: {time}\n\nSe não foi você, altere sua senha imediatamente.'
   },
   pl: {
     accessDenied: 'Odmowa dostępu', noToken: 'Brak tokenu', invalidToken: 'Nieprawidłowy token',
@@ -314,16 +251,7 @@ const messages = {
     accountBlocked: 'Konto zablokowane', usernamePasswordRequired: 'Podaj nazwę użytkownika i hasło',
     invalidUsernamePassword: 'Nieprawidłowa nazwa użytkownika lub hasło', invalid2FA: 'Nieprawidłowe hasło 2FA',
     unknown: 'Nieznane', browser: 'Przeglądarka', localNetwork: 'Sieć lokalna',
-    loginNotification: '🔐 Nowe logowanie na konto\n\n📱 Urządzenie: {device}\n🌍 Lokalizacja: {location}\n🌐 Adres IP: {ip}\n🕐 Czas: {time}\n\nJeśli to nie Ty, natychmiast zmień hasło.',
-    pollGroupOnly: 'Ankiety są dostępne tylko w grupach',
-    pollQuestionRequired: 'Pytanie ankiety jest wymagane',
-    pollOptionsCount: 'Ankieta musi mieć od 2 do 10 opcji',
-    pollNotFound: 'Nie znaleziono ankiety',
-    pollNotPollMessage: 'Wiadomość nie jest ankietą',
-    pollInvalidOption: 'Nieprawidłowa opcja ankiety',
-    pollSingleOptionOnly: 'Dozwolona jest tylko jedna opcja',
-    pollOptionIdsRequired: 'Wymagane są optionIds',
-    messageNotFound: 'Nie znaleziono wiadomości'
+    loginNotification: '🔐 Nowe logowanie na konto\n\n📱 Urządzenie: {device}\n🌍 Lokalizacja: {location}\n🌐 Adres IP: {ip}\n🕐 Czas: {time}\n\nJeśli to nie Ty, natychmiast zmień hasło.'
   },
   uk: {
     accessDenied: 'Доступ заборонено', noToken: 'Токен не передано', invalidToken: 'Недійсний токен',
@@ -332,16 +260,7 @@ const messages = {
     accountBlocked: 'Акаунт заблоковано', usernamePasswordRequired: 'Введіть юзернейм і пароль',
     invalidUsernamePassword: 'Невірний юзернейм або пароль', invalid2FA: 'Невірний пароль 2FA',
     unknown: 'Невідомо', browser: 'Браузер', localNetwork: 'Локальна мережа',
-    loginNotification: '🔐 Новий вхід в акаунт\n\n📱 Пристрій: {device}\n🌍 Місцезнаходження: {location}\n🌐 IP-адреса: {ip}\n🕐 Час: {time}\n\nЯкщо це були не ви, негайно змініть пароль.',
-    pollGroupOnly: 'Опитування доступні лише в групових чатах',
-    pollQuestionRequired: 'Потрібно вказати питання опитування',
-    pollOptionsCount: 'В опитуванні має бути від 2 до 10 варіантів',
-    pollNotFound: 'Опитування не знайдено',
-    pollNotPollMessage: 'Повідомлення не є опитуванням',
-    pollInvalidOption: 'Недопустимий варіант відповіді',
-    pollSingleOptionOnly: 'Можна вибрати лише один варіант',
-    pollOptionIdsRequired: 'Потрібно вказати optionIds',
-    messageNotFound: 'Повідомлення не знайдено'
+    loginNotification: '🔐 Новий вхід в акаунт\n\n📱 Пристрій: {device}\n🌍 Місцезнаходження: {location}\n🌐 IP-адреса: {ip}\n🕐 Час: {time}\n\nЯкщо це були не ви, негайно змініть пароль.'
   },
   tr: {
     accessDenied: 'Erişim reddedildi', noToken: 'Token sağlanmadı', invalidToken: 'Geçersiz token',
@@ -350,16 +269,7 @@ const messages = {
     accountBlocked: 'Hesap engellendi', usernamePasswordRequired: 'Kullanıcı adı ve şifre gir',
     invalidUsernamePassword: 'Geçersiz kullanıcı adı veya şifre', invalid2FA: 'Geçersiz 2FA şifresi',
     unknown: 'Bilinmiyor', browser: 'Tarayıcı', localNetwork: 'Yerel ağ',
-    loginNotification: '🔐 Hesabına yeni giriş\n\n📱 Cihaz: {device}\n🌍 Konum: {location}\n🌐 IP adresi: {ip}\n🕐 Zaman: {time}\n\nBu sen değilsen hemen şifreni değiştir.',
-    pollGroupOnly: 'Anketler yalnızca grup sohbetlerinde kullanılabilir',
-    pollQuestionRequired: 'Anket sorusu gerekli',
-    pollOptionsCount: 'Ankette 2 ile 10 seçenek olmalıdır',
-    pollNotFound: 'Anket bulunamadı',
-    pollNotPollMessage: 'Mesaj bir anket değil',
-    pollInvalidOption: 'Geçersiz anket seçeneği',
-    pollSingleOptionOnly: 'Yalnızca bir seçenek seçilebilir',
-    pollOptionIdsRequired: 'optionIds gerekli',
-    messageNotFound: 'Mesaj bulunamadı'
+    loginNotification: '🔐 Hesabına yeni giriş\n\n📱 Cihaz: {device}\n🌍 Konum: {location}\n🌐 IP adresi: {ip}\n🕐 Zaman: {time}\n\nBu sen değilsen hemen şifreni değiştir.'
   }
 };
 
