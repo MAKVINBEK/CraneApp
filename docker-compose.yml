@@ -108,8 +108,8 @@ services:
     ports:
       - "5005:5005"
     environment:
-      - CRYPTO_SIGNING_SECRET=local-signing-secret-change-me-32ch
-      - CRYPTO_ENCRYPTION_SECRET=local-encryption-secret-change-me-32
+      - CRYPTO_SIGNING_SECRET=${CRYPTO_SIGNING_SECRET}
+      - CRYPTO_ENCRYPTION_SECRET=${CRYPTO_ENCRYPTION_SECRET}
     restart: unless-stopped
 
   db:
