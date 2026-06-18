@@ -420,25 +420,33 @@ const loginNotifications = createLoginNotificationService({
     wss,
 });
 
-// Proxy /api/v2/auth/* to Go auth service when AUTH_URL is set.
-// Falls through to Node handler if the Go service is unreachable.
-if (process.env.AUTH_URL) {
-    const _authTarget = process.env.AUTH_URL.replace(/\/$/, '');
-    app.use('/api/v2/auth', async (req, res, next) => {
+function createV2Proxy(envVar, basePath, name) {
+    if (!process.env[envVar]) return (req, res, next) => next();
+    const target = process.env[envVar].replace(/\/$/, '');
+    return async (req, res, next) => {
         try {
             const qs = Object.keys(req.query).length ? '?' + new URLSearchParams(req.query).toString() : '';
-            const url = `${_authTarget}/api/v2/auth${req.path === '/' ? '' : req.path}${qs}`;
+            const url = `${target}${basePath}${req.path === '/' ? '' : req.path}${qs}`;
             const headers = {
-                'content-type': req.headers['content-type'] || 'application/json',
                 'accept-language': req.headers['accept-language'] || '',
                 'x-forwarded-for': req.ip || '',
             };
+            if (req.headers['content-type']) headers['content-type'] = req.headers['content-type'];
+            if (req.headers['content-length']) headers['content-length'] = req.headers['content-length'];
             if (req.headers.authorization) headers.authorization = req.headers.authorization;
 
-            const body = req.method !== 'GET' && req.method !== 'HEAD' && req.body
-                ? JSON.stringify(req.body) : undefined;
+            let body;
+            let duplex;
+            if (req.method !== 'GET' && req.method !== 'HEAD') {
+                if (req.headers['content-type'] && req.headers['content-type'].includes('multipart/form-data')) {
+                    body = req;
+                    duplex = 'half';
+                } else if (req.body && Object.keys(req.body).length > 0) {
+                    body = JSON.stringify(req.body);
+                }
+            }
 
-            const upstream = await fetch(url, { method: req.method, headers, body, signal: AbortSignal.timeout(8000) });
+            const upstream = await fetch(url, { method: req.method, headers, body, duplex, signal: AbortSignal.timeout(15000) });
             const contentType = upstream.headers.get('content-type') || '';
             res.status(upstream.status);
             upstream.headers.forEach((v, k) => {
@@ -450,11 +458,18 @@ if (process.env.AUTH_URL) {
                 res.send(await upstream.text());
             }
         } catch (err) {
-            logger.warn('Auth proxy fallback to Node:', err.message);
+            logger.warn(`${name} proxy fallback to Node:`, err.message);
             next();
         }
-    });
+    };
 }
+
+app.use('/api/v2/auth', createV2Proxy('AUTH_URL', '/api/v2/auth', 'Auth'));
+app.use('/api/v2/users', createV2Proxy('USER_URL', '/api/v2/users', 'User'));
+app.use('/api/v2/encryption', createV2Proxy('USER_URL', '/api/v2/encryption', 'Encryption'));
+app.use('/api/v2/support', createV2Proxy('USER_URL', '/api/v2/support', 'Support'));
+app.use('/api/v2/media', createV2Proxy('MEDIA_URL', '/api/v2/media', 'Media'));
+
 
 app.use('/api/v2/auth', createAuthPrimaryRoutes({
     authLimiter,
