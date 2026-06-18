@@ -72,7 +72,53 @@ function isDeveloper(username) {
 const app = express();
 app.set('trust proxy', 'loopback');
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server, path: '/ws' });
+const wss = new WebSocket.Server({ noServer: true });
+
+server.on('upgrade', (req, socket, head) => {
+    if (req.url.startsWith('/ws')) {
+        if (process.env.CHAT_URL) {
+            const targetUrl = new URL(process.env.CHAT_URL);
+            const proxyReq = http.request({
+                hostname: targetUrl.hostname,
+                port: targetUrl.port,
+                path: req.url,
+                method: req.method,
+                headers: req.headers,
+            });
+
+            proxyReq.on('upgrade', (proxyRes, proxySocket, proxyHead) => {
+                const headers = [`HTTP/1.1 101 Switching Protocols`];
+                for (let i = 0; i < proxyRes.rawHeaders.length; i += 2) {
+                    if (proxyRes.rawHeaders[i].toLowerCase() !== 'connection' && proxyRes.rawHeaders[i].toLowerCase() !== 'upgrade') {
+                        headers.push(`${proxyRes.rawHeaders[i]}: ${proxyRes.rawHeaders[i + 1]}`);
+                    }
+                }
+                headers.push('Connection: Upgrade', 'Upgrade: websocket');
+                socket.write(headers.join('\r\n') + '\r\n\r\n');
+                if (proxyHead && proxyHead.length) socket.write(proxyHead);
+                proxySocket.pipe(socket);
+                socket.pipe(proxySocket);
+                socket.on('close', () => proxySocket.destroy());
+                proxySocket.on('close', () => socket.destroy());
+            });
+
+            proxyReq.on('error', (err) => {
+                logger.warn('WebSocket proxy fallback to Node:', err.message);
+                wss.handleUpgrade(req, socket, head, (ws) => {
+                    wss.emit('connection', ws, req);
+                });
+            });
+
+            proxyReq.end();
+        } else {
+            wss.handleUpgrade(req, socket, head, (ws) => {
+                wss.emit('connection', ws, req);
+            });
+        }
+    } else {
+        socket.destroy();
+    }
+});
 
 global.wss = wss;
 
@@ -464,6 +510,10 @@ function createV2Proxy(envVar, basePath, name) {
     };
 }
 
+app.use('/api/v2/chats', createV2Proxy('CHAT_URL', '/api/v2/chats', 'Chat'));
+app.use('/api/v2/messages', createV2Proxy('CHAT_URL', '/api/v2/messages', 'Messages'));
+app.use('/api/v2/calls', createV2Proxy('CHAT_URL', '/api/v2/calls', 'Calls'));
+app.use('/api/v2/mls', createV2Proxy('CHAT_URL', '/api/v2/mls', 'MLS'));
 app.use('/api/v2/auth', createV2Proxy('AUTH_URL', '/api/v2/auth', 'Auth'));
 app.use('/api/v2/users', createV2Proxy('USER_URL', '/api/v2/users', 'User'));
 app.use('/api/v2/encryption', createV2Proxy('USER_URL', '/api/v2/encryption', 'Encryption'));
