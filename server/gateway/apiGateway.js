@@ -519,6 +519,8 @@ app.use('/api/v2/users', createV2Proxy('USER_URL', '/api/v2/users', 'User'));
 app.use('/api/v2/encryption', createV2Proxy('USER_URL', '/api/v2/encryption', 'Encryption'));
 app.use('/api/v2/support', createV2Proxy('USER_URL', '/api/v2/support', 'Support'));
 app.use('/api/v2/media', createV2Proxy('MEDIA_URL', '/api/v2/media', 'Media'));
+app.use('/api/v2/moderation', createV2Proxy('USER_URL', '/api/v2/moderation', 'Moderation'));
+app.use('/api/v2/reports', createV2Proxy('USER_URL', '/api/v2/reports', 'Reports'));
 
 
 app.use('/api/v2/auth', createAuthPrimaryRoutes({
