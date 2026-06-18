@@ -24,6 +24,18 @@ services:
     volumes:
       - ./dist:/dist:ro
 
+  migrate:
+    build:
+      context: ./backend-v2
+      args:
+        SERVICE: migrate
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/craneapp?sslmode=disable
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: on-failure
+
   auth:
     build:
       context: ./backend-v2
@@ -36,10 +48,14 @@ services:
       - CRYPTO_URL=http://crypto:5005
       - NATS_URL=nats://nats:4222
     depends_on:
-      - db
-      - redis
-      - crypto
-      - nats
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+      crypto:
+        condition: service_started
+      nats:
+        condition: service_started
     restart: unless-stopped
 
   user:
@@ -54,10 +70,14 @@ services:
       - CRYPTO_URL=http://crypto:5005
       - NATS_URL=nats://nats:4222
     depends_on:
-      - db
-      - redis
-      - crypto
-      - nats
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+      crypto:
+        condition: service_started
+      nats:
+        condition: service_started
     restart: unless-stopped
 
   chat:
@@ -72,10 +92,14 @@ services:
       - CRYPTO_URL=http://crypto:5005
       - NATS_URL=nats://nats:4222
     depends_on:
-      - db
-      - redis
-      - crypto
-      - nats
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+      crypto:
+        condition: service_started
+      nats:
+        condition: service_started
     restart: unless-stopped
 
   crypto:
@@ -99,6 +123,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d craneapp"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   redis:
     image: redis:7-alpine
