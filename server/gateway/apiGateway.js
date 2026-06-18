@@ -57,7 +57,7 @@ const createTrafficProtectionMiddleware = require('./middleware/trafficProtectio
 const createGatewayRateLimiters = require('./middleware/rateLimiterMiddleware');
 const { createErrorHandler, notFoundHandler } = require('./middleware/errorHandlers');
 
-const MAX_LOGIN_ATTEMPTS = 5; // синхронизировано с security.js
+const MAX_LOGIN_ATTEMPTS = 10; // синхронизировано с security.js
 
 // Список разработчиков (загружается из переменных окружения)
 const DEVELOPERS = new Set(
@@ -220,8 +220,8 @@ app.use('/uploads', express.static(uploadsDir, {
         }
     }
 }));
-app.use(express.static(path.join(__dirname, '../../public')));
 app.use(express.static(path.join(__dirname, '../../dist')));
+app.use(express.static(path.join(__dirname, '../../public')));
 
 // Simple file upload handler
 function handleFileUpload(base64Data, type, subDir = 'media') {
@@ -419,6 +419,42 @@ const loginNotifications = createLoginNotificationService({
     WebSocket,
     wss,
 });
+
+// Proxy /api/v2/auth/* to Go auth service when AUTH_URL is set.
+// Falls through to Node handler if the Go service is unreachable.
+if (process.env.AUTH_URL) {
+    const _authTarget = process.env.AUTH_URL.replace(/\/$/, '');
+    app.use('/api/v2/auth', async (req, res, next) => {
+        try {
+            const qs = Object.keys(req.query).length ? '?' + new URLSearchParams(req.query).toString() : '';
+            const url = `${_authTarget}/api/v2/auth${req.path === '/' ? '' : req.path}${qs}`;
+            const headers = {
+                'content-type': req.headers['content-type'] || 'application/json',
+                'accept-language': req.headers['accept-language'] || '',
+                'x-forwarded-for': req.ip || '',
+            };
+            if (req.headers.authorization) headers.authorization = req.headers.authorization;
+
+            const body = req.method !== 'GET' && req.method !== 'HEAD' && req.body
+                ? JSON.stringify(req.body) : undefined;
+
+            const upstream = await fetch(url, { method: req.method, headers, body, signal: AbortSignal.timeout(8000) });
+            const contentType = upstream.headers.get('content-type') || '';
+            res.status(upstream.status);
+            upstream.headers.forEach((v, k) => {
+                if (!['content-encoding', 'transfer-encoding', 'connection'].includes(k)) res.setHeader(k, v);
+            });
+            if (contentType.includes('application/json')) {
+                res.json(await upstream.json());
+            } else {
+                res.send(await upstream.text());
+            }
+        } catch (err) {
+            logger.warn('Auth proxy fallback to Node:', err.message);
+            next();
+        }
+    });
+}
 
 app.use('/api/v2/auth', createAuthPrimaryRoutes({
     authLimiter,
