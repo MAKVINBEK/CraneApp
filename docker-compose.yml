@@ -14,6 +14,7 @@ services:
       - USER_URL=http://user:8082
       - CHAT_URL=http://chat:8083
       - MEDIA_URL=http://media:8084
+      - LEGACY_URL=http://legacy:3001
       - FRONTEND_DIR=/dist
       - NATS_URL=nats://nats:4222
     depends_on:
@@ -21,10 +22,28 @@ services:
       - user
       - chat
       - media
+      - legacy
       - nats
     restart: unless-stopped
     volumes:
       - ./dist:/dist:ro
+
+  legacy:
+    build:
+      context: .
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/craneapp?sslmode=disable
+      - JWT_SECRET=${JWT_SECRET}
+      - REDIS_URL=redis://redis:6379
+      - ALLOWED_ORIGINS=http://localhost:3000
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+    restart: unless-stopped
 
   migrate:
     build:

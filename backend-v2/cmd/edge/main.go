@@ -134,6 +134,7 @@ func main() {
 		log.Fatal(err)
 	}
 	chatProxy := httputil.NewSingleHostReverseProxy(chatURL)
+	chatProxy.FlushInterval = -1 // required for WebSocket and streaming
 	chatProxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		log.Printf("chat upstream: %v", err)
 		httpx.ErrorJSON(w, r, http.StatusBadGateway, "upstream_unavailable", "chat service unavailable")
@@ -157,6 +158,16 @@ func main() {
 	adminProxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		log.Printf("admin upstream: %v", err)
 		httpx.ErrorJSON(w, r, http.StatusBadGateway, "upstream_unavailable", "admin service unavailable")
+	}
+
+	legacyURL, err := url.Parse(config.Value("LEGACY_URL", "http://127.0.0.1:3001"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	legacyProxy := httputil.NewSingleHostReverseProxy(legacyURL)
+	legacyProxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		log.Printf("legacy upstream: %v", err)
+		httpx.ErrorJSON(w, r, http.StatusBadGateway, "upstream_unavailable", "legacy service unavailable")
 	}
 
 	frontendDir := config.Value("FRONTEND_DIR", "../dist")
@@ -192,26 +203,13 @@ func main() {
 	// Admin service
 	mux.Handle("/api/v2/admin/", adminProxy)
 
-	// ICE servers for WebRTC calls
-	mux.HandleFunc("/api/v2/calls/ice-servers", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			httpx.ErrorJSON(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
-			return
-		}
-		stunServers := []map[string]any{
-			{"urls": "stun:stun.l.google.com:19302"},
-			{"urls": "stun:stun1.l.google.com:19302"},
-		}
-		httpx.JSON(w, http.StatusOK, map[string]any{"iceServers": stunServers})
-	})
-
-	mux.HandleFunc("/api/v2/emojis", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			httpx.ErrorJSON(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
-			return
-		}
-		httpx.JSON(w, http.StatusOK, map[string]any{"emojis": []any{}})
-	})
+	// Legacy Node Service (stickers, gifs, emojis)
+	mux.Handle("/api/v2/stickers", legacyProxy)
+	mux.Handle("/api/v2/stickers/", legacyProxy)
+	mux.Handle("/api/v2/gifs", legacyProxy)
+	mux.Handle("/api/v2/gifs/", legacyProxy)
+	mux.Handle("/api/v2/emojis", legacyProxy)
+	mux.Handle("/api/v2/emojis/", legacyProxy)
 
 	// Serve static files for frontend, fallback to index.html for React Router
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
