@@ -36,28 +36,34 @@ type tokenVerifier interface {
 }
 
 type Client struct {
-	UserID string
-	Conn   *websocket.Conn
-	Send   chan []byte
-	done   chan struct{}
+	UserID     string
+	Conn       *websocket.Conn
+	Send       chan []byte
+	done       chan struct{}
+	CallRoomID string // non-empty while in a call room
 }
 
 type WSServer struct {
-	db       *sql.DB
-	crypto   tokenVerifier
-	clients  map[string]map[*Client]bool
-	mu       sync.RWMutex
-	register chan *Client
-	unreg    chan *Client
+	db             *sql.DB
+	crypto         tokenVerifier
+	clients        map[string]map[*Client]bool
+	mu             sync.RWMutex
+	register       chan *Client
+	unreg          chan *Client
+	callRooms      *CallRoomManager
+	pendingInvites map[string]json.RawMessage
+	inviteMu       sync.Mutex
 }
 
 func NewWSServer(db *sql.DB, crypto tokenVerifier) *WSServer {
 	ws := &WSServer{
-		db:       db,
-		crypto:   crypto,
-		clients:  make(map[string]map[*Client]bool),
-		register: make(chan *Client),
-		unreg:    make(chan *Client),
+		db:             db,
+		crypto:         crypto,
+		clients:        make(map[string]map[*Client]bool),
+		register:       make(chan *Client),
+		unreg:          make(chan *Client),
+		callRooms:      NewCallRoomManager(),
+		pendingInvites: make(map[string]json.RawMessage),
 	}
 	go ws.run()
 	return ws
@@ -126,6 +132,23 @@ func (ws *WSServer) ServeWS(w http.ResponseWriter, r *http.Request) {
 	client := &Client{UserID: claims.Subject, Conn: conn, Send: make(chan []byte, 256), done: make(chan struct{})}
 	ws.register <- client
 
+	// Deliver pending call invite if any
+	ws.inviteMu.Lock()
+	if invite, ok := ws.pendingInvites[client.UserID]; ok {
+		// Check if the room is still alive
+		var roomID string
+		var tmp map[string]interface{}
+		if json.Unmarshal(invite, &tmp) == nil {
+			roomID, _ = tmp["roomId"].(string)
+		}
+		if roomID != "" && ws.callRooms.GetRoom(roomID) != nil {
+			client.Send <- invite
+		} else {
+			delete(ws.pendingInvites, client.UserID)
+		}
+	}
+	ws.inviteMu.Unlock()
+
 	go ws.writePump(client)
 	go ws.readPump(client)
 	go ws.heartbeat(client)
@@ -133,6 +156,7 @@ func (ws *WSServer) ServeWS(w http.ResponseWriter, r *http.Request) {
 
 func (ws *WSServer) readPump(client *Client) {
 	defer func() {
+		ws.handleCallDisconnect(client)
 		ws.unreg <- client
 		client.Conn.Close()
 	}()
@@ -141,7 +165,6 @@ func (ws *WSServer) readPump(client *Client) {
 		if err != nil {
 			break
 		}
-		// Reset read deadline on any incoming message.
 		client.Conn.SetReadDeadline(time.Now().Add(wsReadDeadline))
 
 		var msg map[string]interface{}
@@ -153,6 +176,7 @@ func (ws *WSServer) readPump(client *Client) {
 		switch msgType {
 		case "ping", "pong":
 			client.Send <- []byte(`{"type":"pong"}`)
+
 		case "chat_message":
 			chatID, _ := msg["chatId"].(string)
 			if chatID != "" {
@@ -178,6 +202,7 @@ func (ws *WSServer) readPump(client *Client) {
 					}
 				}
 			}
+
 		case "typing":
 			chatID, _ := msg["chatId"].(string)
 			if chatID != "" {
@@ -187,10 +212,43 @@ func (ws *WSServer) readPump(client *Client) {
 					ws.BroadcastToChat(chatID, message, client.UserID)
 				}
 			}
-		case "call_invite", "call_invite_response", "webrtc_offer", "webrtc_answer", "webrtc_candidate", "crane_hangup":
+
+		case "call_join":
+			ws.handleCallJoin(client, msg)
+
+		case "call_leave":
+			ws.handleCallLeave(client, msg)
+
+		case "call_offer", "call_answer", "call_ice":
+			to, _ := msg["to"].(string)
+			if to == "" {
+				break
+			}
+			roomID, _ := msg["roomId"].(string)
+			if roomID == "" {
+				roomID = client.CallRoomID
+			}
+			out, _ := json.Marshal(map[string]interface{}{
+				"type":    msgType,
+				"roomId":  roomID,
+				"from":    client.UserID,
+				"payload": msg["payload"],
+			})
+			ws.sendToUser(to, out)
+
+		case "call_invite":
+			ws.handleCallInvite(client, msg)
+
+		case "call_invite_response":
+			ws.handleCallInviteResponse(client, msg)
+
+		// Legacy WebRTC message types — forward as-is with from injected
+		case "webrtc_offer", "webrtc_answer", "webrtc_candidate", "crane_hangup":
 			to, _ := msg["to"].(string)
 			if to != "" {
-				ws.sendToUser(to, message)
+				msg["from"] = client.UserID
+				out, _ := json.Marshal(msg)
+				ws.sendToUser(to, out)
 			} else {
 				chatID, _ := msg["chatId"].(string)
 				if chatID != "" {
@@ -199,6 +257,172 @@ func (ws *WSServer) readPump(client *Client) {
 			}
 		}
 	}
+}
+
+func (ws *WSServer) handleCallJoin(client *Client, msg map[string]interface{}) {
+	roomID, _ := msg["roomId"].(string)
+	if roomID == "" {
+		return
+	}
+	// Ensure room exists — create if caller is first to join
+	if ws.callRooms.GetRoom(roomID) == nil {
+		callKind, _ := msg["callKind"].(string)
+		chatID, _ := msg["chatId"].(string)
+		title, _ := msg["title"].(string)
+		ws.callRooms.CreateRoom(client.UserID, roomID, "group", callKind, chatID, title)
+	}
+	displayName, _ := msg["displayName"].(string)
+	avatarURL, _ := msg["avatarUrl"].(string)
+	r := ws.callRooms.JoinRoom(roomID, client.UserID, displayName, avatarURL)
+	if !r.OK {
+		out, _ := json.Marshal(map[string]interface{}{"type": "call_error", "reason": r.Error})
+		client.Send <- out
+		return
+	}
+	client.CallRoomID = roomID
+	// Send joined confirmation with current peers
+	joined, _ := json.Marshal(map[string]interface{}{
+		"type":   "call_joined",
+		"roomId": roomID,
+		"peers":  r.Peers,
+		"self":   map[string]string{"userId": client.UserID},
+	})
+	client.Send <- joined
+	// Notify existing peers
+	peerJoined, _ := json.Marshal(map[string]interface{}{
+		"type":   "call_peer_joined",
+		"roomId": roomID,
+		"peer": map[string]interface{}{
+			"userId":      client.UserID,
+			"displayName": displayName,
+			"avatarUrl":   avatarURL,
+		},
+	})
+	ws.sendToCallRoom(roomID, peerJoined, client.UserID)
+}
+
+func (ws *WSServer) handleCallLeave(client *Client, msg map[string]interface{}) {
+	roomID, _ := msg["roomId"].(string)
+	if roomID == "" {
+		roomID = client.CallRoomID
+	}
+	if roomID == "" {
+		return
+	}
+	ws.doLeaveRoom(client, roomID)
+}
+
+func (ws *WSServer) doLeaveRoom(client *Client, roomID string) {
+	lr := ws.callRooms.LeaveRoom(roomID, client.UserID)
+	peerLeft, _ := json.Marshal(map[string]interface{}{
+		"type":   "call_peer_left",
+		"roomId": roomID,
+		"peer":   map[string]string{"userId": client.UserID},
+	})
+	ws.sendToCallRoom(roomID, peerLeft, client.UserID)
+	if lr.Closed && lr.Snapshot != nil {
+		go ws.saveCallMessage(lr.Snapshot)
+		ws.inviteMu.Lock()
+		for uid, inv := range ws.pendingInvites {
+			var tmp map[string]interface{}
+			if json.Unmarshal(inv, &tmp) == nil {
+				if rid, _ := tmp["roomId"].(string); rid == roomID {
+					cancelled, _ := json.Marshal(map[string]interface{}{"type": "call_cancelled", "roomId": roomID})
+					ws.sendToUser(uid, cancelled)
+					delete(ws.pendingInvites, uid)
+				}
+			}
+		}
+		ws.inviteMu.Unlock()
+	}
+	client.CallRoomID = ""
+}
+
+func (ws *WSServer) handleCallInvite(client *Client, msg map[string]interface{}) {
+	to, _ := msg["to"].(string)
+	roomID, _ := msg["roomId"].(string)
+	if to == "" || roomID == "" {
+		return
+	}
+	invite, _ := json.Marshal(map[string]interface{}{
+		"type":        "call_incoming",
+		"roomId":      roomID,
+		"kind":        strOrDefault(msg["kind"], "video"),
+		"callType":    strOrDefault(msg["callType"], "p2p"),
+		"from":        client.UserID,
+		"fromName":    msg["fromName"],
+		"fromAvatar":  msg["fromAvatar"],
+		"title":       msg["title"],
+	})
+	ws.sendToUser(to, invite)
+	// Store for offline delivery
+	ws.inviteMu.Lock()
+	ws.pendingInvites[to] = invite
+	ws.inviteMu.Unlock()
+}
+
+func (ws *WSServer) handleCallInviteResponse(client *Client, msg map[string]interface{}) {
+	to, _ := msg["to"].(string)
+	if to == "" {
+		return
+	}
+	roomID, _ := msg["roomId"].(string)
+	accepted, _ := msg["accepted"].(bool)
+	out, _ := json.Marshal(map[string]interface{}{
+		"type":     "call_invite_response",
+		"roomId":   roomID,
+		"from":     client.UserID,
+		"accepted": accepted,
+	})
+	ws.sendToUser(to, out)
+	ws.inviteMu.Lock()
+	delete(ws.pendingInvites, client.UserID)
+	ws.inviteMu.Unlock()
+}
+
+func (ws *WSServer) handleCallDisconnect(client *Client) {
+	if client.CallRoomID == "" {
+		return
+	}
+	ws.doLeaveRoom(client, client.CallRoomID)
+}
+
+func (ws *WSServer) saveCallMessage(snap *RoomSnapshot) {
+	if snap.ChatID == "" {
+		return
+	}
+	status := "missed"
+	var duration int64
+	if snap.AnsweredAt > 0 {
+		status = "answered"
+		duration = (time.Now().UnixMilli() - snap.AnsweredAt) / 1000
+	}
+	content, _ := json.Marshal(map[string]interface{}{
+		"callKind":    snap.CallKind,
+		"status":      status,
+		"duration":    duration,
+		"initiatorId": snap.HostID,
+	})
+	var msgID string
+	err := ws.db.QueryRow(
+		`INSERT INTO messages.messages (chat_id, sender_id, content, type) VALUES ($1, $2, $3, 'call') RETURNING id`,
+		snap.ChatID, snap.HostID, string(content),
+	).Scan(&msgID)
+	if err != nil {
+		log.Printf("saveCallMessage error: %v", err)
+		return
+	}
+	out, _ := json.Marshal(map[string]interface{}{
+		"type":   "new_message",
+		"chatId": snap.ChatID,
+		"message": map[string]interface{}{
+			"id":       msgID,
+			"type":     "call",
+			"content":  string(content),
+			"senderId": snap.HostID,
+		},
+	})
+	ws.BroadcastToChat(snap.ChatID, out, "")
 }
 
 func (ws *WSServer) heartbeat(client *Client) {
@@ -272,6 +496,15 @@ func (ws *WSServer) sendToUser(userID string, message []byte) {
 	ws.sendToUserLocked(userID, message)
 }
 
+func (ws *WSServer) sendToCallRoom(roomID string, message []byte, exceptUserID string) {
+	ids := ws.callRooms.ParticipantIDs(roomID, exceptUserID)
+	ws.mu.RLock()
+	defer ws.mu.RUnlock()
+	for _, uid := range ids {
+		ws.sendToUserLocked(uid, message)
+	}
+}
+
 func (ws *WSServer) sendToUserLocked(userID string, message []byte) {
 	if conns, ok := ws.clients[userID]; ok {
 		for client := range conns {
@@ -287,7 +520,6 @@ func allowedWSOrigin(origin string) bool {
 	for _, allowed := range strings.Split(config.Value("ALLOWED_ORIGINS", "http://localhost:8080,http://127.0.0.1:8080"), ",") {
 		allowed = strings.TrimSpace(allowed)
 		if allowed == "" || allowed == "*" {
-			// Wildcard is never permitted — it opens CSRF on WebSocket upgrades.
 			continue
 		}
 		if allowed == origin {
@@ -295,4 +527,11 @@ func allowedWSOrigin(origin string) bool {
 		}
 	}
 	return false
+}
+
+func strOrDefault(v interface{}, def string) string {
+	if s, ok := v.(string); ok && s != "" {
+		return s
+	}
+	return def
 }

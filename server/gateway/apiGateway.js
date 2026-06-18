@@ -54,9 +54,46 @@ const wss = new WebSocket.Server({ noServer: true });
 
 server.on('upgrade', (req, socket, head) => {
     if (req.url.startsWith('/ws')) {
-        wss.handleUpgrade(req, socket, head, (ws) => {
-            wss.emit('connection', ws, req);
-        });
+        if (process.env.CHAT_URL) {
+            const targetUrl = new URL(process.env.CHAT_URL);
+            const proxyReq = http.request({
+                hostname: targetUrl.hostname,
+                port: targetUrl.port,
+                path: req.url,
+                method: req.method,
+                headers: req.headers,
+            });
+
+            proxyReq.on('upgrade', (proxyRes, proxySocket, proxyHead) => {
+                const headers = ['HTTP/1.1 101 Switching Protocols'];
+                for (let i = 0; i < proxyRes.rawHeaders.length; i += 2) {
+                    const name = proxyRes.rawHeaders[i].toLowerCase();
+                    if (name !== 'connection' && name !== 'upgrade') {
+                        headers.push(`${proxyRes.rawHeaders[i]}: ${proxyRes.rawHeaders[i + 1]}`);
+                    }
+                }
+                headers.push('Connection: Upgrade', 'Upgrade: websocket');
+                socket.write(headers.join('\r\n') + '\r\n\r\n');
+                if (proxyHead && proxyHead.length) socket.write(proxyHead);
+                proxySocket.pipe(socket);
+                socket.pipe(proxySocket);
+                socket.on('close', () => proxySocket.destroy());
+                proxySocket.on('close', () => socket.destroy());
+            });
+
+            proxyReq.on('error', (err) => {
+                logger.warn('WebSocket proxy fallback to Node:', err.message);
+                wss.handleUpgrade(req, socket, head, (ws) => {
+                    wss.emit('connection', ws, req);
+                });
+            });
+
+            proxyReq.end();
+        } else {
+            wss.handleUpgrade(req, socket, head, (ws) => {
+                wss.emit('connection', ws, req);
+            });
+        }
     } else {
         socket.destroy();
     }
