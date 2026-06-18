@@ -18,34 +18,12 @@ const security = require('../middleware/security');
 const i18n = require('../i18n');
 const QRCode = require('qrcode');
 const callRoom = require('../services/call-service/callRoom');
-const createAuthAccountRoutes = require('./routes/authAccountRoutes');
-const createAuthPrimaryRoutes = require('./routes/authPrimaryRoutes');
-const createBlockedUserRoutes = require('./routes/blockedUserRoutes');
 const createCallRoutes = require('./routes/callRoutes');
 const createGifRoutes = require('./routes/gifRoutes');
-const createChatReadRoutes = require('./routes/chatReadRoutes');
-const createChatWriteRoutes = require('./routes/chatWriteRoutes');
 const createEmojiRoutes = require('./routes/emojiRoutes');
-const createEncryptionRoutes = require('./routes/encryptionRoutes');
-const createMlsRoutes = require('./routes/mlsRoutes');
 const createHealthRoutes = require('./routes/healthRoutes');
-const createMediaRoutes = require('./routes/mediaRoutes');
-const createMessageReadRoutes = require('./routes/messageReadRoutes');
-const createMessageSocialRoutes = require('./routes/messageSocialRoutes');
-const createMessageWriteRoutes = require('./routes/messageWriteRoutes');
 const createStickerRoutes = require('./routes/stickerRoutes');
-const createSupportRoutes = require('./routes/supportRoutes');
 const createSpaRoutes = require('./routes/spaRoutes');
-const createUserProfileRoutes = require('./routes/userProfileRoutes');
-const createUserSettingsRoutes = require('./routes/userSettingsRoutes');
-const createUserDeviceRoutes = require('./routes/userDeviceRoutes');
-const createUserPreferenceRoutes = require('./routes/userPreferenceRoutes');
-const createUserStorageRoutes = require('./routes/userStorageRoutes');
-const createUserPasscodeRoutes = require('./routes/userPasscodeRoutes');
-const createUserExportRoutes = require('./routes/userExportRoutes');
-const createReportRoutes = require('./routes/reportRoutes');
-const createModerationRoutes = require('./routes/moderationRoutes');
-const createChatModerationRoutes = require('./routes/chatModerationRoutes');
 const createLoginNotificationService = require('./services/loginNotificationService');
 const createGatewayStartupMigrations = require('./services/gatewayStartupMigrations');
 const createRealtimeGateway = require('./services/realtimeGateway');
@@ -76,45 +54,9 @@ const wss = new WebSocket.Server({ noServer: true });
 
 server.on('upgrade', (req, socket, head) => {
     if (req.url.startsWith('/ws')) {
-        if (process.env.CHAT_URL) {
-            const targetUrl = new URL(process.env.CHAT_URL);
-            const proxyReq = http.request({
-                hostname: targetUrl.hostname,
-                port: targetUrl.port,
-                path: req.url,
-                method: req.method,
-                headers: req.headers,
-            });
-
-            proxyReq.on('upgrade', (proxyRes, proxySocket, proxyHead) => {
-                const headers = [`HTTP/1.1 101 Switching Protocols`];
-                for (let i = 0; i < proxyRes.rawHeaders.length; i += 2) {
-                    if (proxyRes.rawHeaders[i].toLowerCase() !== 'connection' && proxyRes.rawHeaders[i].toLowerCase() !== 'upgrade') {
-                        headers.push(`${proxyRes.rawHeaders[i]}: ${proxyRes.rawHeaders[i + 1]}`);
-                    }
-                }
-                headers.push('Connection: Upgrade', 'Upgrade: websocket');
-                socket.write(headers.join('\r\n') + '\r\n\r\n');
-                if (proxyHead && proxyHead.length) socket.write(proxyHead);
-                proxySocket.pipe(socket);
-                socket.pipe(proxySocket);
-                socket.on('close', () => proxySocket.destroy());
-                proxySocket.on('close', () => socket.destroy());
-            });
-
-            proxyReq.on('error', (err) => {
-                logger.warn('WebSocket proxy fallback to Node:', err.message);
-                wss.handleUpgrade(req, socket, head, (ws) => {
-                    wss.emit('connection', ws, req);
-                });
-            });
-
-            proxyReq.end();
-        } else {
-            wss.handleUpgrade(req, socket, head, (ws) => {
-                wss.emit('connection', ws, req);
-            });
-        }
+        wss.handleUpgrade(req, socket, head, (ws) => {
+            wss.emit('connection', ws, req);
+        });
     } else {
         socket.destroy();
     }
@@ -512,7 +454,6 @@ function createV2Proxy(envVar, basePath, name) {
 
 app.use('/api/v2/chats', createV2Proxy('CHAT_URL', '/api/v2/chats', 'Chat'));
 app.use('/api/v2/messages', createV2Proxy('CHAT_URL', '/api/v2/messages', 'Messages'));
-app.use('/api/v2/calls', createV2Proxy('CHAT_URL', '/api/v2/calls', 'Calls'));
 app.use('/api/v2/mls', createV2Proxy('CHAT_URL', '/api/v2/mls', 'MLS'));
 app.use('/api/v2/auth', createV2Proxy('AUTH_URL', '/api/v2/auth', 'Auth'));
 app.use('/api/v2/users', createV2Proxy('USER_URL', '/api/v2/users', 'User'));
@@ -522,41 +463,6 @@ app.use('/api/v2/media', createV2Proxy('MEDIA_URL', '/api/v2/media', 'Media'));
 app.use('/api/v2/moderation', createV2Proxy('USER_URL', '/api/v2/moderation', 'Moderation'));
 app.use('/api/v2/reports', createV2Proxy('USER_URL', '/api/v2/reports', 'Reports'));
 
-
-app.use('/api/v2/auth', createAuthPrimaryRoutes({
-    authLimiter,
-    bcrypt,
-    createCraneAppBotChat,
-    i18n,
-    isDeveloper,
-    jwt,
-    logger,
-    loginNotifications,
-    maxLoginAttempts: MAX_LOGIN_ATTEMPTS,
-    query,
-    security,
-    uuidv4,
-}));
-
-app.use('/api/v2/auth', createAuthAccountRoutes({
-    authMiddleware,
-    bcrypt,
-    i18n,
-    jwt,
-    logger,
-    QRCode,
-    query,
-    security,
-    uuidv4,
-}));
-
-app.use('/api/v2', createMediaRoutes({
-    authMiddleware,
-    logger,
-    query,
-    uploadLimiter,
-    uuidv4,
-}));
 
 app.use('/api/v2/stickers', createStickerRoutes({
     authMiddleware,
@@ -568,144 +474,6 @@ app.use('/api/v2/stickers', createStickerRoutes({
 }));
 
 app.use('/api/v2/gifs', createGifRoutes({
-    authMiddleware,
-    logger,
-    query,
-    uuidv4,
-}));
-
-app.use('/api/v2', createUserProfileRoutes({
-    authMiddleware,
-    handleFileUpload,
-    isDeveloper,
-    logger,
-    QRCode,
-    query,
-}));
-
-app.use('/api/v2/users', createUserSettingsRoutes({
-    authMiddleware,
-    broadcastSettingsUpdated: (userId) => {
-        wss.clients.forEach(client => {
-            if (client.readyState === WebSocket.OPEN && client.userId === userId) {
-                client.send(JSON.stringify({ type: 'settings_updated' }));
-            }
-        });
-    },
-    i18n,
-    logger,
-    query,
-}));
-
-app.use('/api/v2/users', createUserDeviceRoutes({
-    authMiddleware,
-    logger,
-    query,
-    uuidv4,
-}));
-
-app.use('/api/v2/users', createBlockedUserRoutes({
-    authMiddleware,
-    logger,
-    query,
-    uuidv4,
-}));
-
-app.use('/api/v2/users', createUserPreferenceRoutes({
-    authMiddleware,
-    logger,
-    query,
-}));
-
-app.use('/api/v2/users', createUserStorageRoutes({
-    authMiddleware,
-    logger,
-    projectRoot: path.join(__dirname, '../..'),
-    query,
-}));
-
-app.use('/api/v2/users', createUserPasscodeRoutes({
-    authMiddleware,
-    bcrypt,
-    query,
-}));
-
-app.use('/api/v2/users', createUserExportRoutes({
-    authMiddleware,
-    logger,
-    query,
-}));
-
-app.use('/api/v2/reports', createReportRoutes({
-    authMiddleware,
-    isDeveloper,
-    logger,
-    query,
-    uuidv4,
-}));
-
-app.use('/api/v2/users', createModerationRoutes({
-    authMiddleware,
-    isDeveloper,
-    logger,
-    query,
-}));
-
-app.use('/api/v2/chats', createChatReadRoutes({
-    authMiddleware,
-    logger,
-    query,
-}));
-
-app.use('/api/v2/chats', createChatWriteRoutes({
-    authMiddleware,
-    broadcastToChat,
-    handleFileUpload,
-    logger,
-    pool,
-    query,
-    uuidv4,
-}));
-
-app.use('/api/v2/chats', createChatModerationRoutes({
-    authMiddleware,
-    broadcastToChat,
-    logger,
-    query,
-    uuidv4,
-}));
-
-app.use('/api/v2/messages', createMessageSocialRoutes({
-    authMiddleware,
-    broadcastToChat,
-    logger,
-    query,
-    uuidv4,
-}));
-
-app.use('/api/v2', createMessageReadRoutes({
-    authMiddleware,
-    logger,
-    query,
-}));
-
-app.use('/api/v2/messages', createMessageWriteRoutes({
-    authMiddleware,
-    broadcastToChat,
-    handleBotCommand,
-    logger,
-    query,
-    uuidv4,
-}));
-
-app.use('/api/v2/encryption', createEncryptionRoutes({
-    authMiddleware,
-    logger,
-    query,
-    uuidv4,
-}));
-
-app.use('/api/v2/mls', createMlsRoutes({
     authMiddleware,
     logger,
     query,
@@ -726,15 +494,6 @@ app.use('/api/v2/emojis', createEmojiRoutes({
 // ============================================
 // SUPPORT REQUESTS API
 // ============================================
-
-app.use('/api/v2/support', createSupportRoutes({
-    authMiddleware,
-    broadcastToChat,
-    isDeveloper,
-    logger,
-    query,
-    uuidv4,
-}));
 
 app.use(createErrorHandler({ logger }));
 app.use(notFoundHandler);
