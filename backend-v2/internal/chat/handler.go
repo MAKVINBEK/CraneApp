@@ -102,6 +102,28 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 	case suffix == "" && r.Method == http.MethodGet:
 		chat, err := h.service.Get(r.Context(), current.ID, chatID)
 		respondChat(w, r, chat, err)
+	case suffix == "" && r.Method == http.MethodPatch:
+		var input struct {
+			Title       string `json:"title"`
+			Description string `json:"description"`
+			AvatarURL   string `json:"avatarUrl"`
+		}
+		if !decode(w, r, &input) {
+			return
+		}
+		chat, err := h.service.UpdateChat(r.Context(), current.ID, chatID, input.Title, input.Description, input.AvatarURL)
+		respondChat(w, r, chat, err)
+	case suffix == "" && r.Method == http.MethodDelete:
+		err := h.service.DeleteChat(r.Context(), current.ID, chatID)
+		if errors.Is(err, ErrForbidden) {
+			httpx.ErrorJSON(w, r, http.StatusForbidden, "access_denied", "access denied")
+			return
+		}
+		if err != nil {
+			httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", "delete failed")
+			return
+		}
+		httpx.JSON(w, http.StatusOK, map[string]any{"success": true})
 	case suffix == "/members" && r.Method == http.MethodGet:
 		members, err := h.service.Members(r.Context(), current.ID, chatID)
 		if errors.Is(err, ErrForbidden) {
@@ -199,7 +221,12 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 			httpx.ErrorJSON(w, r, http.StatusForbidden, "access_denied", "access denied")
 			return
 		}
-		httpx.JSON(w, http.StatusOK, map[string]any{"state": map[string]any{"chatId": chatID, "epoch": 0}})
+		epoch, treeState, err := h.service.GetMlsState(r.Context(), chatID)
+		if err != nil {
+			httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", "mls state fetch failed")
+			return
+		}
+		httpx.JSON(w, http.StatusOK, map[string]any{"state": map[string]any{"chatId": chatID, "epoch": epoch, "groupState": treeState}})
 	case suffix == "/pin" && (r.Method == http.MethodPost || r.Method == http.MethodDelete):
 		respondSuccess(w, r, h.service.SetFlag(r.Context(), current.ID, chatID, "pin", r.Method == http.MethodPost))
 	case suffix == "/archive" && (r.Method == http.MethodPost || r.Method == http.MethodDelete):
@@ -224,9 +251,19 @@ func (h *Handler) CallRoom(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &input) {
 		return
 	}
+	current := authctx.MustUser(r)
+	roomID, err := h.service.CreateCallRoom(r.Context(), current.ID, input.ChatID, input.Type, input.Title)
+	if errors.Is(err, ErrForbidden) {
+		httpx.ErrorJSON(w, r, http.StatusForbidden, "access_denied", "access denied")
+		return
+	}
+	if err != nil {
+		httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", "room creation failed")
+		return
+	}
 	httpx.JSON(w, http.StatusCreated, map[string]any{
 		"room": map[string]string{
-			"id":     randomID(),
+			"id":     roomID,
 			"type":   input.Type,
 			"chatId": input.ChatID,
 			"title":  input.Title,

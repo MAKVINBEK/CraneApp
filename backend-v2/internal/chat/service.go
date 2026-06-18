@@ -220,6 +220,45 @@ func (s *Service) CreateGroup(ctx context.Context, ownerID, title, description, 
 	return chatID, tx.Commit()
 }
 
+func (s *Service) UpdateChat(ctx context.Context, actorID, chatID, title, description, avatarURL string) (Chat, error) {
+	role, err := s.memberRole(ctx, actorID, chatID)
+	if err != nil {
+		return Chat{}, err
+	}
+	if role != "owner" && role != "admin" {
+		return Chat{}, ErrForbidden
+	}
+
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return Chat{}, ErrInvalidInput
+	}
+
+	_, err = s.db.ExecContext(ctx, `
+		UPDATE chats.chats
+		SET title = $1, description = $2, avatar_url = $3, updated_at = NOW()
+		WHERE id = $4
+	`, title, description, avatarURL, chatID)
+	if err != nil {
+		return Chat{}, err
+	}
+
+	return s.Get(ctx, actorID, chatID)
+}
+
+func (s *Service) DeleteChat(ctx context.Context, actorID, chatID string) error {
+	role, err := s.memberRole(ctx, actorID, chatID)
+	if err != nil {
+		return err
+	}
+	if role != "owner" {
+		return ErrForbidden
+	}
+
+	_, err = s.db.ExecContext(ctx, `DELETE FROM chats.chats WHERE id = $1`, chatID)
+	return err
+}
+
 func (s *Service) Members(ctx context.Context, userID, chatID string) ([]Member, error) {
 	if ok, err := s.isMember(ctx, userID, chatID); err != nil || !ok {
 		if err != nil {
@@ -969,4 +1008,27 @@ func (s *Service) ListFavorites(ctx context.Context, userID string, limit, offse
 	}
 	defer rows.Close()
 	return scanMessages(rows)
+}
+
+func (s *Service) CreateCallRoom(ctx context.Context, userID, chatID, callType, title string) (string, error) {
+	if ok, err := s.IsMember(ctx, userID, chatID); err != nil || !ok {
+		return "", ErrForbidden
+	}
+	var roomID string
+	err := s.db.QueryRowContext(ctx, `
+		INSERT INTO calls.rooms (chat_id, type, title, initiator_id)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id::text
+	`, chatID, callType, title, userID).Scan(&roomID)
+	return roomID, err
+}
+
+func (s *Service) GetMlsState(ctx context.Context, chatID string) (int64, string, error) {
+	var epoch int64
+	var treeState sql.NullString
+	err := s.db.QueryRowContext(ctx, `SELECT epoch, tree_structure FROM crypto.group_mls_state WHERE chat_id = $1`, chatID).Scan(&epoch, &treeState)
+	if err == sql.ErrNoRows {
+		return 0, "", nil
+	}
+	return epoch, treeState.String, err
 }

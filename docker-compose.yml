@@ -14,10 +14,12 @@ services:
       - USER_URL=http://user:8082
       - CHAT_URL=http://chat:8083
       - FRONTEND_DIR=/dist
+      - NATS_URL=nats://nats:4222
     depends_on:
       - auth
       - user
       - chat
+      - nats
     restart: unless-stopped
     volumes:
       - ./dist:/dist:ro
@@ -32,10 +34,12 @@ services:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/craneapp?sslmode=disable
       - REDIS_URL=redis://redis:6379
       - CRYPTO_URL=http://crypto:5005
+      - NATS_URL=nats://nats:4222
     depends_on:
       - db
       - redis
       - crypto
+      - nats
     restart: unless-stopped
 
   user:
@@ -48,10 +52,12 @@ services:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/craneapp?sslmode=disable
       - REDIS_URL=redis://redis:6379
       - CRYPTO_URL=http://crypto:5005
+      - NATS_URL=nats://nats:4222
     depends_on:
       - db
       - redis
       - crypto
+      - nats
     restart: unless-stopped
 
   chat:
@@ -64,10 +70,12 @@ services:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/craneapp?sslmode=disable
       - REDIS_URL=redis://redis:6379
       - CRYPTO_URL=http://crypto:5005
+      - NATS_URL=nats://nats:4222
     depends_on:
       - db
       - redis
       - crypto
+      - nats
     restart: unless-stopped
 
   crypto:
@@ -98,6 +106,12 @@ services:
       - "6380:6379"
     volumes:
       - redis_data:/data
+    restart: unless-stopped
+
+  nats:
+    image: nats:alpine
+    ports:
+      - "4222:4222"
     restart: unless-stopped
 
 volumes:

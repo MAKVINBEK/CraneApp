@@ -153,10 +153,39 @@ func (ws *WSServer) readPump(client *Client) {
 		switch msgType {
 		case "ping", "pong":
 			client.Send <- []byte(`{"type":"pong"}`)
-		case "chat_message", "typing":
+		case "chat_message":
 			chatID, _ := msg["chatId"].(string)
 			if chatID != "" {
-				ws.BroadcastToChat(chatID, message, client.UserID)
+				content, _ := msg["content"].(string)
+				mType, _ := msg["messageType"].(string)
+				if mType == "" {
+					mType = "text"
+				}
+				var isMember bool
+				ws.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM chats.members WHERE chat_id = $1 AND user_id = $2)`, chatID, client.UserID).Scan(&isMember)
+				if isMember {
+					var msgID string
+					err := ws.db.QueryRow(`
+						INSERT INTO messages.messages (chat_id, sender_id, content, type)
+						VALUES ($1, $2, $3, $4) RETURNING id`,
+						chatID, client.UserID, content, mType).Scan(&msgID)
+					if err == nil {
+						msg["id"] = msgID
+						msg["senderId"] = client.UserID
+						msg["createdAt"] = time.Now().Format(time.RFC3339Nano)
+						newMessage, _ := json.Marshal(msg)
+						ws.BroadcastToChat(chatID, newMessage, client.UserID)
+					}
+				}
+			}
+		case "typing":
+			chatID, _ := msg["chatId"].(string)
+			if chatID != "" {
+				var isMember bool
+				ws.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM chats.members WHERE chat_id = $1 AND user_id = $2)`, chatID, client.UserID).Scan(&isMember)
+				if isMember {
+					ws.BroadcastToChat(chatID, message, client.UserID)
+				}
 			}
 		case "call_invite", "call_invite_response", "webrtc_offer", "webrtc_answer", "webrtc_candidate", "crane_hangup":
 			to, _ := msg["to"].(string)
@@ -209,6 +238,13 @@ func (ws *WSServer) writePump(client *Client) {
 }
 
 func (ws *WSServer) BroadcastToChat(chatID string, message []byte, excludeUserID string) {
+	if excludeUserID != "" {
+		var isMember bool
+		if err := ws.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM chats.members WHERE chat_id = $1 AND user_id = $2)`, chatID, excludeUserID).Scan(&isMember); err != nil || !isMember {
+			return
+		}
+	}
+
 	rows, err := ws.db.Query(`SELECT user_id FROM chats.members WHERE chat_id = $1`, chatID)
 	if err != nil {
 		return
