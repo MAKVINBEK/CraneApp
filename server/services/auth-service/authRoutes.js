@@ -47,7 +47,7 @@ router.get('/me', async (req, res) => {
         const jwt = require('jsonwebtoken');
         const { query } = require('../../../database/database');
         const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET);
-        const result = await query('SELECT id, username, first_name, last_name FROM users WHERE id = $1', [decoded.userId]);
+        const result = await query('SELECT id, username, first_name, last_name FROM users WHERE id = $1', [decoded.userId ?? decoded.subject]);
         if (result.rows.length === 0) return res.status(401).json({ success: false, error: 'User not found' });
         res.status(200).json({ success: true, user: result.rows[0] });
     } catch (error) {

@@ -126,7 +126,7 @@ function createAuthAccountRoutes({
                 try {
                     const token = authHeader.split(' ')[1];
                     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-                    scanningUserId = decoded.userId;
+                    scanningUserId = decoded.userId ?? decoded.subject;
                 } catch (_) {}
             }
 
@@ -167,7 +167,7 @@ function createAuthAccountRoutes({
             const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET);
             const result = await query(
                 'SELECT id, username, first_name, last_name, avatar_url, bio, badge, is_bot FROM users WHERE id = $1',
-                [decoded.userId]
+                [decoded.userId ?? decoded.subject]
             );
             const user = result.rows[0];
             if (!user) return res.status(401).json({ error: req.t('userNotFound') });

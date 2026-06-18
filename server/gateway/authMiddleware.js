@@ -28,12 +28,12 @@ const authMiddleware = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     req.user = {
-      userId: decoded.userId,
+      userId: decoded.userId ?? decoded.subject,
       phone: decoded.phone,
-      username: decoded.username
+      username: decoded.username ?? decoded.username
     };
 
-    req.headers['x-user-id'] = decoded.userId;
+    req.headers['x-user-id'] = decoded.userId ?? decoded.subject;
 
     next();
   } catch (error) {
@@ -76,11 +76,11 @@ const optionalAuthMiddleware = async (req, res, next) => {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       
       req.user = {
-        userId: decoded.userId,
+        userId: decoded.userId ?? decoded.subject,
         phone: decoded.phone,
         username: decoded.username
       };
-      req.headers['x-user-id'] = decoded.userId;
+      req.headers['x-user-id'] = decoded.userId ?? decoded.subject;
     }
 
     next();

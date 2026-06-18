@@ -44,7 +44,10 @@ func main() {
 	if *domain == "chats" || *domain == "all" {
 		migrateChats(ctx, tx)
 	}
-	if *domain != "auth" && *domain != "users" && *domain != "chats" && *domain != "all" {
+	if *domain == "messages" || *domain == "all" {
+		migrateMessages(ctx, tx)
+	}
+	if *domain != "auth" && *domain != "users" && *domain != "chats" && *domain != "messages" && *domain != "all" {
 		log.Fatalf("unknown domain %q", *domain)
 	}
 
@@ -89,11 +92,26 @@ func migrateAuth(ctx context.Context, tx *sql.Tx) {
 	}
 	affected, _ := result.RowsAffected()
 
+	result, err = tx.ExecContext(ctx, `
+		INSERT INTO auth.sessions (id, user_id, refresh_token_hash, expires_at, created_at)
+		SELECT id, user_id, refresh_token, expires_at, created_at
+		FROM public.sessions
+		WHERE user_id IN (SELECT id FROM auth.users)
+		ON CONFLICT (id) DO UPDATE SET
+			refresh_token_hash = EXCLUDED.refresh_token_hash,
+			expires_at = EXCLUDED.expires_at
+	`)
+	if err != nil {
+		log.Fatalf("migrate auth sessions: %v", err)
+	}
+	sessionsAffected, _ := result.RowsAffected()
+
 	var migratedCount int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM auth.users`).Scan(&migratedCount); err != nil {
 		log.Fatalf("count migrated auth users: %v", err)
 	}
-	fmt.Printf("auth: legacy users=%d migrated users=%d affected=%d\n", legacyCount, migratedCount, affected)
+
+	fmt.Printf("auth: legacy users=%d migrated users=%d affected=%d sessions_affected=%d\n", legacyCount, migratedCount, affected, sessionsAffected)
 	if migratedCount < legacyCount {
 		log.Fatalf("auth integrity check failed: migrated count is lower than legacy count")
 	}
@@ -108,7 +126,7 @@ func migrateUsers(ctx context.Context, tx *sql.Tx) {
 			COALESCE(u.last_name, ''),
 			COALESCE(u.bio, ''),
 			COALESCE(u.avatar_url, ''),
-			COALESCE(u.badges, '{}'),
+			CASE WHEN u.is_verified THEN '{verified}' ELSE '{}' END::text[],
 			COALESCE(u.is_premium, FALSE),
 			COALESCE(u.created_at, NOW()),
 			COALESCE(u.updated_at, NOW())
@@ -178,6 +196,40 @@ func migrateUsers(ctx context.Context, tx *sql.Tx) {
 		log.Fatalf("count user profiles: %v", err)
 	}
 	fmt.Printf("users: profiles=%d affected_profiles=%d affected_settings=%d affected_blocked=%d\n", profiles, profilesAffected, settingsAffected, blockedAffected)
+
+	// Rebind public.user_sessions foreign key to auth.users
+	if _, err := tx.ExecContext(ctx, `DELETE FROM public.user_sessions WHERE user_id NOT IN (SELECT id FROM auth.users)`); err != nil {
+		log.Fatalf("delete orphaned user_sessions: %v", err)
+	}
+	
+	// Drop old foreign key. We find it dynamically in case it has a different name.
+	if _, err := tx.ExecContext(ctx, `
+		DO $$
+		DECLARE fk_name text;
+		BEGIN
+			SELECT constraint_name INTO fk_name
+			FROM information_schema.key_column_usage
+			WHERE table_schema = 'public' AND table_name = 'user_sessions' AND column_name = 'user_id'
+			AND constraint_name IN (
+				SELECT constraint_name FROM information_schema.table_constraints WHERE constraint_type = 'FOREIGN KEY'
+			) LIMIT 1;
+			
+			IF fk_name IS NOT NULL THEN
+				EXECUTE 'ALTER TABLE public.user_sessions DROP CONSTRAINT ' || fk_name;
+			END IF;
+		END $$;
+	`); err != nil {
+		log.Fatalf("drop old foreign key for user_sessions: %v", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		ALTER TABLE public.user_sessions 
+		ADD CONSTRAINT user_sessions_user_id_fkey 
+		FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
+	`); err != nil {
+		log.Fatalf("add new foreign key for user_sessions: %v", err)
+	}
+	fmt.Println("users: successfully rebound public.user_sessions foreign key to auth.users")
 }
 
 func migrateChats(ctx context.Context, tx *sql.Tx) {
@@ -267,4 +319,118 @@ func migrateChats(ctx context.Context, tx *sql.Tx) {
 		log.Fatalf("count chats: %v", err)
 	}
 	fmt.Printf("chats: chats=%d affected_chats=%d affected_members=%d affected_settings=%d affected_bans=%d\n", chatsCount, chatsAffected, membersAffected, settingsAffected, bansAffected)
+}
+
+func migrateMessages(ctx context.Context, tx *sql.Tx) {
+	result, err := tx.ExecContext(ctx, `
+		INSERT INTO messages.messages (id, chat_id, sender_id, content, type, reply_to, metadata, created_at, updated_at, deleted_at)
+		SELECT
+			m.id,
+			m.chat_id,
+			m.sender_id,
+			COALESCE(m.content, ''),
+			COALESCE(m.type, 'text'),
+			m.reply_to_message_id,
+			jsonb_build_object(
+				'media_url', m.media_url,
+				'media_type', m.media_type,
+				'media_encrypted', m.media_encrypted,
+				'media_encryption', m.media_encryption,
+				'forwarded_from', m.forwarded_from,
+				'voice_duration', m.voice_duration,
+				'is_edited', m.is_edited,
+				'is_encrypted', m.is_encrypted,
+				'encryption_iv', m.encryption_iv,
+				'is_mls', m.is_mls,
+				'mls_epoch', m.mls_epoch
+			) as metadata,
+			COALESCE(m.created_at, NOW()),
+			COALESCE(m.edited_at, m.created_at, NOW()),
+			m.deleted_at
+		FROM public.messages m
+		JOIN chats.chats c ON c.id = m.chat_id
+		LEFT JOIN auth.users u ON u.id = m.sender_id
+		ON CONFLICT (id) DO UPDATE SET
+			content = EXCLUDED.content,
+			type = EXCLUDED.type,
+			metadata = EXCLUDED.metadata,
+			updated_at = EXCLUDED.updated_at,
+			deleted_at = EXCLUDED.deleted_at
+	`)
+	if err != nil {
+		log.Fatalf("migrate messages: %v", err)
+	}
+	messagesAffected, _ := result.RowsAffected()
+
+	var exists bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='message_reactions')`).Scan(&exists); err != nil {
+		log.Fatalf("check message_reactions table: %v", err)
+	}
+
+	if exists {
+		result, err = tx.ExecContext(ctx, `
+			INSERT INTO messages.reactions (id, message_id, user_id, emoji, created_at)
+			SELECT r.id, r.message_id, r.user_id, r.emoji, COALESCE(r.created_at, NOW())
+			FROM public.message_reactions r
+			JOIN messages.messages m ON m.id = r.message_id
+			JOIN auth.users u ON u.id = r.user_id
+			ON CONFLICT (message_id, user_id, emoji) DO NOTHING
+		`)
+		if err != nil {
+			log.Fatalf("migrate message_reactions: %v", err)
+		}
+	} else {
+		result, err = tx.ExecContext(ctx, `
+			INSERT INTO messages.reactions (id, message_id, user_id, emoji, created_at)
+			SELECT r.id, r.message_id, r.user_id, r.emoji, COALESCE(r.created_at, NOW())
+			FROM public.reactions r
+			JOIN messages.messages m ON m.id = r.message_id
+			JOIN auth.users u ON u.id = r.user_id
+			ON CONFLICT (message_id, user_id, emoji) DO NOTHING
+		`)
+		if err != nil {
+			log.Printf("migrate reactions fallback failed: %v", err)
+		}
+	}
+	var reactionsAffected int64
+	if result != nil {
+		reactionsAffected, _ = result.RowsAffected()
+	}
+
+	// Pinned messages
+	result, err = tx.ExecContext(ctx, `
+		INSERT INTO messages.pins (chat_id, message_id, pinned_by, pinned_at)
+		SELECT m.chat_id, m.id, m.sender_id, m.pinned_at
+		FROM public.messages m
+		JOIN chats.chats c ON c.id = m.chat_id
+		WHERE m.is_pinned = TRUE AND m.pinned_at IS NOT NULL
+		ON CONFLICT (chat_id, message_id) DO NOTHING
+	`)
+	if err != nil {
+		log.Fatalf("migrate pinned messages: %v", err)
+	}
+	pinsAffected, _ := result.RowsAffected()
+
+	// Favorites
+	var favsExists bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='favorite_messages')`).Scan(&favsExists); err != nil {
+		log.Fatalf("check favorite_messages table: %v", err)
+	}
+	var favsAffected int64
+	if favsExists {
+		result, err = tx.ExecContext(ctx, `
+			INSERT INTO messages.favorites (user_id, message_id, created_at)
+			SELECT mf.user_id, mf.message_id, COALESCE(mf.created_at, NOW())
+			FROM public.favorite_messages mf
+			JOIN messages.messages m ON m.id = mf.message_id
+			JOIN auth.users u ON u.id = mf.user_id
+			ON CONFLICT DO NOTHING
+		`)
+		if err != nil {
+			log.Fatalf("migrate favorite_messages: %v", err)
+		}
+		favsAffected, _ = result.RowsAffected()
+	}
+
+	fmt.Printf("messages: affected_messages=%d affected_reactions=%d affected_pins=%d affected_favorites=%d\n", messagesAffected, reactionsAffected, pinsAffected, favsAffected)
 }

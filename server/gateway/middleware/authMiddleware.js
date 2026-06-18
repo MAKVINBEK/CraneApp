@@ -27,7 +27,7 @@ function createAuthMiddleware({ i18n, jwt, logger, query }) {
                  FROM users u
                  LEFT JOIN user_settings us ON us.user_id = u.id
                  WHERE u.id = $1`,
-                [decoded.userId]
+                [decoded.userId ?? decoded.subject]
             );
 
             if (result.rows.length === 0) {

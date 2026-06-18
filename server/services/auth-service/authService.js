@@ -116,7 +116,7 @@ async function verifyToken(token) {
         
         const result = await query(
             'SELECT id, username, first_name, last_name FROM users WHERE id = $1',
-            [decoded.userId]
+            [decoded.userId ?? decoded.subject]
         );
 
         if (result.rows.length === 0) {
