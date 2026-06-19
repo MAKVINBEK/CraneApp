@@ -13,14 +13,13 @@ FROM golang:1.26-alpine AS gobuilder
 WORKDIR /src
 COPY backend-v2/go.mod backend-v2/go.sum ./
 RUN go mod download
-RUN echo "build:20260619-4"
 COPY backend-v2/ .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/auth   ./cmd/auth && \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/user   ./cmd/user && \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/chat   ./cmd/chat && \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/media  ./cmd/media && \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/edge   ./cmd/edge && \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/migrate ./cmd/migrate
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.buildID=20260619a" -o /out/auth   ./cmd/auth && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.buildID=20260619a" -o /out/user   ./cmd/user && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.buildID=20260619a" -o /out/chat   ./cmd/chat && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.buildID=20260619a" -o /out/media  ./cmd/media && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.buildID=20260619a" -o /out/edge   ./cmd/edge && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.buildID=20260619a" -o /out/migrate ./cmd/migrate
 
 # Stage 3: Build crypto-rust
 FROM rust:1.94-slim AS cryptobuilder
