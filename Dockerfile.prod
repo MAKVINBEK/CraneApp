@@ -3,7 +3,7 @@ FROM node:20-alpine AS frontend
 WORKDIR /app
 COPY package.json package-lock.json* pnpm-lock.yaml* ./
 RUN npm install --frozen-lockfile 2>/dev/null || npm install
-COPY vite.config.js index.html ./
+COPY vite.config.js index.html mobile.html ./
 COPY client ./client
 COPY public ./public
 RUN npm run build:react
@@ -28,12 +28,20 @@ COPY server/crypto-rust/Cargo.toml server/crypto-rust/Cargo.lock ./
 COPY server/crypto-rust/src ./src
 RUN cargo build --release --locked
 
-# Stage 4: Final image
+# Stage 4: Download NATS server
+FROM debian:bookworm-slim AS natsdownload
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && \
+    curl -fsSL https://github.com/nats-io/nats-server/releases/download/v2.10.22/nats-server-v2.10.22-linux-amd64.tar.gz \
+    | tar -xz --strip-components=1 -C /usr/local/bin nats-server-v2.10.22-linux-amd64/nats-server
+
+# Stage 5: Final image
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     supervisor \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+COPY --from=natsdownload /usr/local/bin/nats-server /usr/local/bin/nats-server
 
 COPY --from=gobuilder   /out/auth     /usr/local/bin/auth
 COPY --from=gobuilder   /out/user     /usr/local/bin/user
