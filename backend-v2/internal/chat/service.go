@@ -77,7 +77,7 @@ func (s *Service) List(ctx context.Context, userID string, archived bool) ([]Cha
 		SELECT c.id::text, c.type, c.title, c.description, c.avatar_url, c.owner_id::text,
 		       cm.role, COALESCE(cs.is_pinned, FALSE), COALESCE(cs.is_archived, FALSE),
 		       COALESCE(cs.last_read_at::text, ''), c.created_at::text, c.updated_at::text,
-		       COUNT(cm_all.user_id)::int, COALESCE(MAX(m.created_at)::text, '')
+		       COUNT(DISTINCT cm_all.user_id)::int, COALESCE(MAX(m.created_at)::text, '')
 		FROM chats.chats c
 		JOIN chats.members cm ON cm.chat_id = c.id AND cm.user_id = $1
 		LEFT JOIN chats.user_chat_settings cs ON cs.chat_id = c.id AND cs.user_id = $1
@@ -99,7 +99,7 @@ func (s *Service) Get(ctx context.Context, userID, chatID string) (Chat, error) 
 		SELECT c.id::text, c.type, c.title, c.description, c.avatar_url, c.owner_id::text,
 		       cm.role, COALESCE(cs.is_pinned, FALSE), COALESCE(cs.is_archived, FALSE),
 		       COALESCE(cs.last_read_at::text, ''), c.created_at::text, c.updated_at::text,
-		       COUNT(cm_all.user_id)::int, COALESCE(MAX(m.created_at)::text, '')
+		       COUNT(DISTINCT cm_all.user_id)::int, COALESCE(MAX(m.created_at)::text, '')
 		FROM chats.chats c
 		JOIN chats.members cm ON cm.chat_id = c.id AND cm.user_id = $1
 		LEFT JOIN chats.user_chat_settings cs ON cs.chat_id = c.id AND cs.user_id = $1
