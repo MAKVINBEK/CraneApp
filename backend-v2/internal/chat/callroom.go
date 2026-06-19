@@ -36,6 +36,15 @@ type RoomSnapshot struct {
 	HostID     string
 }
 
+type RoomPublic struct {
+	ID           string         `json:"id"`
+	Type         string         `json:"type"`
+	ChatID       string         `json:"chatId"`
+	Title        string         `json:"title"`
+	HostID       string         `json:"hostId"`
+	Participants []*Participant `json:"participants"`
+}
+
 type JoinResult struct {
 	OK    bool
 	Error string
@@ -89,6 +98,40 @@ func (m *CallRoomManager) GetRoom(roomID string) *callRoom {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.rooms[roomID]
+}
+
+func (m *CallRoomManager) GetRoomPublic(roomID string) *RoomPublic {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if r, ok := m.rooms[roomID]; ok {
+		return r.toPublic()
+	}
+	return nil
+}
+
+func (m *CallRoomManager) ListRoomsPublic() []*RoomPublic {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	res := make([]*RoomPublic, 0, len(m.rooms))
+	for _, r := range m.rooms {
+		res = append(res, r.toPublic())
+	}
+	return res
+}
+
+func (r *callRoom) toPublic() *RoomPublic {
+	participants := make([]*Participant, 0, len(r.participants))
+	for _, p := range r.participants {
+		participants = append(participants, p)
+	}
+	return &RoomPublic{
+		ID:           r.id,
+		Type:         r.roomType,
+		ChatID:       r.chatID,
+		Title:        r.title,
+		HostID:       r.hostID,
+		Participants: participants,
+	}
 }
 
 func (m *CallRoomManager) JoinRoom(roomID, userID, displayName, avatarURL string) JoinResult {

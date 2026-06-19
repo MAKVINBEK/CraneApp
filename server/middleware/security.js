@@ -27,8 +27,8 @@ const suspiciousIPs = new Map();
 // ============================================
 // КОНСТАНТЫ
 // ============================================
-const MAX_LOGIN_ATTEMPTS = 5;          // попыток до блокировки
-const LOCKOUT_DURATION = 15 * 60000;   // 15 минут блокировки
+const MAX_LOGIN_ATTEMPTS = 10;         // попыток до временной блокировки
+const LOCKOUT_DURATION = 5 * 60000;    // 5 минут временной блокировки
 const SUSPICIOUS_THRESHOLD = 50;       // очков до постоянной блокировки
 const TOKEN_MAX_AGE = 30 * 24 * 3600;  // 30 дней в секундах
 

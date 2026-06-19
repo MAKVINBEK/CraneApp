@@ -68,6 +68,10 @@ func NewService(db *sql.DB, ws *WSServer) *Service {
 	return &Service{db: db, ws: ws}
 }
 
+func (s *Service) CallRooms() *CallRoomManager {
+	return s.ws.CallRooms()
+}
+
 func (s *Service) List(ctx context.Context, userID string, archived bool) ([]Chat, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT c.id::text, c.type, c.title, c.description, c.avatar_url, c.owner_id::text,
@@ -1010,7 +1014,7 @@ func (s *Service) ListFavorites(ctx context.Context, userID string, limit, offse
 	return scanMessages(rows)
 }
 
-func (s *Service) CreateCallRoom(ctx context.Context, userID, chatID, callType, title string) (string, error) {
+func (s *Service) CreateCallRoom(ctx context.Context, userID, chatID, callType, callKind, title string) (string, error) {
 	if ok, err := s.IsMember(ctx, userID, chatID); err != nil || !ok {
 		return "", ErrForbidden
 	}
@@ -1020,6 +1024,9 @@ func (s *Service) CreateCallRoom(ctx context.Context, userID, chatID, callType, 
 		VALUES ($1, $2, $3, $4)
 		RETURNING id::text
 	`, chatID, callType, title, userID).Scan(&roomID)
+	if err == nil {
+		s.CallRooms().CreateRoom(userID, roomID, callType, callKind, chatID, title)
+	}
 	return roomID, err
 }
 

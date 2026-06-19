@@ -4,10 +4,10 @@ test:
 	GOCACHE=/tmp/crane-go-cache go test ./...
 
 build:
-	GOCACHE=/tmp/crane-go-cache go build ./cmd/edge ./cmd/auth ./cmd/user ./cmd/chat ./cmd/migrate-legacy
+	GOCACHE=/tmp/crane-go-cache go build ./cmd/edge ./cmd/auth ./cmd/user ./cmd/chat ./cmd/migrate-legacy ./cmd/migrate
 
 migrate:
-	for migration in migrations/*.sql; do psql "$${DATABASE_URL}" -v ON_ERROR_STOP=1 -f "$$migration"; done
+	GOCACHE=/tmp/crane-go-cache go run ./cmd/migrate
 
 migrate-legacy-dry-run:
 	GOCACHE=/tmp/crane-go-cache go run ./cmd/migrate-legacy

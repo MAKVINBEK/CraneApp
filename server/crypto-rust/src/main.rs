@@ -67,6 +67,8 @@ struct VerifyTokenRequest {
 struct TokenClaims {
     #[serde(rename = "sub")]
     subject: String,
+    #[serde(rename = "userId", default)]
+    user_id: String,
     username: String,
     #[serde(rename = "iat")]
     issued_at: u64,
@@ -203,7 +205,8 @@ async fn issue_token(Json(payload): Json<IssueTokenRequest>) -> ApiResult<IssueT
     let issued_at = unix_time();
     let expires_at = issued_at + token_ttl();
     let claims = TokenClaims {
-        subject: payload.subject,
+        subject: payload.subject.clone(),
+        user_id: payload.subject,
         username: payload.username,
         issued_at,
         expires_at,

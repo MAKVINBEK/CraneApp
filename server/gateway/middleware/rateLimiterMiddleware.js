@@ -3,11 +3,12 @@
  * Falls back to in-memory store if DB is unavailable.
  */
 
-function createPostgresStore(query, windowMs) {
+function createPostgresStore(query, windowMs, namespace = 'default') {
     return {
         localKeys: false,
 
         async increment(key) {
+            const namespacedKey = `${namespace}:${key}`;
             try {
                 const windowSecs = Math.ceil(windowMs / 1000);
                 const result = await query(
@@ -23,7 +24,7 @@ function createPostgresStore(query, windowMs) {
                              ELSE rate_limit_hits.reset_at
                          END
                      RETURNING hits, reset_at`,
-                    [key, String(windowSecs)]
+                    [namespacedKey, String(windowSecs)]
                 );
                 const row = result.rows[0];
                 return { totalHits: row.hits, resetTime: new Date(row.reset_at) };
@@ -34,17 +35,19 @@ function createPostgresStore(query, windowMs) {
         },
 
         async decrement(key) {
+            const namespacedKey = `${namespace}:${key}`;
             try {
                 await query(
                     'UPDATE rate_limit_hits SET hits = GREATEST(0, hits - 1) WHERE key = $1',
-                    [key]
+                    [namespacedKey]
                 );
             } catch (_) {}
         },
 
         async resetKey(key) {
+            const namespacedKey = `${namespace}:${key}`;
             try {
-                await query('DELETE FROM rate_limit_hits WHERE key = $1', [key]);
+                await query('DELETE FROM rate_limit_hits WHERE key = $1', [namespacedKey]);
             } catch (_) {}
         },
 
@@ -56,10 +59,10 @@ function createPostgresStore(query, windowMs) {
     };
 }
 
-function createGatewayRateLimiters({ i18n, logger, rateLimit, trafficProtection, query }) {
+function createGatewayRateLimiters({ i18n, logger, rateLimit, query }) {
     return {
         apiLimiter: createApiLimiter({ i18n, rateLimit, query }),
-        authLimiter: createAuthLimiter({ i18n, logger, rateLimit, trafficProtection, query }),
+        authLimiter: createAuthLimiter({ i18n, logger, rateLimit, query }),
         globalLimiter: createGlobalLimiter({ i18n, logger, rateLimit, query }),
         uploadLimiter: createUploadLimiter({ i18n, rateLimit, query }),
     };
@@ -73,7 +76,7 @@ function createGlobalLimiter({ i18n, logger, rateLimit, query }) {
         standardHeaders: true,
         legacyHeaders: false,
         keyGenerator: getIp,
-        store: createPostgresStore(query, windowMs),
+        store: createPostgresStore(query, windowMs, 'global'),
         handler: (req, res) => {
             const ip = getIp(req);
             logger.warn(`🚫 Rate limit exceeded: ${ip}`);
@@ -83,21 +86,20 @@ function createGlobalLimiter({ i18n, logger, rateLimit, query }) {
     });
 }
 
-function createAuthLimiter({ i18n, logger, rateLimit, trafficProtection, query }) {
-    const windowMs = 15 * 60 * 1000;
+function createAuthLimiter({ i18n, logger, rateLimit, query }) {
+    const windowMs = 5 * 60 * 1000;
     return rateLimit({
         windowMs,
-        max: 10,
+        max: 30,
         standardHeaders: true,
         legacyHeaders: false,
         keyGenerator: getIp,
-        store: createPostgresStore(query, windowMs),
+        store: createPostgresStore(query, windowMs, 'auth'),
         handler: (req, res) => {
             const ip = getIp(req);
             logger.warn(`🚫 Auth rate limit exceeded: ${ip}`);
-            trafficProtection.blockIp(ip, 30 * 60 * 1000);
-            res.set('Retry-After', '1800');
-            res.status(429).json({ error: i18n.t(i18n.languageFromHeaders(req), 'tooManyFailedAttempts', { minutes: 30 }) });
+            res.set('Retry-After', '300');
+            res.status(429).json({ error: i18n.t(i18n.languageFromHeaders(req), 'tooManyFailedAttempts', { minutes: 5 }) });
         },
     });
 }
@@ -110,7 +112,7 @@ function createApiLimiter({ i18n, rateLimit, query }) {
         standardHeaders: true,
         legacyHeaders: false,
         keyGenerator: getIp,
-        store: createPostgresStore(query, windowMs),
+        store: createPostgresStore(query, windowMs, 'api'),
         handler: (req, res) => {
             res.set('Retry-After', '60');
             res.status(429).json({ error: (req.t || ((key) => i18n.t(i18n.languageFromHeaders(req), key)))('tooManyRequests') });
@@ -124,7 +126,7 @@ function createUploadLimiter({ i18n, rateLimit, query }) {
         windowMs,
         max: 20,
         keyGenerator: getIp,
-        store: createPostgresStore(query, windowMs),
+        store: createPostgresStore(query, windowMs, 'upload'),
         handler: (req, res) => {
             res.set('Retry-After', '60');
             res.status(429).json({ error: (req.t || ((key) => i18n.t(i18n.languageFromHeaders(req), key)))('tooManyRequests') });

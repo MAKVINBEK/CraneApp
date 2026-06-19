@@ -18,7 +18,6 @@ const security = require('../middleware/security');
 const i18n = require('../i18n');
 const QRCode = require('qrcode');
 const callRoom = require('../services/call-service/callRoom');
-const createCallRoutes = require('./routes/callRoutes');
 const createGifRoutes = require('./routes/gifRoutes');
 const createEmojiRoutes = require('./routes/emojiRoutes');
 const createHealthRoutes = require('./routes/healthRoutes');
@@ -384,13 +383,7 @@ async function saveCallMessage(r) {
         logger.warn('⚠️ saveCallMessage error:', e.message);
     }
 }
-
-app.use('/api/v2/calls', createCallRoutes({
-    authFromHeader,
-    callRoom,
-    fetchTurnCredentials,
-    getIceServers,
-}));
+app.use('/api/v2/calls', createV2Proxy('CHAT_URL', '/api/v2/calls', 'Calls'));
 
 app.use('/api', createHealthRoutes({ wss }));
 

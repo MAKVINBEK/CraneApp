@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"craneapp/backend-v2/internal/platform/authctx"
+	"craneapp/backend-v2/internal/platform/config"
 	"craneapp/backend-v2/internal/platform/httpx"
 )
 
@@ -244,15 +245,19 @@ func (h *Handler) CallRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		Type   string `json:"type"`
-		ChatID string `json:"chatId"`
-		Title  string `json:"title"`
+		Type     string `json:"type"`
+		ChatID   string `json:"chatId"`
+		Title    string `json:"title"`
+		CallKind string `json:"callKind"`
 	}
 	if !decode(w, r, &input) {
 		return
 	}
 	current := authctx.MustUser(r)
-	roomID, err := h.service.CreateCallRoom(r.Context(), current.ID, input.ChatID, input.Type, input.Title)
+	if input.CallKind == "" {
+		input.CallKind = "video"
+	}
+	roomID, err := h.service.CreateCallRoom(r.Context(), current.ID, input.ChatID, input.Type, input.CallKind, input.Title)
 	if errors.Is(err, ErrForbidden) {
 		httpx.ErrorJSON(w, r, http.StatusForbidden, "access_denied", "access denied")
 		return
@@ -262,12 +267,92 @@ func (h *Handler) CallRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusCreated, map[string]any{
+		"success": true,
 		"room": map[string]string{
-			"id":     roomID,
-			"type":   input.Type,
-			"chatId": input.ChatID,
-			"title":  input.Title,
+			"id":       roomID,
+			"type":     input.Type,
+			"chatId":   input.ChatID,
+			"title":    input.Title,
+			"callKind": input.CallKind,
+			"hostId":   current.ID,
 		},
+		"iceServers":      getIceServers(),
+		"maxParticipants": maxCallParticipants,
+	})
+}
+
+type IceServer struct {
+	URLs       interface{} `json:"urls"`
+	Username   string      `json:"username,omitempty"`
+	Credential string      `json:"credential,omitempty"`
+}
+
+func getIceServers() []IceServer {
+	servers := []IceServer{
+		{URLs: "stun:stun.l.google.com:19302"},
+		{URLs: "stun:stun1.l.google.com:19302"},
+		{URLs: "stun:stun2.l.google.com:19302"},
+	}
+	if turnURL := config.Value("TURN_URL", ""); turnURL != "" {
+		servers = append(servers, IceServer{
+			URLs:       turnURL,
+			Username:   config.Value("TURN_USERNAME", ""),
+			Credential: config.Value("TURN_CREDENTIAL", ""),
+		})
+	}
+	return servers
+}
+
+func (h *Handler) IceServers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, r)
+		return
+	}
+	servers := getIceServers()
+	hasTurn := false
+	for _, s := range servers {
+		if str, ok := s.URLs.(string); ok && strings.HasPrefix(str, "turn:") {
+			hasTurn = true
+			break
+		}
+	}
+	meteredConfigured := config.Value("METERED_API_KEY", "") != "" && config.Value("METERED_DOMAIN", "") != ""
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"servers":           servers,
+		"hasTurn":           hasTurn,
+		"meteredConfigured": meteredConfigured,
+		"meteredTest":       nil,
+	})
+}
+
+func (h *Handler) GetRoom(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, r)
+		return
+	}
+	roomID := r.PathValue("id")
+	room := h.service.CallRooms().GetRoomPublic(roomID)
+	if room == nil {
+		httpx.ErrorJSON(w, r, http.StatusNotFound, "room_not_found", "Room not found")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"success":         true,
+		"room":            room,
+		"iceServers":      getIceServers(),
+		"maxParticipants": maxCallParticipants,
+	})
+}
+
+func (h *Handler) ListRooms(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, r)
+		return
+	}
+	rooms := h.service.CallRooms().ListRoomsPublic()
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"rooms":   rooms,
 	})
 }
 

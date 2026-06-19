@@ -69,6 +69,10 @@ func NewWSServer(db *sql.DB, crypto tokenVerifier) *WSServer {
 	return ws
 }
 
+func (ws *WSServer) CallRooms() *CallRoomManager {
+	return ws.callRooms
+}
+
 func (ws *WSServer) run() {
 	for {
 		select {
