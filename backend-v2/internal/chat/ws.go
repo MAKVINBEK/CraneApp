@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -127,7 +127,7 @@ func (ws *WSServer) ServeWS(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("ws upgrade error: %v", err)
+		slog.Error("ws upgrade error", "err", err)
 		return
 	}
 
@@ -413,7 +413,7 @@ func (ws *WSServer) saveCallMessage(snap *RoomSnapshot) {
 		snap.ChatID, snap.HostID, string(content),
 	).Scan(&msgID)
 	if err != nil {
-		log.Printf("saveCallMessage error: %v", err)
+		slog.Error("saveCallMessage", "err", err)
 		return
 	}
 	out, _ := json.Marshal(map[string]interface{}{

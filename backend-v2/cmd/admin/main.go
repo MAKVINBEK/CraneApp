@@ -46,7 +46,7 @@ func main() {
 	mux.Handle("/api/v2/admin/reports", authenticated(http.HandlerFunc(handler.Reports)))
 	mux.Handle("/api/v2/admin/reports/", authenticated(http.HandlerFunc(handler.Reports)))
 
-	server := &http.Server{Addr: config.Value("ADMIN_ADDR", ":8085"), Handler: httpx.Middleware(mux), ReadHeaderTimeout: 5 * time.Second}
+	server := &http.Server{Addr: config.Value("ADMIN_ADDR", ":8085"), Handler: httpx.Middleware(mux), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	go func() {

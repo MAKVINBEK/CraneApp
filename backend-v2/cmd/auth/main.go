@@ -55,7 +55,7 @@ func main() {
 	mux.Handle("/api/v2/auth/2fa/disable", authenticated(http.HandlerFunc(handler.TwoFADisable)))
 	mux.Handle("/api/v2/auth/2fa/verify", authenticated(http.HandlerFunc(handler.TwoFAVerify)))
 
-	server := &http.Server{Addr: config.Value("AUTH_ADDR", ":8081"), Handler: httpx.Middleware(mux), ReadHeaderTimeout: 5 * time.Second}
+	server := &http.Server{Addr: config.Value("AUTH_ADDR", ":8081"), Handler: httpx.Middleware(mux), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	go func() {

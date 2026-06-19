@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"os/signal"
 	"strings"
 	"sync"
@@ -109,6 +111,10 @@ func rateLimitMiddleware(authLimiter, globalLimiter *tokenBucket, next http.Hand
 }
 
 func main() {
+	if os.Getenv("ALLOWED_ORIGINS") == "" {
+		slog.Warn("ALLOWED_ORIGINS not set — defaulting to localhost; set it in production")
+	}
+
 	authURL, err := url.Parse(config.Value("AUTH_URL", "http://127.0.0.1:8081"))
 	if err != nil {
 		log.Fatal(err)
@@ -246,7 +252,7 @@ func main() {
 		mux.ServeHTTP(w, r)
 	})))
 
-	server := &http.Server{Addr: config.Value("EDGE_ADDR", ":8080"), Handler: handler, ReadHeaderTimeout: 5 * time.Second}
+	server := &http.Server{Addr: config.Value("EDGE_ADDR", ":8080"), Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 5 * time.Minute, WriteTimeout: 5 * time.Minute, IdleTimeout: 120 * time.Second}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	go func() {

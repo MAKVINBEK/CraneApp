@@ -2,7 +2,7 @@ package httpx
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 )
@@ -18,7 +18,7 @@ func JSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(value); err != nil {
-		log.Printf("encode response: %v", err)
+		slog.Error("encode response", "err", err)
 	}
 }
 
@@ -55,7 +55,7 @@ func Middleware(next http.Handler) http.Handler {
 		)
 		defer func() {
 			if rec := recover(); rec != nil {
-				log.Printf("panic in handler [%s %s]: %v", r.Method, r.URL.Path, rec)
+				slog.Error("panic in handler", "method", r.Method, "path", r.URL.Path, "panic", rec)
 				http.Error(w, `{"code":"internal_error","message":"internal server error"}`, http.StatusInternalServerError)
 			}
 		}()

@@ -66,7 +66,7 @@ func main() {
 	mux.Handle("/api/v2/media", authenticated(http.HandlerFunc(handler.Upload)))
 	mux.Handle("/api/v2/media/", http.HandlerFunc(handler.Serve))
 
-	server := &http.Server{Addr: config.Value("MEDIA_ADDR", ":8084"), Handler: httpx.Middleware(mux), ReadHeaderTimeout: 5 * time.Second}
+	server := &http.Server{Addr: config.Value("MEDIA_ADDR", ":8084"), Handler: httpx.Middleware(mux), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 5 * time.Minute, WriteTimeout: 5 * time.Minute, IdleTimeout: 120 * time.Second}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	go func() {

@@ -89,7 +89,7 @@ func main() {
 
 	mux.HandleFunc("/ws", wsServer.ServeWS)
 
-	server := &http.Server{Addr: config.Value("CHAT_ADDR", ":8083"), Handler: httpx.Middleware(mux), ReadHeaderTimeout: 5 * time.Second}
+	server := &http.Server{Addr: config.Value("CHAT_ADDR", ":8083"), Handler: httpx.Middleware(mux), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 120 * time.Second}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	go func() {

@@ -83,7 +83,7 @@ func main() {
 		httpx.ErrorJSON(w, r, http.StatusNotFound, "route_not_found", "route not found")
 	})))
 
-	server := &http.Server{Addr: config.Value("USER_ADDR", ":8082"), Handler: httpx.Middleware(mux), ReadHeaderTimeout: 5 * time.Second}
+	server := &http.Server{Addr: config.Value("USER_ADDR", ":8082"), Handler: httpx.Middleware(mux), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	go func() {
