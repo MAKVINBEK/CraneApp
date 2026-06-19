@@ -9,6 +9,7 @@ COPY public ./public
 RUN npm run build:react
 
 # Stage 2: Build Go services
+ARG CACHEBUST=1
 FROM golang:1.26-alpine AS gobuilder
 WORKDIR /src
 COPY backend-v2/go.mod backend-v2/go.sum ./
