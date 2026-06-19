@@ -527,12 +527,12 @@ func (ws *WSServer) sendToUserLocked(userID string, message []byte) {
 }
 
 func allowedWSOrigin(origin string) bool {
+	if origin == "" {
+		return true
+	}
 	for _, allowed := range strings.Split(config.Value("ALLOWED_ORIGINS", "http://localhost:8080,http://127.0.0.1:8080"), ",") {
 		allowed = strings.TrimSpace(allowed)
-		if allowed == "" || allowed == "*" {
-			continue
-		}
-		if allowed == origin {
+		if allowed == "*" || allowed == origin {
 			return true
 		}
 	}
