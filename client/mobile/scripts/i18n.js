@@ -9,7 +9,11 @@
     ];
 
     const source = parts.map((part) => loadText(part)).join('\n');
-    (0, eval)(source + '\n//# sourceURL=/client/mobile/scripts/i18n.bundle.js');
+    try {
+        (0, eval)(source + '\n//# sourceURL=/client/mobile/scripts/i18n.bundle.js');
+    } catch (e) {
+        console.warn('[i18n] eval blocked by CSP, translations unavailable:', e);
+    }
 
     function loadText(path) {
         const request = new XMLHttpRequest();
