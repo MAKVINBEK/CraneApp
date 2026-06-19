@@ -1,6 +1,11 @@
 #!/bin/sh
 set -e
 
+# Generate encryption secret if not provided
+if [ -z "$CRYPTO_ENCRYPTION_SECRET" ]; then
+  export CRYPTO_ENCRYPTION_SECRET=$(cat /proc/sys/kernel/random/uuid | tr -d '-')
+fi
+
 echo "[entrypoint] running migrations..."
 cd /app && /usr/local/bin/migrate
 
