@@ -45,12 +45,12 @@ func Middleware(next http.Handler) http.Handler {
 		w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
 		w.Header().Set("Content-Security-Policy",
 			"default-src 'self'; "+
-				"script-src 'self' 'unsafe-inline'; "+
-				"style-src 'self' 'unsafe-inline'; "+
+				"script-src 'self' 'unsafe-inline' 'unsafe-eval'; "+
+				"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "+
 				"img-src 'self' data: blob: https:; "+
 				"media-src 'self' blob:; "+
-				"connect-src 'self' wss: ws:; "+
-				"font-src 'self' data:; "+
+				"connect-src 'self' wss: ws: https://api.ipify.org; "+
+				"font-src 'self' data: https://fonts.gstatic.com; "+
 				"frame-ancestors 'none'",
 		)
 		defer func() {
