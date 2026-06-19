@@ -172,6 +172,7 @@ services:
     environment:
       - MEDIA_ADDR=:8084
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/craneapp?sslmode=prefer
+      - CRYPTO_URL=http://crypto:5005
       - MINIO_ENDPOINT=http://minio:9000
       - MINIO_ACCESS_KEY=minioadmin
       - MINIO_SECRET_KEY=minioadmin
