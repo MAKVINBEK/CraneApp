@@ -13,7 +13,7 @@ FROM golang:1.26-alpine AS gobuilder
 WORKDIR /src
 COPY backend-v2/go.mod backend-v2/go.sum ./
 RUN go mod download
-RUN echo "build:20260619-3"
+RUN echo "build:20260619-4"
 COPY backend-v2/ .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/auth   ./cmd/auth && \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/user   ./cmd/user && \
