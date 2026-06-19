@@ -1,0 +1,10 @@
+meta:
+  toolchain: dockerfile
+
+build:
+  dockerfile: Dockerfile.prod
+  context: .
+
+run:
+  containerPort: "8080"
+  servicePort: "80"
