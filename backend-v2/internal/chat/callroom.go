@@ -39,6 +39,7 @@ type RoomSnapshot struct {
 type RoomPublic struct {
 	ID           string         `json:"id"`
 	Type         string         `json:"type"`
+	CallKind     string         `json:"callKind"`
 	ChatID       string         `json:"chatId"`
 	Title        string         `json:"title"`
 	HostID       string         `json:"hostId"`
@@ -127,6 +128,7 @@ func (r *callRoom) toPublic() *RoomPublic {
 	return &RoomPublic{
 		ID:           r.id,
 		Type:         r.roomType,
+		CallKind:     r.callKind,
 		ChatID:       r.chatID,
 		Title:        r.title,
 		HostID:       r.hostID,
