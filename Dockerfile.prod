@@ -14,12 +14,12 @@ WORKDIR /src
 COPY backend-v2/go.mod backend-v2/go.sum ./
 RUN go mod download
 COPY backend-v2/ .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.buildID=20260619a" -o /out/auth   ./cmd/auth && \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.buildID=20260619a" -o /out/user   ./cmd/user && \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.buildID=20260619a" -o /out/chat   ./cmd/chat && \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.buildID=20260619a" -o /out/media  ./cmd/media && \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.buildID=20260619a" -o /out/edge   ./cmd/edge && \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.buildID=20260619a" -o /out/migrate ./cmd/migrate
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /binaries/auth    ./cmd/auth && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /binaries/user    ./cmd/user && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /binaries/chat    ./cmd/chat && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /binaries/media   ./cmd/media && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /binaries/edge    ./cmd/edge && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /binaries/migrate ./cmd/migrate
 
 # Stage 3: Build crypto-rust
 FROM rust:1.94-slim AS cryptobuilder
@@ -46,12 +46,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=natsdownload /usr/local/bin/nats-server /usr/local/bin/nats-server
 COPY --from=natsdownload /usr/local/bin/minio /usr/local/bin/minio
 
-COPY --from=gobuilder   /out/auth     /usr/local/bin/auth
-COPY --from=gobuilder   /out/user     /usr/local/bin/user
-COPY --from=gobuilder   /out/chat     /usr/local/bin/chat
-COPY --from=gobuilder   /out/media    /usr/local/bin/media
-COPY --from=gobuilder   /out/edge     /usr/local/bin/edge
-COPY --from=gobuilder   /out/migrate  /usr/local/bin/migrate
+COPY --from=gobuilder   /binaries/auth     /usr/local/bin/auth
+COPY --from=gobuilder   /binaries/user     /usr/local/bin/user
+COPY --from=gobuilder   /binaries/chat     /usr/local/bin/chat
+COPY --from=gobuilder   /binaries/media    /usr/local/bin/media
+COPY --from=gobuilder   /binaries/edge     /usr/local/bin/edge
+COPY --from=gobuilder   /binaries/migrate  /usr/local/bin/migrate
 COPY --from=cryptobuilder /src/target/release/crypto-rust /usr/local/bin/crypto-rust
 COPY --from=frontend    /app/dist     /dist
 COPY supervisord.conf      /etc/supervisor/conf.d/craneapp.conf
