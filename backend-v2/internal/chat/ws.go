@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"craneapp/backend-v2/internal/platform/authctx"
 	"craneapp/backend-v2/internal/platform/config"
 	cryptoclient "craneapp/backend-v2/internal/platform/crypto"
 	"github.com/gorilla/websocket"
@@ -122,6 +123,11 @@ func (ws *WSServer) ServeWS(w http.ResponseWriter, r *http.Request) {
 	claims, err := ws.crypto.VerifyToken(r.Context(), token)
 	if err != nil || claims.Subject == "" {
 		http.Error(w, "invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	if authctx.NewDBTokenChecker(ws.db).IsTokenRevoked(r.Context(), token) {
+		http.Error(w, "token revoked", http.StatusUnauthorized)
 		return
 	}
 
