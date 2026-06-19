@@ -1,0 +1,53 @@
+# Stage 1: Build frontend
+FROM node:20-alpine AS frontend
+WORKDIR /app
+COPY package.json package-lock.json* pnpm-lock.yaml* ./
+RUN npm install --frozen-lockfile 2>/dev/null || npm install
+COPY vite.config.js index.html ./
+COPY client ./client
+COPY public ./public
+RUN npm run build:react
+
+# Stage 2: Build Go services
+FROM golang:1.26-alpine AS gobuilder
+WORKDIR /src
+COPY backend-v2/go.mod backend-v2/go.sum ./
+RUN go mod download
+COPY backend-v2/ .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/auth   ./cmd/auth && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/user   ./cmd/user && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/chat   ./cmd/chat && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/media  ./cmd/media && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/edge   ./cmd/edge && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/migrate ./cmd/migrate
+
+# Stage 3: Build crypto-rust
+FROM rust:1.94-slim AS cryptobuilder
+WORKDIR /src
+COPY server/crypto-rust/Cargo.toml server/crypto-rust/Cargo.lock ./
+COPY server/crypto-rust/src ./src
+RUN cargo build --release --locked
+
+# Stage 4: Final image
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    supervisor \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=gobuilder   /out/auth     /usr/local/bin/auth
+COPY --from=gobuilder   /out/user     /usr/local/bin/user
+COPY --from=gobuilder   /out/chat     /usr/local/bin/chat
+COPY --from=gobuilder   /out/media    /usr/local/bin/media
+COPY --from=gobuilder   /out/edge     /usr/local/bin/edge
+COPY --from=gobuilder   /out/migrate  /usr/local/bin/migrate
+COPY --from=cryptobuilder /src/target/release/crypto-rust /usr/local/bin/crypto-rust
+COPY --from=frontend    /app/dist     /dist
+COPY supervisord.conf      /etc/supervisor/conf.d/craneapp.conf
+COPY backend-v2/migrations /app/migrations
+COPY docker-entrypoint.sh  /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 8080
+
+ENTRYPOINT ["/entrypoint.sh"]

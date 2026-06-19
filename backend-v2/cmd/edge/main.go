@@ -156,26 +156,6 @@ func main() {
 		httpx.ErrorJSON(w, r, http.StatusBadGateway, "upstream_unavailable", "media service unavailable")
 	}
 
-	adminURL, err := url.Parse(config.Value("ADMIN_URL", "http://127.0.0.1:8085"))
-	if err != nil {
-		log.Fatal(err)
-	}
-	adminProxy := httputil.NewSingleHostReverseProxy(adminURL)
-	adminProxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		log.Printf("admin upstream: %v", err)
-		httpx.ErrorJSON(w, r, http.StatusBadGateway, "upstream_unavailable", "admin service unavailable")
-	}
-
-	legacyURL, err := url.Parse(config.Value("LEGACY_URL", "http://127.0.0.1:3001"))
-	if err != nil {
-		log.Fatal(err)
-	}
-	legacyProxy := httputil.NewSingleHostReverseProxy(legacyURL)
-	legacyProxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		log.Printf("legacy upstream: %v", err)
-		httpx.ErrorJSON(w, r, http.StatusBadGateway, "upstream_unavailable", "legacy service unavailable")
-	}
-
 	frontendDir := config.Value("FRONTEND_DIR", "../dist")
 	fs := http.FileServer(http.Dir(frontendDir))
 
@@ -205,17 +185,6 @@ func main() {
 	// Media service
 	mux.Handle("/api/v2/media", mediaProxy)
 	mux.Handle("/api/v2/media/", mediaProxy)
-
-	// Admin service
-	mux.Handle("/api/v2/admin/", adminProxy)
-
-	// Legacy Node Service (stickers, gifs, emojis)
-	mux.Handle("/api/v2/stickers", legacyProxy)
-	mux.Handle("/api/v2/stickers/", legacyProxy)
-	mux.Handle("/api/v2/gifs", legacyProxy)
-	mux.Handle("/api/v2/gifs/", legacyProxy)
-	mux.Handle("/api/v2/emojis", legacyProxy)
-	mux.Handle("/api/v2/emojis/", legacyProxy)
 
 	// Serve static files for frontend, fallback to index.html for React Router
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
