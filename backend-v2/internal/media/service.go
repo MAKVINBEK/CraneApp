@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 var (
@@ -140,6 +142,9 @@ func (s *Service) ServeProxy(ctx context.Context, uploadID string, w http.Respon
 		SELECT bucket, object_key, content_type FROM media.uploads WHERE id = $1
 	`, uploadID).Scan(&bucket, &objectKey, &contentType)
 	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if pqErr, ok := err.(*pq.Error); ok && pqErr.Code == "22P02" {
 		return ErrNotFound
 	}
 	if err != nil {
