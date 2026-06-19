@@ -75,6 +75,7 @@ function createGlobalLimiter({ i18n, logger, rateLimit, query }) {
         max: 600,
         standardHeaders: true,
         legacyHeaders: false,
+        validate: { singleCount: false },
         keyGenerator: getIp,
         store: createPostgresStore(query, windowMs, 'global'),
         handler: (req, res) => {
@@ -111,6 +112,7 @@ function createApiLimiter({ i18n, rateLimit, query }) {
         max: 300,
         standardHeaders: true,
         legacyHeaders: false,
+        validate: { singleCount: false },
         keyGenerator: getIp,
         store: createPostgresStore(query, windowMs, 'api'),
         handler: (req, res) => {
