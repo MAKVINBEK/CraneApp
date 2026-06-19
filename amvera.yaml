@@ -1,5 +1,5 @@
 meta:
-  environment: dockerfile
+  toolchain: dockerfile
 
 build:
   dockerfile: Dockerfile.prod
