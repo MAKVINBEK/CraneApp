@@ -161,7 +161,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health/live", func(w http.ResponseWriter, _ *http.Request) {
-		httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok", "v": "csp-v3"})
 	})
 
 	// Auth service
@@ -225,6 +225,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	go func() {
+		log.Printf("CRANE_BUILD_VERSION=csp-v3")
 		log.Printf("edge gateway listening on %s", server.Addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
