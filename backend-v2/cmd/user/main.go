@@ -29,7 +29,7 @@ func main() {
 
 	crypto := cryptoclient.NewClient(config.Value("CRYPTO_URL", "http://127.0.0.1:5005"))
 	handler := user.NewHandler(user.NewService(pool))
-	authenticated := authctx.Middleware(crypto)
+	authenticated := authctx.Middleware(crypto, authctx.NewDBTokenChecker(pool))
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health/live", func(w http.ResponseWriter, _ *http.Request) {
 		httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})

@@ -53,7 +53,7 @@ func main() {
 		log.Printf("NATS_URL not set — outbox events will accumulate until NATS is configured")
 	}
 	go chat.OutboxRelay(outboxCtx, pool, natsConn)
-	authenticated := authctx.Middleware(crypto)
+	authenticated := authctx.Middleware(crypto, authctx.NewDBTokenChecker(pool))
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health/live", func(w http.ResponseWriter, _ *http.Request) {
 		httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
