@@ -170,10 +170,17 @@ func (m *MinioStore) signRequest(req *http.Request, body []byte) {
 	}
 	req.Header.Set("Host", host)
 
-	signedHeaders := "content-type;host;x-amz-content-sha256;x-amz-date"
 	ct := req.Header.Get("Content-Type")
-	canonicalHeaders := fmt.Sprintf("content-type:%s\nhost:%s\nx-amz-content-sha256:%s\nx-amz-date:%s\n",
-		ct, host, bodyHash, amzDate)
+	var signedHeaders, canonicalHeaders string
+	if ct != "" {
+		signedHeaders = "content-type;host;x-amz-content-sha256;x-amz-date"
+		canonicalHeaders = fmt.Sprintf("content-type:%s\nhost:%s\nx-amz-content-sha256:%s\nx-amz-date:%s\n",
+			ct, host, bodyHash, amzDate)
+	} else {
+		signedHeaders = "host;x-amz-content-sha256;x-amz-date"
+		canonicalHeaders = fmt.Sprintf("host:%s\nx-amz-content-sha256:%s\nx-amz-date:%s\n",
+			host, bodyHash, amzDate)
+	}
 
 	credScope := fmt.Sprintf("%s/%s/s3/aws4_request", dateStamp, m.region)
 	canonicalRequest := strings.Join([]string{
