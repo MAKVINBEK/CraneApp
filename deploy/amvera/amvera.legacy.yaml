@@ -3,7 +3,9 @@ meta:
 
 build:
   dockerfile: Dockerfile
+  context: .
 
 run:
+  containerPort: "3001"
+  servicePort: "80"
   persistenceMount: /app/uploads
-  command: node --max-old-space-size=512 server/gateway/apiGateway.js

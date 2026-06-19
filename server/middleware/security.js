@@ -9,17 +9,18 @@ const logger = require('../services/logger');
 const i18n = require('../i18n');
 
 // ============================================
-// ХРАНИЛИЩА (in-memory, можно заменить на Redis)
+// ХРАНИЛИЩА
 // ============================================
 
 // Неудачные попытки входа: ip+username -> { count, firstAt, lockedUntil }
 const loginAttempts = new Map();
 
-// Использованные токены (для logout/invalidation): token hash -> expiry
-const revokedTokens = new Set();
-
-// Активные сессии: userId -> Set<tokenHash>
+// Активные сессии: userId -> Set<tokenHash> (in-memory — используется только для revokeAllUserSessions)
 const activeSessions = new Map();
+
+// DB-клиент для проверки отозванных токенов — инжектируется через init()
+let _query = null;
+function init({ query }) { _query = query; }
 
 // Подозрительные IP (повторные атаки): ip -> { score, lastAt }
 const suspiciousIPs = new Map();
@@ -221,16 +222,34 @@ function hashToken(token) {
     return crypto.createHash('sha256').update(token).digest('hex');
 }
 
-function revokeToken(token) {
+async function revokeToken(token, userId) {
     const hash = hashToken(token);
-    // Храним до истечения срока (30 дней)
-    revokedTokens.add(hash);
-    // Автоочистка через 30 дней
-    setTimeout(() => revokedTokens.delete(hash), TOKEN_MAX_AGE * 1000);
+    if (!_query || !userId) return;
+    try {
+        await _query(
+            `INSERT INTO auth.revoked_tokens (token_hash, user_id, expires_at)
+             VALUES ($1, $2, NOW() + INTERVAL '30 days')
+             ON CONFLICT (token_hash) DO NOTHING`,
+            [hash, userId]
+        );
+    } catch (e) {
+        logger.warn('revokeToken DB error:', e.message);
+    }
 }
 
-function isTokenRevoked(token) {
-    return revokedTokens.has(hashToken(token));
+async function isTokenRevoked(token) {
+    const hash = hashToken(token);
+    if (!_query) return false;
+    try {
+        const r = await _query(
+            `SELECT 1 FROM auth.revoked_tokens WHERE token_hash = $1 AND expires_at > NOW()`,
+            [hash]
+        );
+        return r.rows.length > 0;
+    } catch (e) {
+        logger.warn('isTokenRevoked DB error:', e.message);
+        return false;
+    }
 }
 
 function registerSession(userId, token) {
@@ -241,21 +260,26 @@ function registerSession(userId, token) {
     activeSessions.get(userId).add(hash);
 }
 
-function revokeAllUserSessions(userId) {
-    const sessions = activeSessions.get(userId);
-    if (sessions) {
-        sessions.forEach(hash => revokedTokens.add(hash));
-        activeSessions.delete(userId);
+async function revokeAllUserSessions(userId) {
+    if (!_query) return;
+    try {
+        await _query(
+            `UPDATE auth.sessions SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL`,
+            [userId]
+        );
+    } catch (e) {
+        logger.warn('revokeAllUserSessions DB error:', e.message);
     }
+    activeSessions.delete(userId);
 }
 
 // Middleware проверки отозванных токенов
-function tokenRevocationMiddleware(req, res, next) {
+async function tokenRevocationMiddleware(req, res, next) {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) return next();
 
     const token = authHeader.split(' ')[1];
-    if (isTokenRevoked(token)) {
+    if (await isTokenRevoked(token)) {
         return res.status(401).json({ error: 'Token has been revoked' });
     }
     next();
@@ -407,6 +431,9 @@ setInterval(() => {
 // ЭКСПОРТ
 // ============================================
 module.exports = {
+    // Инициализация с DB-клиентом
+    init,
+
     // Middleware
     sqlInjectionMiddleware,
     xssMiddleware,

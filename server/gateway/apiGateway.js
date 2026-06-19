@@ -15,6 +15,7 @@ const rateLimit = require('express-rate-limit');
 const logger = require('../services/logger');
 const { pool, query, initDatabase, ensureTablesExist } = require('../../database/database');
 const security = require('../middleware/security');
+security.init({ query });
 const i18n = require('../i18n');
 const QRCode = require('qrcode');
 const callRoom = require('../services/call-service/callRoom');

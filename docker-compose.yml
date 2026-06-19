@@ -34,7 +34,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/craneapp?sslmode=disable
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/craneapp?sslmode=prefer
       - JWT_SECRET=${JWT_SECRET}
       - REDIS_URL=redis://redis:6379
       - ALLOWED_ORIGINS=http://localhost:3000
@@ -51,7 +51,7 @@ services:
       args:
         SERVICE: migrate
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/craneapp?sslmode=disable
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/craneapp?sslmode=prefer
     depends_on:
       db:
         condition: service_healthy
@@ -64,7 +64,7 @@ services:
         SERVICE: auth
     environment:
       - AUTH_ADDR=:8081
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/craneapp?sslmode=disable
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/craneapp?sslmode=prefer
       - REDIS_URL=redis://redis:6379
       - CRYPTO_URL=http://crypto:5005
       - NATS_URL=nats://nats:4222
@@ -86,7 +86,7 @@ services:
         SERVICE: user
     environment:
       - USER_ADDR=:8082
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/craneapp?sslmode=disable
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/craneapp?sslmode=prefer
       - REDIS_URL=redis://redis:6379
       - CRYPTO_URL=http://crypto:5005
       - NATS_URL=nats://nats:4222
@@ -108,7 +108,7 @@ services:
         SERVICE: chat
     environment:
       - CHAT_ADDR=:8083
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/craneapp?sslmode=disable
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/craneapp?sslmode=prefer
       - REDIS_URL=redis://redis:6379
       - CRYPTO_URL=http://crypto:5005
       - NATS_URL=nats://nats:4222
@@ -171,7 +171,7 @@ services:
         SERVICE: media
     environment:
       - MEDIA_ADDR=:8084
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/craneapp?sslmode=disable
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/craneapp?sslmode=prefer
       - MINIO_ENDPOINT=minio:9000
       - MINIO_ACCESS_KEY=minioadmin
       - MINIO_SECRET_KEY=minioadmin

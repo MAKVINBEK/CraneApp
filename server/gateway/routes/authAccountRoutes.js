@@ -21,10 +21,10 @@ function createAuthAccountRoutes({
         }
     }, 2 * 60 * 1000);
 
-    router.post('/logout', authMiddleware, (req, res) => {
+    router.post('/logout', authMiddleware, async (req, res) => {
         try {
             const token = req.headers.authorization.split(' ')[1];
-            security.revokeToken(token);
+            await security.revokeToken(token, req.user.id);
             logger.info('✅ User logged out:', req.user.username);
             res.json({ success: true });
         } catch (error) {
@@ -32,9 +32,9 @@ function createAuthAccountRoutes({
         }
     });
 
-    router.post('/logout-all', authMiddleware, (req, res) => {
+    router.post('/logout-all', authMiddleware, async (req, res) => {
         try {
-            security.revokeAllUserSessions(req.user.id);
+            await security.revokeAllUserSessions(req.user.id);
             logger.info('✅ All sessions revoked for:', req.user.username);
             res.json({ success: true });
         } catch (error) {
