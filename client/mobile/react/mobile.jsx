@@ -12,6 +12,6 @@ import './styles/mobile.css';
 
 createRoot(document.getElementById('appRoot')).render(
   <React.StrictMode>
-    <App basename="/mobile" forceMobile />
+    <App basename="/mobile" />
   </React.StrictMode>
 );
