@@ -80,6 +80,9 @@ class ApiClient {
       : await response.text();
 
     if (!response.ok) {
+      if (response.status === 401) {
+        window.dispatchEvent(new CustomEvent('craneapp:unauthorized'));
+      }
       const message = payload?.error || payload?.message || (typeof payload === 'string' ? payload : JSON.stringify(payload)) || 'Request failed';
       const error = new Error(message);
       error.status = response.status;
