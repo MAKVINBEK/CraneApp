@@ -376,7 +376,7 @@ fn token_ttl() -> u64 {
     env::var("CRYPTO_TOKEN_TTL_SECONDS")
         .ok()
         .and_then(|value| value.parse().ok())
-        .unwrap_or(900)
+        .unwrap_or(30 * 24 * 3600) // 30 days
 }
 
 fn unix_time() -> u64 {

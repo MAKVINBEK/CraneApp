@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation, useNavigate } from 'react-router-dom';
 import { RegisterPage } from './components/Auth/RegisterPage.jsx';
 import { LoginPage } from './components/Auth/LoginPage.jsx';
@@ -21,6 +21,7 @@ export function App({ basename = '', forceMobile = false }) {
   return (
     <BrowserRouter basename={basename || undefined}>
       <CallProvider>
+        <AuthGuard />
         <CallOverlay />
         <Routes>
           <Route path="/" element={<HomeRoute loginPath="/login" chatsPath="/chats" />} />
@@ -265,8 +266,24 @@ function ChatLayout({ forceMobile = false }) {
   );
 }
 
+function AuthGuard() {
+  const navigate = useNavigate();
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
+  useEffect(() => {
+    function handleUnauthorized() {
+      localStorage.removeItem('craneapp_auth_token');
+      navigateRef.current('/login', { replace: true });
+    }
+    window.addEventListener('craneapp:unauthorized', handleUnauthorized);
+    return () => window.removeEventListener('craneapp:unauthorized', handleUnauthorized);
+  }, []);
+  return null;
+}
+
 function translate(key, fallback, vars) {
-  return window.i18n?.t(key, vars) || fallback;
+  const val = window.i18n?.t(key, vars);
+  return (val && val !== key) ? val : fallback;
 }
 
 function withBasePath(basePath, path) {

@@ -8,6 +8,7 @@ import '../scripts/apple-emoji.js';
 
 // Styles
 import './styles/desktop.css';
+import './styles/mobile.css';
 import './styles/register.css';
 import './styles/thread.css';
 import './styles/rate-limit.css';
