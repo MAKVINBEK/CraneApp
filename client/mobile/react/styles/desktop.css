@@ -87,9 +87,20 @@
     width: 100%;
     height: 100%;
     overflow-y: auto;
-    max-width: none;
-    margin: 0;
+    max-width: none !important;
+    margin: 0 !important;
     padding: 40px 48px;
+    box-sizing: border-box;
+  }
+
+  /* Inner content of settings/contacts stretches full width */
+  .app-main-content > .settings-page .settings-profile-card,
+  .app-main-content > .settings-page .settings-block-group,
+  .app-main-content > .settings-page .logout-btn-container,
+  .app-main-content > .contacts-page .contacts-search-input,
+  .app-main-content > .contacts-page .contacts-list {
+    max-width: none;
+    width: 100%;
   }
 
   /* Hide mobile back arrow on desktop — nav rail handles navigation */
@@ -97,6 +108,20 @@
   .app-main-content > .contacts-page .back-arrow-btn,
   .app-main-content > .create-group-page .back-arrow-btn {
     display: none;
+  }
+
+  /* Desktop settings header — just title, no back button */
+  .app-main-content > .settings-page .settings-header,
+  .app-main-content > .contacts-page .contacts-header,
+  .app-main-content > .create-group-page .create-group-header {
+    margin-bottom: 32px;
+  }
+
+  .app-main-content > .settings-page .settings-header h1,
+  .app-main-content > .contacts-page .contacts-header h1,
+  .app-main-content > .create-group-page .create-group-header h1 {
+    font-size: 28px;
+    font-weight: 800;
   }
 
   /* Navigation Rail */
