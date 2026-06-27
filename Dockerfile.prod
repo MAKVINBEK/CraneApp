@@ -6,6 +6,7 @@ RUN npm install --include=dev
 COPY vite.config.js index.html mobile.html ./
 COPY client ./client
 COPY public ./public
+RUN echo "css-bust-v1"
 RUN npm run build:react
 
 # Stage 2: Build Go services
