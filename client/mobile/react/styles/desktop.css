@@ -88,7 +88,14 @@
     overflow-y: auto;
     max-width: 760px;
     margin: 0 auto;
-    padding: 40px 20px;
+    padding: 40px 32px;
+  }
+
+  /* Hide mobile back arrow on desktop — nav rail handles navigation */
+  .app-main-content > .settings-page .back-arrow-btn,
+  .app-main-content > .contacts-page .back-arrow-btn,
+  .app-main-content > .create-group-page .back-arrow-btn {
+    display: none;
   }
 
   /* Navigation Rail */
