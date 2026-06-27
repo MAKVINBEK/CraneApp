@@ -86,20 +86,6 @@
     flex: 1;
   }
 
-  /* Desktop settings header — just title, no back button */
-  .app-main-content > .settings-page .settings-header,
-  .app-main-content > .contacts-page .contacts-header,
-  .app-main-content > .create-group-page .create-group-header {
-    margin-bottom: 32px;
-  }
-
-  .app-main-content > .settings-page .settings-header h1,
-  .app-main-content > .contacts-page .contacts-header h1,
-  .app-main-content > .create-group-page .create-group-header h1 {
-    font-size: 28px;
-    font-weight: 800;
-  }
-
   /* Navigation Rail */
   .nav-rail {
     width: 72px;
