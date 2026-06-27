@@ -112,22 +112,23 @@ function ProtectedRoute({ children }) {
   return token ? children : <Navigate to="/login" replace />;
 }
 
-function useWindowWidth() {
-  const [width, setWidth] = useState(window.innerWidth);
+function useIsMobile() {
+  const mq = window.matchMedia('(max-width: 767px)');
+  const [isMobile, setIsMobile] = useState(mq.matches);
   useEffect(() => {
-    const handleResize = () => setWidth(window.innerWidth);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    const handler = (e) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
   }, []);
-  return width;
+  return isMobile;
 }
 
 function AppLayout({ children, forceMobile = false }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { chatId } = useParams();
-  const width = useWindowWidth();
-  const isMobile = forceMobile || width < 768;
+  const isMobileScreen = useIsMobile();
+  const isMobile = forceMobile || isMobileScreen;
   
   let activeTab = 'chats';
   if (location.pathname.startsWith('/contacts')) activeTab = 'contacts';
@@ -235,8 +236,8 @@ function AppLayout({ children, forceMobile = false }) {
 
 function ChatLayout({ forceMobile = false }) {
   const { chatId } = useParams();
-  const width = useWindowWidth();
-  const isMobile = forceMobile || width < 768;
+  const isMobileScreen = useIsMobile();
+  const isMobile = forceMobile || isMobileScreen;
 
   if (isMobile) {
     if (chatId) {
