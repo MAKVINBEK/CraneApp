@@ -194,6 +194,13 @@ func main() {
 			return
 		}
 
+		// Content-hashed assets can be cached forever; HTML must never be cached
+		if strings.HasPrefix(r.URL.Path, "/assets/") {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		}
+
 		// Attempt to serve file
 		if _, err := http.Dir(frontendDir).Open(r.URL.Path); err != nil {
 			http.ServeFile(w, r, frontendFallback(frontendDir, r.URL.Path))

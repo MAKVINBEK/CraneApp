@@ -79,24 +79,11 @@
     overflow-y: auto;
   }
   
-  /* Full screen width pages on desktop (settings, contacts, etc) */
+  /* Full screen width pages on desktop — flex:1 so they fill app-main-content */
   .app-main-content > .contacts-page,
   .app-main-content > .settings-page,
   .app-main-content > .create-group-page {
     flex: 1;
-    width: 100%;
-    height: 100%;
-    overflow-y: auto;
-    max-width: none;
-    margin: 0;
-    padding: 40px 48px;
-  }
-
-  /* Hide mobile back arrow on desktop — nav rail handles navigation */
-  .app-main-content > .settings-page .back-arrow-btn,
-  .app-main-content > .contacts-page .back-arrow-btn,
-  .app-main-content > .create-group-page .back-arrow-btn {
-    display: none;
   }
 
   /* Navigation Rail */
