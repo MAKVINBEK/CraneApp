@@ -17,6 +17,7 @@
     "check:architecture": "node scripts/checkArchitecture.js"
   },
   "dependencies": {
+    "@tailwindcss/vite": "^4.3.1",
     "applemojis": "^0.0.3",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
@@ -35,6 +36,7 @@
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.16.0",
     "sharp": "^0.33.2",
+    "tailwindcss": "^4.3.1",
     "uuid": "^9.0.1",
     "ws": "^8.14.2"
   },

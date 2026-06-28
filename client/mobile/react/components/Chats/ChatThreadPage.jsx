@@ -5,7 +5,6 @@ import Message from '../../../domain/entities/Message.js';
 import { useRealtimeSocket } from '../../hooks/useRealtimeSocket.js';
 import { useCall } from '../Calls/CallProvider.jsx';
 import { GroupInfoModal } from './GroupInfoModal.jsx';
-import '../../styles/thread.css';
 
 export function ChatThreadPage({ chatId, t = fallbackTranslate }) {
   const [chat, setChat] = useState(null);

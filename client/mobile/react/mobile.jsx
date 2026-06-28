@@ -5,11 +5,7 @@ import { App } from './App.jsx';
 import '../scripts/i18n.js';
 import '../scripts/apple-emoji.js';
 
-import './styles/desktop.css';
-import './styles/mobile.css';
-import './styles/register.css';
-import './styles/thread.css';
-import './styles/rate-limit.css';
+import './styles/tailwind.css';
 
 createRoot(document.getElementById('appRoot')).render(
   <React.StrictMode>

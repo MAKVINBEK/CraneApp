@@ -2,7 +2,6 @@ import { useMemo, useRef, useState } from 'react';
 import { ToastStack } from '../common/ToastStack.jsx';
 import { registerUser, saveAuthSession, uploadAvatar } from '../../services/authApi.js';
 import { useToasts } from '../../hooks/useToasts.js';
-import '../../styles/register.css';
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]+$/;
 
