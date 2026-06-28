@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { services } from '../../../application/services/serviceContainer.js';
 import { ToastStack } from '../common/ToastStack.jsx';
 import { useToasts } from '../../hooks/useToasts.js';
+import { Identicon } from '../common/Identicon.jsx';
 
 export function ContactsPage({ t = (k, f) => f }) {
   const navigate = useNavigate();
@@ -86,7 +87,6 @@ export function ContactsPage({ t = (k, f) => f }) {
         )}
 
         {users.map((user) => {
-          const initials = (user.firstName || user.username || '?').charAt(0).toUpperCase();
           return (
             <div key={user.id} className="contact-item-row" onClick={() => startChat(user.id)}>
               <div className="contact-left">
@@ -94,7 +94,7 @@ export function ContactsPage({ t = (k, f) => f }) {
                   {user.avatarUrl ? (
                     <img src={user.avatarUrl} alt="" />
                   ) : (
-                    <span>{initials}</span>
+                    <Identicon userId={user.id} size={44} />
                   )}
                 </div>
                 <div className="contact-details">

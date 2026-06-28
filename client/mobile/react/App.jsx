@@ -10,6 +10,7 @@ import { ContactsPage } from './components/Contacts/ContactsPage.jsx';
 import { CreateGroupPage } from './components/Chats/CreateGroupPage.jsx';
 import { CallProvider } from './components/Calls/CallProvider.jsx';
 import { CallOverlay } from './components/Calls/CallOverlay.jsx';
+import { useRealtimeSocket } from './hooks/useRealtimeSocket.js';
 
 export function App({ basename = '', forceMobile = false }) {
   const homePath = withBasePath(basename, '/chats');
@@ -96,8 +97,36 @@ export function App({ basename = '', forceMobile = false }) {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </CallProvider>
+      <NotificationManager />
     </BrowserRouter>
   );
+}
+
+function NotificationManager() {
+  const token = localStorage.getItem('craneapp_auth_token');
+  const { eventBus } = useRealtimeSocket(!!token);
+
+  useEffect(() => {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  useEffect(() => {
+    return eventBus.on('new_message', (payload) => {
+      if (!document.hidden) return;
+      if (Notification.permission !== 'granted') return;
+      const msg = payload?.message ?? payload ?? {};
+      const title = msg.senderName || 'CraneApp';
+      const body = typeof msg.content === 'string' ? msg.content.slice(0, 120) : 'Новое сообщение';
+      try {
+        new Notification(title, { body, icon: '/favicon.ico', tag: msg.chatId });
+      } catch (_) {}
+    });
+  }, [eventBus]);
+
+  return null;
 }
 
 function HomeRoute({ loginPath, chatsPath }) {
