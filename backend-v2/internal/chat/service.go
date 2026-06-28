@@ -23,6 +23,7 @@ type Chat struct {
 	Description   string `json:"description"`
 	AvatarURL     string `json:"avatarUrl"`
 	PeerPublicKey string `json:"peerPublicKey,omitempty"`
+	PeerID        string `json:"peerId,omitempty"`
 	OwnerID       string `json:"ownerId"`
 	Role          string `json:"role"`
 	IsPinned      bool   `json:"isPinned"`
@@ -74,17 +75,41 @@ func (s *Service) CallRooms() *CallRoomManager {
 
 func (s *Service) List(ctx context.Context, userID string, archived bool) ([]Chat, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT c.id::text, c.type, c.title, c.description, c.avatar_url, c.owner_id::text,
-		       cm.role, COALESCE(cs.is_pinned, FALSE), COALESCE(cs.is_archived, FALSE),
+		SELECT c.id::text, c.type,
+		       CASE WHEN c.type = 'private' THEN
+		         COALESCE(
+		           NULLIF(TRIM(COALESCE(peer.first_name,'') ||
+		             CASE WHEN COALESCE(peer.last_name,'') != '' THEN ' ' || peer.last_name ELSE '' END), ''),
+		           peer.display_username
+		         )
+		       ELSE c.title END,
+		       c.description,
+		       CASE WHEN c.type = 'private' THEN COALESCE(peer.avatar_url, '') ELSE COALESCE(c.avatar_url, '') END,
+		       c.owner_id::text, cm.role,
+		       COALESCE(cs.is_pinned, FALSE), COALESCE(cs.is_archived, FALSE),
 		       COALESCE(cs.last_read_at::text, ''), c.created_at::text, c.updated_at::text,
-		       COUNT(DISTINCT cm_all.user_id)::int, COALESCE(MAX(m.created_at)::text, '')
+		       COUNT(DISTINCT cm_all.user_id)::int, COALESCE(MAX(m.created_at)::text, ''),
+		       COALESCE(peer.peer_id, '')
 		FROM chats.chats c
 		JOIN chats.members cm ON cm.chat_id = c.id AND cm.user_id = $1
 		LEFT JOIN chats.user_chat_settings cs ON cs.chat_id = c.id AND cs.user_id = $1
 		LEFT JOIN chats.members cm_all ON cm_all.chat_id = c.id
 		LEFT JOIN messages.messages m ON m.chat_id = c.id AND m.deleted_at IS NULL
+		LEFT JOIN LATERAL (
+		  SELECT au.id::text AS peer_id,
+		         COALESCE(up.first_name, au.first_name, '') AS first_name,
+		         COALESCE(up.last_name,  au.last_name,  '') AS last_name,
+		         COALESCE(up.avatar_url, '') AS avatar_url,
+		         au.username || '.' || au.username_discriminator::text AS display_username
+		  FROM chats.members pm
+		  JOIN auth.users au ON au.id = pm.user_id
+		  LEFT JOIN users.profiles up ON up.user_id = pm.user_id
+		  WHERE pm.chat_id = c.id AND pm.user_id != $1
+		  LIMIT 1
+		) peer ON c.type = 'private'
 		WHERE COALESCE(cs.is_archived, FALSE) = $2
-		GROUP BY c.id, cm.role, cs.is_pinned, cs.is_archived, cs.last_read_at
+		GROUP BY c.id, cm.role, cs.is_pinned, cs.is_archived, cs.last_read_at,
+		         peer.peer_id, peer.first_name, peer.last_name, peer.avatar_url, peer.display_username
 		ORDER BY COALESCE(cs.is_pinned, FALSE) DESC, MAX(m.created_at) DESC NULLS LAST, c.updated_at DESC
 	`, userID, archived)
 	if err != nil {
@@ -96,17 +121,41 @@ func (s *Service) List(ctx context.Context, userID string, archived bool) ([]Cha
 
 func (s *Service) Get(ctx context.Context, userID, chatID string) (Chat, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT c.id::text, c.type, c.title, c.description, c.avatar_url, c.owner_id::text,
-		       cm.role, COALESCE(cs.is_pinned, FALSE), COALESCE(cs.is_archived, FALSE),
+		SELECT c.id::text, c.type,
+		       CASE WHEN c.type = 'private' THEN
+		         COALESCE(
+		           NULLIF(TRIM(COALESCE(peer.first_name,'') ||
+		             CASE WHEN COALESCE(peer.last_name,'') != '' THEN ' ' || peer.last_name ELSE '' END), ''),
+		           peer.display_username
+		         )
+		       ELSE c.title END,
+		       c.description,
+		       CASE WHEN c.type = 'private' THEN COALESCE(peer.avatar_url, '') ELSE COALESCE(c.avatar_url, '') END,
+		       c.owner_id::text, cm.role,
+		       COALESCE(cs.is_pinned, FALSE), COALESCE(cs.is_archived, FALSE),
 		       COALESCE(cs.last_read_at::text, ''), c.created_at::text, c.updated_at::text,
-		       COUNT(DISTINCT cm_all.user_id)::int, COALESCE(MAX(m.created_at)::text, '')
+		       COUNT(DISTINCT cm_all.user_id)::int, COALESCE(MAX(m.created_at)::text, ''),
+		       COALESCE(peer.peer_id, '')
 		FROM chats.chats c
 		JOIN chats.members cm ON cm.chat_id = c.id AND cm.user_id = $1
 		LEFT JOIN chats.user_chat_settings cs ON cs.chat_id = c.id AND cs.user_id = $1
 		LEFT JOIN chats.members cm_all ON cm_all.chat_id = c.id
 		LEFT JOIN messages.messages m ON m.chat_id = c.id AND m.deleted_at IS NULL
+		LEFT JOIN LATERAL (
+		  SELECT au.id::text AS peer_id,
+		         COALESCE(up.first_name, au.first_name, '') AS first_name,
+		         COALESCE(up.last_name,  au.last_name,  '') AS last_name,
+		         COALESCE(up.avatar_url, '') AS avatar_url,
+		         au.username || '.' || au.username_discriminator::text AS display_username
+		  FROM chats.members pm
+		  JOIN auth.users au ON au.id = pm.user_id
+		  LEFT JOIN users.profiles up ON up.user_id = pm.user_id
+		  WHERE pm.chat_id = c.id AND pm.user_id != $1
+		  LIMIT 1
+		) peer ON c.type = 'private'
 		WHERE c.id = $2
-		GROUP BY c.id, cm.role, cs.is_pinned, cs.is_archived, cs.last_read_at
+		GROUP BY c.id, cm.role, cs.is_pinned, cs.is_archived, cs.last_read_at,
+		         peer.peer_id, peer.first_name, peer.last_name, peer.avatar_url, peer.display_username
 	`, userID, chatID)
 	if err != nil {
 		return Chat{}, err
@@ -584,7 +633,12 @@ func scanChats(rows *sql.Rows) ([]Chat, error) {
 	var chats []Chat
 	for rows.Next() {
 		var chat Chat
-		if err := rows.Scan(&chat.ID, &chat.Type, &chat.Title, &chat.Description, &chat.AvatarURL, &chat.OwnerID, &chat.Role, &chat.IsPinned, &chat.IsArchived, &chat.LastReadAt, &chat.CreatedAt, &chat.UpdatedAt, &chat.MemberCount, &chat.LastMessageAt); err != nil {
+		if err := rows.Scan(
+			&chat.ID, &chat.Type, &chat.Title, &chat.Description, &chat.AvatarURL,
+			&chat.OwnerID, &chat.Role, &chat.IsPinned, &chat.IsArchived, &chat.LastReadAt,
+			&chat.CreatedAt, &chat.UpdatedAt, &chat.MemberCount, &chat.LastMessageAt,
+			&chat.PeerID,
+		); err != nil {
 			return nil, err
 		}
 		chats = append(chats, chat)

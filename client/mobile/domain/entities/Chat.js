@@ -3,6 +3,7 @@ class Chat {
     id,
     name,
     type = 'private',
+    peerId = null,
     participants = [],
     lastMessage = null,
     unreadCount = 0,
@@ -11,6 +12,7 @@ class Chat {
     this.id = id;
     this.name = name;
     this.type = type;
+    this.peerId = peerId;
     this.participants = participants;
     this.lastMessage = lastMessage;
     this.unreadCount = unreadCount;
@@ -22,6 +24,7 @@ class Chat {
       id: data.id,
       name: data.name ?? data.title,
       type: data.type ?? 'private',
+      peerId: data.peerId ?? data.peer_id ?? null,
       participants: data.participants ?? [],
       lastMessage: data.lastMessage ?? data.last_message ?? null,
       unreadCount: data.unreadCount ?? data.unread_count ?? 0,
