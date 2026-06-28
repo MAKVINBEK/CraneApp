@@ -2,11 +2,15 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -63,20 +67,37 @@ func (s *Service) Register(ctx context.Context, username, password, firstName, l
 	defer tx.Rollback()
 
 	var user User
-	err = tx.QueryRowContext(ctx, `
-		INSERT INTO auth.users (username, password_hash, first_name, last_name)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id::text, username, first_name, last_name
-	`, username, hash, strings.TrimSpace(firstName), strings.TrimSpace(lastName)).Scan(
-		&user.ID, &user.Username, &user.FirstName, &user.LastName,
-	)
-	if err != nil {
-		var postgresError *pq.Error
-		if errors.As(err, &postgresError) && postgresError.Constraint == "auth_users_username_key" {
-			return User{}, "", ErrUsernameTaken
+	var disc int
+	inserted := false
+	// Try up to 20 random discriminators (0–999) before giving up.
+	for attempt := 0; attempt < 20; attempt++ {
+		var buf [2]byte
+		if _, err := rand.Read(buf[:]); err != nil {
+			return User{}, "", err
+		}
+		disc = int(binary.BigEndian.Uint16(buf[:])) % 1000
+
+		err = tx.QueryRowContext(ctx, `
+			INSERT INTO auth.users (username, username_discriminator, password_hash, first_name, last_name)
+			VALUES ($1, $2, $3, $4, $5)
+			RETURNING id::text, username, first_name, last_name
+		`, username, disc, hash, strings.TrimSpace(firstName), strings.TrimSpace(lastName)).Scan(
+			&user.ID, &user.Username, &user.FirstName, &user.LastName,
+		)
+		if err == nil {
+			inserted = true
+			break
+		}
+		var pgErr *pq.Error
+		if errors.As(err, &pgErr) && pgErr.Constraint == "auth_users_username_discriminator_key" {
+			continue
 		}
 		return User{}, "", err
 	}
+	if !inserted {
+		return User{}, "", ErrUsernameTaken
+	}
+	user.Username = fmt.Sprintf("%s.%d", user.Username, disc)
 
 	user.Bio = ""
 	user.AvatarUrl = ""
@@ -113,17 +134,46 @@ func (s *Service) Register(ctx context.Context, username, password, firstName, l
 }
 
 func (s *Service) Login(ctx context.Context, username, password string) (User, string, error) {
+	username = strings.ToLower(strings.TrimSpace(username))
+
+	// Parse "base.discriminator" format (e.g. "alex.247").
+	baseUsername := username
+	disc := -1
+	if idx := strings.LastIndex(username, "."); idx > 0 {
+		if d, err := strconv.Atoi(username[idx+1:]); err == nil && d >= 0 && d <= 999 {
+			baseUsername = username[:idx]
+			disc = d
+		}
+	}
+
 	var user User
-	err := s.db.QueryRowContext(ctx, `
-		SELECT u.id::text, u.username, u.first_name, u.last_name, u.password_hash,
-		       COALESCE(p.bio, ''), COALESCE(p.avatar_url, '')
-		FROM auth.users u
-		LEFT JOIN users.profiles p ON p.user_id = u.id
-		WHERE u.username = $1 AND u.disabled_at IS NULL
-	`, strings.ToLower(strings.TrimSpace(username))).Scan(
-		&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.PasswordHash,
-		&user.Bio, &user.AvatarUrl,
-	)
+	var scanDisc int
+	var err error
+	if disc >= 0 {
+		err = s.db.QueryRowContext(ctx, `
+			SELECT u.id::text, u.username, u.username_discriminator, u.first_name, u.last_name, u.password_hash,
+			       COALESCE(p.bio, ''), COALESCE(p.avatar_url, '')
+			FROM auth.users u
+			LEFT JOIN users.profiles p ON p.user_id = u.id
+			WHERE u.username = $1 AND u.username_discriminator = $2 AND u.disabled_at IS NULL
+		`, baseUsername, disc).Scan(
+			&user.ID, &user.Username, &scanDisc, &user.FirstName, &user.LastName, &user.PasswordHash,
+			&user.Bio, &user.AvatarUrl,
+		)
+	} else {
+		// Fallback: match by base username alone (takes first match).
+		err = s.db.QueryRowContext(ctx, `
+			SELECT u.id::text, u.username, u.username_discriminator, u.first_name, u.last_name, u.password_hash,
+			       COALESCE(p.bio, ''), COALESCE(p.avatar_url, '')
+			FROM auth.users u
+			LEFT JOIN users.profiles p ON p.user_id = u.id
+			WHERE u.username = $1 AND u.disabled_at IS NULL
+			LIMIT 1
+		`, baseUsername).Scan(
+			&user.ID, &user.Username, &scanDisc, &user.FirstName, &user.LastName, &user.PasswordHash,
+			&user.Bio, &user.AvatarUrl,
+		)
+	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return User{}, "", ErrInvalidCredentials
 	}
@@ -139,6 +189,7 @@ func (s *Service) Login(ctx context.Context, username, password string) (User, s
 		return User{}, "", ErrInvalidCredentials
 	}
 
+	user.Username = fmt.Sprintf("%s.%d", user.Username, scanDisc)
 	token, err := s.crypto.IssueToken(ctx, user.ID, user.Username)
 	return user, token, err
 }

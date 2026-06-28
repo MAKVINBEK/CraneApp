@@ -16,6 +16,11 @@ import (
 	"time"
 )
 
+// formatUsername concatenates the base username and numeric discriminator.
+func formatUsername(base string, disc int) string {
+	return fmt.Sprintf("%s.%d", base, disc)
+}
+
 var (
 	ErrNotFound       = errors.New("user not found")
 	ErrSelfBlock      = errors.New("cannot block yourself")
@@ -130,16 +135,25 @@ func (s *Service) Search(ctx context.Context, viewerID, query string) ([]SearchR
 	if query == "" {
 		return []SearchResult{}, nil
 	}
+	// Strip leading "@" and trailing ".N" discriminator from the query so users can
+	// search by base username or by the full "base.N" form.
+	cleanQuery := strings.TrimPrefix(query, "@")
+	if idx := strings.LastIndex(cleanQuery, "."); idx > 0 {
+		if _, err := strconv.Atoi(cleanQuery[idx+1:]); err == nil {
+			cleanQuery = cleanQuery[:idx]
+		}
+	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT au.id::text, au.username, COALESCE(up.first_name, au.first_name), COALESCE(up.last_name, au.last_name), COALESCE(up.avatar_url, '')
+		SELECT au.id::text, au.username, au.username_discriminator,
+		       COALESCE(up.first_name, au.first_name), COALESCE(up.last_name, au.last_name), COALESCE(up.avatar_url, '')
 		FROM auth.users au
 		LEFT JOIN users.profiles up ON up.user_id = au.id
 		WHERE au.disabled_at IS NULL
 		  AND au.id::text != $2
 		  AND (au.username ILIKE $1 OR au.first_name ILIKE $1 OR au.last_name ILIKE $1 OR up.bio ILIKE $1)
-		ORDER BY au.username
+		ORDER BY au.username, au.username_discriminator
 		LIMIT 50
-	`, "%"+query+"%", viewerID)
+	`, "%"+cleanQuery+"%", viewerID)
 	if err != nil {
 		return nil, err
 	}
@@ -148,9 +162,11 @@ func (s *Service) Search(ctx context.Context, viewerID, query string) ([]SearchR
 	var users []SearchResult
 	for rows.Next() {
 		var user SearchResult
-		if err := rows.Scan(&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.AvatarURL); err != nil {
+		var disc int
+		if err := rows.Scan(&user.ID, &user.Username, &disc, &user.FirstName, &user.LastName, &user.AvatarURL); err != nil {
 			return nil, err
 		}
+		user.Username = formatUsername(user.Username, disc)
 		users = append(users, user)
 	}
 	return users, rows.Err()
@@ -161,9 +177,10 @@ func (s *Service) IsUsernameAvailable(ctx context.Context, username string) (boo
 	if username == "" {
 		return false, ErrInvalidInput
 	}
-	var exists bool
-	err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM auth.users WHERE lower(username) = lower($1))`, username).Scan(&exists)
-	return !exists, err
+	// Available as long as fewer than 1000 discriminator slots are used.
+	var count int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM auth.users WHERE lower(username) = lower($1)`, username).Scan(&count)
+	return count < 1000, err
 }
 
 func (s *Service) ProfileByID(ctx context.Context, userID string) (Profile, error) {
@@ -437,7 +454,8 @@ func (s *Service) Export(ctx context.Context, userID string) (ExportData, error)
 
 func (s *Service) Blocked(ctx context.Context, userID string) ([]BlockedUser, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT au.id::text, au.username, COALESCE(up.first_name, au.first_name), COALESCE(up.last_name, au.last_name),
+		SELECT au.id::text, au.username, au.username_discriminator,
+		       COALESCE(up.first_name, au.first_name), COALESCE(up.last_name, au.last_name),
 		       COALESCE(up.avatar_url, ''), bu.blocked_at::text
 		FROM users.blocked_users bu
 		JOIN auth.users au ON au.id = bu.blocked_user_id
@@ -452,9 +470,11 @@ func (s *Service) Blocked(ctx context.Context, userID string) ([]BlockedUser, er
 	var blocked []BlockedUser
 	for rows.Next() {
 		var item BlockedUser
-		if err := rows.Scan(&item.ID, &item.Username, &item.FirstName, &item.LastName, &item.AvatarURL, &item.BlockedAt); err != nil {
+		var disc int
+		if err := rows.Scan(&item.ID, &item.Username, &disc, &item.FirstName, &item.LastName, &item.AvatarURL, &item.BlockedAt); err != nil {
 			return nil, err
 		}
+		item.Username = formatUsername(item.Username, disc)
 		blocked = append(blocked, item)
 	}
 	return blocked, rows.Err()
@@ -494,16 +514,19 @@ func (s *Service) Unblock(ctx context.Context, userID, blockedUserID string) err
 func (s *Service) profileByID(ctx context.Context, userID string) (Profile, error) {
 	var profile Profile
 	var badges pqStringArray
+	var disc int
 	err := s.db.QueryRowContext(ctx, `
-		SELECT au.id::text, au.username, COALESCE(up.first_name, au.first_name), COALESCE(up.last_name, au.last_name),
+		SELECT au.id::text, au.username, au.username_discriminator,
+		       COALESCE(up.first_name, au.first_name), COALESCE(up.last_name, au.last_name),
 		       COALESCE(up.bio, ''), COALESCE(up.avatar_url, ''), COALESCE(up.badges, '{}')
 		FROM auth.users au
 		LEFT JOIN users.profiles up ON up.user_id = au.id
 		WHERE au.id = $1 AND au.disabled_at IS NULL
-	`, userID).Scan(&profile.ID, &profile.Username, &profile.FirstName, &profile.LastName, &profile.Bio, &profile.AvatarURL, &badges)
+	`, userID).Scan(&profile.ID, &profile.Username, &disc, &profile.FirstName, &profile.LastName, &profile.Bio, &profile.AvatarURL, &badges)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Profile{}, ErrNotFound
 	}
+	profile.Username = formatUsername(profile.Username, disc)
 	profile.Badges = []string(badges)
 	return profile, err
 }

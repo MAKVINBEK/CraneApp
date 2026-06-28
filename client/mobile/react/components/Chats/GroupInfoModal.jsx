@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { services } from '../../../application/services/serviceContainer.js';
 import { useToasts } from '../../hooks/useToasts.js';
+import { Identicon } from '../common/Identicon.jsx';
 
 export function GroupInfoModal({ chatId, isOpen, onClose, t = (k, f) => f }) {
   const { showToast } = useToasts();
@@ -72,7 +73,7 @@ export function GroupInfoModal({ chatId, isOpen, onClose, t = (k, f) => f }) {
                     {avatarUrl ? (
                       <img src={avatarUrl} alt="avatar" />
                     ) : (
-                      <div className="avatar-placeholder">{member.username?.[0]?.toUpperCase()}</div>
+                      <Identicon userId={memberId} size={44} />
                     )}
                   </div>
                   <div className="member-details">

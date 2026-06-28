@@ -82,7 +82,7 @@ export function LoginPage({
               autoComplete="username"
               autoCorrect="off"
               onChange={(event) => setUsername(event.target.value)}
-              placeholder="@username"
+              placeholder="@username.123"
               type="text"
               value={username}
             />

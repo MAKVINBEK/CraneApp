@@ -207,6 +207,10 @@ func (ws *WSServer) readPump(client *Client) {
 						msg["id"] = msgID
 						msg["senderId"] = client.UserID
 						msg["createdAt"] = time.Now().Format(time.RFC3339Nano)
+						// Attach sender display name for client-side notifications.
+						var senderName string
+						ws.db.QueryRow(`SELECT username || '.' || username_discriminator FROM auth.users WHERE id = $1`, client.UserID).Scan(&senderName)
+						msg["senderName"] = senderName
 						newMessage, _ := json.Marshal(msg)
 						ws.BroadcastToChat(chatID, newMessage, client.UserID)
 					}
