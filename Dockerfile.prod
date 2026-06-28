@@ -4,7 +4,7 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install --include=dev
 COPY vite.config.js index.html mobile.html ./
-RUN echo "css-bust-v6"
+RUN echo "css-bust-v7"
 COPY client ./client
 COPY public ./public
 RUN npm run build:react

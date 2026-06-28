@@ -10,8 +10,6 @@ import { ContactsPage } from './components/Contacts/ContactsPage.jsx';
 import { CreateGroupPage } from './components/Chats/CreateGroupPage.jsx';
 import { CallProvider } from './components/Calls/CallProvider.jsx';
 import { CallOverlay } from './components/Calls/CallOverlay.jsx';
-import './styles/app.css';
-import './styles/features.css';
 
 export function App({ basename = '', forceMobile = false }) {
   const homePath = withBasePath(basename, '/chats');
