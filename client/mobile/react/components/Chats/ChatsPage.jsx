@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { services } from '../../../application/services/serviceContainer.js';
+import { Identicon } from '../common/Identicon.jsx';
 
 export function ChatsPage({ t = fallbackTranslate }) {
   const [chats, setChats] = useState([]);
@@ -64,10 +65,15 @@ function ChatListItem({ chat, t }) {
   const title = chat.name || t('untitledChat', 'Без названия');
   const lastMessage = getLastMessageText(chat, t);
 
+  const peerId = chat.peerId ?? chat.peer_id ?? null;
+
   return (
     <Link className="chat-row" to={href}>
-      <div className={`chat-avatar chat-avatar-${chat.type || 'private'}`}>
-        {title.slice(0, 1).toUpperCase()}
+      <div className={`chat-avatar chat-avatar-${chat.type || 'private'}`} style={peerId ? { background: 'none', padding: 0 } : {}}>
+        {peerId
+          ? <Identicon userId={peerId} size={48} />
+          : title.slice(0, 1).toUpperCase()
+        }
       </div>
       <div className="chat-main">
         <div className="chat-topline">
