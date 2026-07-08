@@ -31,8 +31,16 @@ type Chat struct {
 	LastReadAt    string `json:"lastReadAt,omitempty"`
 	CreatedAt     string `json:"createdAt"`
 	UpdatedAt     string `json:"updatedAt"`
-	MemberCount   int    `json:"memberCount"`
-	LastMessageAt string `json:"lastMessageAt,omitempty"`
+	MemberCount   int                 `json:"memberCount"`
+	LastMessageAt string              `json:"lastMessageAt,omitempty"`
+	UnreadCount   int                 `json:"unreadCount"`
+	LastMessage   *LastMessagePreview `json:"lastMessage,omitempty"`
+}
+
+type LastMessagePreview struct {
+	Content    string `json:"content"`
+	Type       string `json:"type"`
+	SenderName string `json:"senderName"`
 }
 
 type Member struct {
@@ -48,16 +56,20 @@ type Member struct {
 }
 
 type Message struct {
-	ID        string         `json:"id"`
-	ChatID    string         `json:"chatId"`
-	SenderID  string         `json:"senderId"`
-	Content   string         `json:"content"`
-	Type      string         `json:"type"`
-	ReplyTo   *string        `json:"replyTo,omitempty"`
-	Metadata  map[string]any `json:"metadata,omitempty"`
-	CreatedAt string         `json:"createdAt"`
-	UpdatedAt string         `json:"updatedAt"`
-	DeletedAt *string        `json:"deletedAt,omitempty"`
+	ID           string         `json:"id"`
+	ChatID       string         `json:"chatId"`
+	SenderID     string         `json:"senderId"`
+	SenderName   string         `json:"senderName,omitempty"`
+	SenderAvatar string         `json:"senderAvatar,omitempty"`
+	Content      string         `json:"content"`
+	Type         string         `json:"type"`
+	ReplyTo      *string        `json:"replyTo,omitempty"`
+	Metadata     map[string]any `json:"metadata,omitempty"`
+	IsPinned     bool           `json:"isPinned"`
+	IsEdited     bool           `json:"isEdited"`
+	CreatedAt    string         `json:"createdAt"`
+	UpdatedAt    string         `json:"updatedAt"`
+	DeletedAt    *string        `json:"deletedAt,omitempty"`
 }
 
 type Service struct {
@@ -89,12 +101,15 @@ func (s *Service) List(ctx context.Context, userID string, archived bool) ([]Cha
 		       COALESCE(cs.is_pinned, FALSE), COALESCE(cs.is_archived, FALSE),
 		       COALESCE(cs.last_read_at::text, ''), c.created_at::text, c.updated_at::text,
 		       COUNT(DISTINCT cm_all.user_id)::int, COALESCE(MAX(m.created_at)::text, ''),
-		       COALESCE(peer.peer_id, '')
+		       COALESCE(peer.peer_id, ''),
+		       COALESCE(crs.unread_count, 0)::int,
+		       lm.content, lm.type, COALESCE(lm_up.first_name, lm_au.first_name, lm_au.username, '')
 		FROM chats.chats c
 		JOIN chats.members cm ON cm.chat_id = c.id AND cm.user_id = $1
 		LEFT JOIN chats.user_chat_settings cs ON cs.chat_id = c.id AND cs.user_id = $1
 		LEFT JOIN chats.members cm_all ON cm_all.chat_id = c.id
 		LEFT JOIN messages.messages m ON m.chat_id = c.id AND m.deleted_at IS NULL
+		LEFT JOIN chat_read_states crs ON crs.chat_id = c.id AND crs.user_id = $1
 		LEFT JOIN LATERAL (
 		  SELECT au.id::text AS peer_id,
 		         COALESCE(up.first_name, au.first_name, '') AS first_name,
@@ -107,9 +122,19 @@ func (s *Service) List(ctx context.Context, userID string, archived bool) ([]Cha
 		  WHERE pm.chat_id = c.id AND pm.user_id != $1
 		  LIMIT 1
 		) peer ON c.type = 'private'
+		LEFT JOIN LATERAL (
+		  SELECT sender_id, content, type
+		  FROM messages.messages
+		  WHERE chat_id = c.id AND deleted_at IS NULL
+		  ORDER BY created_at DESC
+		  LIMIT 1
+		) lm ON TRUE
+		LEFT JOIN auth.users lm_au ON lm_au.id = lm.sender_id
+		LEFT JOIN users.profiles lm_up ON lm_up.user_id = lm.sender_id
 		WHERE COALESCE(cs.is_archived, FALSE) = $2
 		GROUP BY c.id, cm.role, cs.is_pinned, cs.is_archived, cs.last_read_at,
-		         peer.peer_id, peer.first_name, peer.last_name, peer.avatar_url, peer.display_username
+		         peer.peer_id, peer.first_name, peer.last_name, peer.avatar_url, peer.display_username,
+		         crs.unread_count, lm.content, lm.type, lm_up.first_name, lm_au.first_name, lm_au.username
 		ORDER BY COALESCE(cs.is_pinned, FALSE) DESC, MAX(m.created_at) DESC NULLS LAST, c.updated_at DESC
 	`, userID, archived)
 	if err != nil {
@@ -135,12 +160,15 @@ func (s *Service) Get(ctx context.Context, userID, chatID string) (Chat, error) 
 		       COALESCE(cs.is_pinned, FALSE), COALESCE(cs.is_archived, FALSE),
 		       COALESCE(cs.last_read_at::text, ''), c.created_at::text, c.updated_at::text,
 		       COUNT(DISTINCT cm_all.user_id)::int, COALESCE(MAX(m.created_at)::text, ''),
-		       COALESCE(peer.peer_id, '')
+		       COALESCE(peer.peer_id, ''),
+		       COALESCE(crs.unread_count, 0)::int,
+		       lm.content, lm.type, COALESCE(lm_up.first_name, lm_au.first_name, lm_au.username, '')
 		FROM chats.chats c
 		JOIN chats.members cm ON cm.chat_id = c.id AND cm.user_id = $1
 		LEFT JOIN chats.user_chat_settings cs ON cs.chat_id = c.id AND cs.user_id = $1
 		LEFT JOIN chats.members cm_all ON cm_all.chat_id = c.id
 		LEFT JOIN messages.messages m ON m.chat_id = c.id AND m.deleted_at IS NULL
+		LEFT JOIN chat_read_states crs ON crs.chat_id = c.id AND crs.user_id = $1
 		LEFT JOIN LATERAL (
 		  SELECT au.id::text AS peer_id,
 		         COALESCE(up.first_name, au.first_name, '') AS first_name,
@@ -153,9 +181,19 @@ func (s *Service) Get(ctx context.Context, userID, chatID string) (Chat, error) 
 		  WHERE pm.chat_id = c.id AND pm.user_id != $1
 		  LIMIT 1
 		) peer ON c.type = 'private'
+		LEFT JOIN LATERAL (
+		  SELECT sender_id, content, type
+		  FROM messages.messages
+		  WHERE chat_id = c.id AND deleted_at IS NULL
+		  ORDER BY created_at DESC
+		  LIMIT 1
+		) lm ON TRUE
+		LEFT JOIN auth.users lm_au ON lm_au.id = lm.sender_id
+		LEFT JOIN users.profiles lm_up ON lm_up.user_id = lm.sender_id
 		WHERE c.id = $2
 		GROUP BY c.id, cm.role, cs.is_pinned, cs.is_archived, cs.last_read_at,
-		         peer.peer_id, peer.first_name, peer.last_name, peer.avatar_url, peer.display_username
+		         peer.peer_id, peer.first_name, peer.last_name, peer.avatar_url, peer.display_username,
+		         crs.unread_count, lm.content, lm.type, lm_up.first_name, lm_au.first_name, lm_au.username
 	`, userID, chatID)
 	if err != nil {
 		return Chat{}, err
@@ -633,13 +671,24 @@ func scanChats(rows *sql.Rows) ([]Chat, error) {
 	var chats []Chat
 	for rows.Next() {
 		var chat Chat
+		var unreadCount int
+		var lmContent, lmType, lmSender sql.NullString
 		if err := rows.Scan(
 			&chat.ID, &chat.Type, &chat.Title, &chat.Description, &chat.AvatarURL,
 			&chat.OwnerID, &chat.Role, &chat.IsPinned, &chat.IsArchived, &chat.LastReadAt,
 			&chat.CreatedAt, &chat.UpdatedAt, &chat.MemberCount, &chat.LastMessageAt,
 			&chat.PeerID,
+			&unreadCount, &lmContent, &lmType, &lmSender,
 		); err != nil {
 			return nil, err
+		}
+		chat.UnreadCount = unreadCount
+		if lmContent.Valid || lmType.Valid {
+			chat.LastMessage = &LastMessagePreview{
+				Content:    lmContent.String,
+				Type:       lmType.String,
+				SenderName: lmSender.String,
+			}
 		}
 		chats = append(chats, chat)
 	}
@@ -654,11 +703,17 @@ func (s *Service) ListMessages(ctx context.Context, userID, chatID string, limit
 		return nil, ErrForbidden
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id::text, chat_id::text, sender_id::text, content, type,
-		       reply_to::text, metadata, created_at::text, updated_at::text, deleted_at::text
-		FROM messages.messages
-		WHERE chat_id = $1 AND deleted_at IS NULL
-		ORDER BY created_at DESC
+		SELECT m.id::text, m.chat_id::text, m.sender_id::text,
+		       COALESCE(up.first_name, au.first_name, au.username, ''), COALESCE(up.avatar_url, ''),
+		       m.content, m.type, m.reply_to::text, m.metadata,
+		       (p.message_id IS NOT NULL), m.updated_at > m.created_at,
+		       m.created_at::text, m.updated_at::text, m.deleted_at::text
+		FROM messages.messages m
+		LEFT JOIN auth.users au ON au.id = m.sender_id
+		LEFT JOIN users.profiles up ON up.user_id = m.sender_id
+		LEFT JOIN messages.pins p ON p.message_id = m.id
+		WHERE m.chat_id = $1 AND m.deleted_at IS NULL
+		ORDER BY m.created_at DESC
 		LIMIT $2 OFFSET $3
 	`, chatID, limit, offset)
 	if err != nil {
@@ -675,7 +730,13 @@ func scanMessages(rows *sql.Rows) ([]Message, error) {
 		var metadataBytes []byte
 		var replyTo sql.NullString
 		var deletedAt sql.NullString
-		if err := rows.Scan(&msg.ID, &msg.ChatID, &msg.SenderID, &msg.Content, &msg.Type, &replyTo, &metadataBytes, &msg.CreatedAt, &msg.UpdatedAt, &deletedAt); err != nil {
+		if err := rows.Scan(
+			&msg.ID, &msg.ChatID, &msg.SenderID,
+			&msg.SenderName, &msg.SenderAvatar,
+			&msg.Content, &msg.Type, &replyTo, &metadataBytes,
+			&msg.IsPinned, &msg.IsEdited,
+			&msg.CreatedAt, &msg.UpdatedAt, &deletedAt,
+		); err != nil {
 			return nil, err
 		}
 		if replyTo.Valid {
@@ -684,16 +745,35 @@ func scanMessages(rows *sql.Rows) ([]Message, error) {
 		if deletedAt.Valid {
 			msg.DeletedAt = &deletedAt.String
 		}
+		if metadataBytes != nil {
+			json.Unmarshal(metadataBytes, &msg.Metadata)
+		}
 		messages = append(messages, msg)
 	}
 	return messages, rows.Err()
 }
 
 func (s *Service) SendMessage(ctx context.Context, userID, chatID, content, msgType string, replyTo *string) (Message, error) {
-	if ok, err := s.isMember(ctx, userID, chatID); err != nil || !ok {
-		if err != nil {
-			return Message{}, err
+	var role string
+	var isMuted sql.NullBool
+	err := s.db.QueryRowContext(ctx, `
+		SELECT cm.role, 
+		       (
+		         COALESCE(u.is_muted AND (u.muted_until IS NULL OR u.muted_until > NOW()), false) OR 
+		         (cm.role = 'member' AND cm.muted_until > NOW())
+		       )
+		FROM chats.members cm
+		JOIN auth.users u ON u.id = cm.user_id
+		WHERE cm.chat_id = $1 AND cm.user_id = $2
+	`, chatID, userID).Scan(&role, &isMuted)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Message{}, ErrForbidden
 		}
+		return Message{}, err
+	}
+	if isMuted.Valid && isMuted.Bool {
 		return Message{}, ErrForbidden
 	}
 
@@ -706,11 +786,26 @@ func (s *Service) SendMessage(ctx context.Context, userID, chatID, content, msgT
 	var replyToStr sql.NullString
 	var deletedAt sql.NullString
 	var metadataBytes []byte
-	err := s.db.QueryRowContext(ctx, `
-		INSERT INTO messages.messages (chat_id, sender_id, content, type, reply_to)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id::text, chat_id::text, sender_id::text, content, type, reply_to::text, metadata, created_at::text, updated_at::text, deleted_at::text
-	`, chatID, userID, content, msgType, replyToSQL).Scan(&msg.ID, &msg.ChatID, &msg.SenderID, &msg.Content, &msg.Type, &replyToStr, &metadataBytes, &msg.CreatedAt, &msg.UpdatedAt, &deletedAt)
+	err = s.db.QueryRowContext(ctx, `
+		WITH inserted AS (
+			INSERT INTO messages.messages (chat_id, sender_id, content, type, reply_to)
+			VALUES ($1, $2, $3, $4, $5)
+			RETURNING *
+		)
+		SELECT m.id::text, m.chat_id::text, m.sender_id::text,
+		       COALESCE(up.first_name, au.first_name, au.username, ''), COALESCE(up.avatar_url, ''),
+		       m.content, m.type, m.reply_to::text, m.metadata,
+		       FALSE, FALSE,
+		       m.created_at::text, m.updated_at::text, m.deleted_at::text
+		FROM inserted m
+		LEFT JOIN auth.users au ON au.id = m.sender_id
+		LEFT JOIN users.profiles up ON up.user_id = m.sender_id
+	`, chatID, userID, content, msgType, replyToSQL).Scan(
+		&msg.ID, &msg.ChatID, &msg.SenderID,
+		&msg.SenderName, &msg.SenderAvatar,
+		&msg.Content, &msg.Type, &replyToStr, &metadataBytes,
+		&msg.IsPinned, &msg.IsEdited,
+		&msg.CreatedAt, &msg.UpdatedAt, &deletedAt)
 	if err != nil {
 		return Message{}, err
 	}
@@ -742,13 +837,29 @@ func (s *Service) EditMessage(ctx context.Context, userID, messageID, content st
 
 	// Require sender to be a current member of the chat to prevent editing after being kicked.
 	err := s.db.QueryRowContext(ctx, `
-		UPDATE messages.messages AS m
-		SET content = $1, updated_at = NOW()
-		FROM chats.members AS cm
-		WHERE m.id = $2 AND m.sender_id = $3 AND m.deleted_at IS NULL
-		  AND cm.chat_id = m.chat_id AND cm.user_id = $3
-		RETURNING m.id::text, m.chat_id::text, m.sender_id::text, m.content, m.type, m.reply_to::text, m.metadata, m.created_at::text, m.updated_at::text, m.deleted_at::text
-	`, content, messageID, userID).Scan(&msg.ID, &msg.ChatID, &msg.SenderID, &msg.Content, &msg.Type, &replyToStr, &metadataBytes, &msg.CreatedAt, &msg.UpdatedAt, &deletedAt)
+		WITH updated AS (
+			UPDATE messages.messages AS m
+			SET content = $1, updated_at = NOW()
+			FROM chats.members AS cm
+			WHERE m.id = $2 AND m.sender_id = $3 AND m.deleted_at IS NULL
+			  AND cm.chat_id = m.chat_id AND cm.user_id = $3
+			RETURNING m.*
+		)
+		SELECT u.id::text, u.chat_id::text, u.sender_id::text,
+		       COALESCE(up.first_name, au.first_name, au.username, ''), COALESCE(up.avatar_url, ''),
+		       u.content, u.type, u.reply_to::text, u.metadata,
+		       (p.message_id IS NOT NULL), u.updated_at > u.created_at,
+		       u.created_at::text, u.updated_at::text, u.deleted_at::text
+		FROM updated u
+		LEFT JOIN auth.users au ON au.id = u.sender_id
+		LEFT JOIN users.profiles up ON up.user_id = u.sender_id
+		LEFT JOIN messages.pins p ON p.message_id = u.id
+	`, content, messageID, userID).Scan(
+		&msg.ID, &msg.ChatID, &msg.SenderID,
+		&msg.SenderName, &msg.SenderAvatar,
+		&msg.Content, &msg.Type, &replyToStr, &metadataBytes,
+		&msg.IsPinned, &msg.IsEdited,
+		&msg.CreatedAt, &msg.UpdatedAt, &deletedAt)
 
 	if err == sql.ErrNoRows {
 		return Message{}, ErrNotFound
@@ -784,7 +895,7 @@ func (s *Service) DeleteMessage(ctx context.Context, userID, messageID string) e
 		UPDATE messages.messages AS m
 		SET deleted_at = NOW()
 		FROM chats.members AS cm
-		WHERE m.id = $1 AND m.sender_id = $2 AND m.deleted_at IS NULL
+		WHERE m.id = $1 AND (m.sender_id = $2 OR cm.role = 'owner' OR (cm.role = 'admin' AND cm.permissions->>'can_delete_messages' = 'true')) AND m.deleted_at IS NULL
 		  AND cm.chat_id = m.chat_id AND cm.user_id = $2
 		RETURNING m.chat_id::text
 	`, messageID, userID).Scan(&chatID)
@@ -1020,10 +1131,17 @@ func (s *Service) SearchMessages(ctx context.Context, userID, query string, limi
 		limit = 50
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT m.id::text, m.chat_id::text, m.sender_id::text, m.content, m.type,
-		       m.reply_to::text, m.metadata, m.created_at::text, m.updated_at::text, m.deleted_at::text
+		SELECT m.id::text, m.chat_id::text, m.sender_id::text,
+		       COALESCE(up.first_name, au.first_name, au.username, ''), COALESCE(up.avatar_url, ''),
+		       m.content, m.type,
+		       m.reply_to::text, m.metadata,
+		       (p.message_id IS NOT NULL), m.updated_at > m.created_at,
+		       m.created_at::text, m.updated_at::text, m.deleted_at::text
 		FROM messages.messages m
 		JOIN chats.members cm ON cm.chat_id = m.chat_id AND cm.user_id = $1
+		LEFT JOIN auth.users au ON au.id = m.sender_id
+		LEFT JOIN users.profiles up ON up.user_id = m.sender_id
+		LEFT JOIN messages.pins p ON p.message_id = m.id
 		WHERE m.deleted_at IS NULL
 		  AND to_tsvector('simple', m.content) @@ plainto_tsquery('simple', $2)
 		ORDER BY m.created_at DESC
@@ -1053,10 +1171,17 @@ func (s *Service) ListFavorites(ctx context.Context, userID string, limit, offse
 		limit = 50
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT m.id::text, m.chat_id::text, m.sender_id::text, m.content, m.type,
-		       m.reply_to::text, m.metadata, m.created_at::text, m.updated_at::text, m.deleted_at::text
+		SELECT m.id::text, m.chat_id::text, m.sender_id::text,
+		       COALESCE(up.first_name, au.first_name, au.username, ''), COALESCE(up.avatar_url, ''),
+		       m.content, m.type,
+		       m.reply_to::text, m.metadata,
+		       (p.message_id IS NOT NULL), m.updated_at > m.created_at,
+		       m.created_at::text, m.updated_at::text, m.deleted_at::text
 		FROM messages.favorites f
 		JOIN messages.messages m ON m.id = f.message_id
+		LEFT JOIN auth.users au ON au.id = m.sender_id
+		LEFT JOIN users.profiles up ON up.user_id = m.sender_id
+		LEFT JOIN messages.pins p ON p.message_id = m.id
 		WHERE f.user_id = $1 AND m.deleted_at IS NULL
 		ORDER BY f.created_at DESC
 		LIMIT $2 OFFSET $3

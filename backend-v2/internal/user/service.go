@@ -38,6 +38,8 @@ type Profile struct {
 	Bio       string   `json:"bio"`
 	AvatarURL string   `json:"avatarUrl"`
 	Badges    []string `json:"badges"`
+	IsPremium bool     `json:"isPremium"`
+	IsBot     bool     `json:"isBot"`
 }
 
 type SearchResult struct {
@@ -130,6 +132,19 @@ func (s *Service) UpdateProfile(ctx context.Context, userID string, firstName, l
 	return s.profileByID(ctx, userID)
 }
 
+func (s *Service) SubscribePremium(ctx context.Context, userID string) error {
+	if err := s.ensureProfile(ctx, userID); err != nil {
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE users.profiles SET
+			is_premium = TRUE,
+			updated_at = NOW()
+		WHERE user_id = $1
+	`, userID)
+	return err
+}
+
 func (s *Service) Search(ctx context.Context, viewerID, query string) ([]SearchResult, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
@@ -188,6 +203,22 @@ func (s *Service) ProfileByID(ctx context.Context, userID string) (Profile, erro
 }
 
 func (s *Service) Status(ctx context.Context, userID string) (map[string]any, error) {
+	var privacyJSON []byte
+	if err := s.db.QueryRowContext(ctx, `SELECT privacy_settings FROM users.settings WHERE user_id = $1`, userID).Scan(&privacyJSON); err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+	}
+	lastSeenPrivacy := "everyone"
+	if len(privacyJSON) > 0 {
+		var privacy struct {
+			LastSeen string `json:"lastSeen"`
+		}
+		if err := json.Unmarshal(privacyJSON, &privacy); err == nil && privacy.LastSeen != "" {
+			lastSeenPrivacy = privacy.LastSeen
+		}
+	}
+
 	var lastActive sql.NullString
 	err := s.db.QueryRowContext(ctx, `
 		SELECT last_active::text FROM public.user_sessions
@@ -205,6 +236,11 @@ func (s *Service) Status(ctx context.Context, userID string) (map[string]any, er
 	`, userID).Scan(&online); err != nil {
 		return nil, err
 	}
+
+	if lastSeenPrivacy == "nobody" || lastSeenPrivacy == "contacts" || lastSeenPrivacy == "none" {
+		return map[string]any{"isOnline": false, "lastSeen": "recently"}, nil
+	}
+
 	return map[string]any{"isOnline": online, "lastSeen": lastActive.String}, nil
 }
 
@@ -518,17 +554,37 @@ func (s *Service) profileByID(ctx context.Context, userID string) (Profile, erro
 	err := s.db.QueryRowContext(ctx, `
 		SELECT au.id::text, au.username, au.username_discriminator,
 		       COALESCE(up.first_name, au.first_name), COALESCE(up.last_name, au.last_name),
-		       COALESCE(up.bio, ''), COALESCE(up.avatar_url, ''), COALESCE(up.badges, '{}')
+		       COALESCE(up.bio, ''), COALESCE(up.avatar_url, ''), COALESCE(up.badges, '{}'), COALESCE(up.is_premium, FALSE)
 		FROM auth.users au
 		LEFT JOIN users.profiles up ON up.user_id = au.id
 		WHERE au.id = $1 AND au.disabled_at IS NULL
-	`, userID).Scan(&profile.ID, &profile.Username, &disc, &profile.FirstName, &profile.LastName, &profile.Bio, &profile.AvatarURL, &badges)
+	`, userID).Scan(&profile.ID, &profile.Username, &disc, &profile.FirstName, &profile.LastName, &profile.Bio, &profile.AvatarURL, &badges, &profile.IsPremium)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Profile{}, ErrNotFound
 	}
 	profile.Username = formatUsername(profile.Username, disc)
 	profile.Badges = []string(badges)
+	
+	for _, badge := range profile.Badges {
+		if badge == "bot" {
+			profile.IsBot = true
+			break
+		}
+	}
+	if profile.IsPremium && !contains(profile.Badges, "premium") {
+		profile.Badges = append(profile.Badges, "premium")
+	}
+
 	return profile, err
+}
+
+func contains(slice []string, val string) bool {
+	for _, item := range slice {
+		if item == val {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) ensureProfile(ctx context.Context, userID string) error {

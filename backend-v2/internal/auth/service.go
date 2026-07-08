@@ -23,6 +23,8 @@ var (
 	ErrUsernameTaken      = errors.New("username already exists")
 	ErrWrongPassword      = errors.New("wrong password")
 	ErrTwoFANotEnabled    = errors.New("2fa not enabled")
+	ErrTwoFARequired      = errors.New("2fa required")
+	ErrInvalidTwoFA       = errors.New("invalid 2fa")
 )
 
 type Session struct {
@@ -133,7 +135,7 @@ func (s *Service) Register(ctx context.Context, username, password, firstName, l
 	return user, token, err
 }
 
-func (s *Service) Login(ctx context.Context, username, password string) (User, string, error) {
+func (s *Service) Login(ctx context.Context, username, password, twoFAPassword string) (User, string, error) {
 	username = strings.ToLower(strings.TrimSpace(username))
 
 	// Parse "base.discriminator" format (e.g. "alex.247").
@@ -189,6 +191,25 @@ func (s *Service) Login(ctx context.Context, username, password string) (User, s
 		return User{}, "", ErrInvalidCredentials
 	}
 
+	var twoFAEnabled bool
+	var twoFAHash sql.NullString
+	_ = s.db.QueryRowContext(ctx, `SELECT two_fa_enabled, two_fa_hash FROM auth.users WHERE id = $1`, user.ID).Scan(&twoFAEnabled, &twoFAHash)
+
+	if twoFAEnabled {
+		if twoFAPassword == "" {
+			return user, "", ErrTwoFARequired
+		}
+		if twoFAHash.Valid {
+			valid2FA, err := s.crypto.VerifyPassword(ctx, twoFAPassword, twoFAHash.String)
+			if err != nil {
+				return User{}, "", err
+			}
+			if !valid2FA {
+				return User{}, "", ErrInvalidTwoFA
+			}
+		}
+	}
+
 	user.Username = fmt.Sprintf("%s.%d", user.Username, scanDisc)
 	token, err := s.crypto.IssueToken(ctx, user.ID, user.Username)
 	return user, token, err
@@ -205,6 +226,18 @@ func (s *Service) SavePublicKey(ctx context.Context, userID, publicKey string) e
 		ON CONFLICT (user_id) DO UPDATE SET public_key = EXCLUDED.public_key, updated_at = NOW()
 	`, userID, publicKey)
 	return err
+}
+
+// IssueQRToken issues a new token for the given user ID, used for QR login confirmation.
+func (s *Service) IssueQRToken(ctx context.Context, userID string) (string, error) {
+	var username string
+	var disc int
+	err := s.db.QueryRowContext(ctx, `SELECT username, username_discriminator FROM auth.users WHERE id = $1`, userID).Scan(&username, &disc)
+	if err != nil {
+		return "", err
+	}
+	fullUsername := fmt.Sprintf("%s.%d", username, disc)
+	return s.crypto.IssueToken(ctx, userID, fullUsername)
 }
 
 func tokenHash(token string) string {

@@ -66,6 +66,13 @@ func main() {
 	mux.Handle("/api/v2/media", authenticated(http.HandlerFunc(handler.Upload)))
 	mux.Handle("/api/v2/media/", http.HandlerFunc(handler.Serve))
 
+	mux.Handle("/api/v2/emojis", http.HandlerFunc(media.ServeEmojis))
+	mux.Handle("/api/v2/gifs", authenticated(http.HandlerFunc(handler.HandleGifsRoutes)))
+	mux.Handle("/api/v2/gifs/", authenticated(http.HandlerFunc(handler.HandleGifsRoutes)))
+	mux.Handle("/api/v2/stickers/packs", authenticated(http.HandlerFunc(handler.HandleStickersRoutes)))
+	mux.Handle("/api/v2/stickers/packs/", authenticated(http.HandlerFunc(handler.HandleStickersRoutes)))
+	mux.Handle("/api/v2/stickers/", authenticated(http.HandlerFunc(handler.HandleStickersRoutes)))
+
 	server := &http.Server{Addr: config.Value("MEDIA_ADDR", ":8084"), Handler: httpx.Middleware(mux), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 5 * time.Minute, WriteTimeout: 5 * time.Minute, IdleTimeout: 120 * time.Second}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
