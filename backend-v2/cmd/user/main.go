@@ -45,6 +45,8 @@ func main() {
 	mux.Handle("/api/v2/users/avatar", authenticated(http.HandlerFunc(handler.Avatar)))
 	mux.Handle("/api/v2/users/check-username", authenticated(http.HandlerFunc(handler.CheckUsername)))
 	mux.Handle("/api/v2/users/search", authenticated(http.HandlerFunc(handler.Search)))
+	mux.Handle("/api/v2/users/qr-code", authenticated(http.HandlerFunc(handler.QRCode)))
+	mux.Handle("/api/v2/premium/subscribe", authenticated(http.HandlerFunc(handler.SubscribePremium)))
 	mux.Handle("/api/v2/users/all-settings", authenticated(http.HandlerFunc(handler.AllSettings)))
 	mux.Handle("/api/v2/users/settings", authenticated(http.HandlerFunc(handler.Settings)))
 	mux.Handle("/api/v2/users/privacy", authenticated(http.HandlerFunc(handler.Privacy)))

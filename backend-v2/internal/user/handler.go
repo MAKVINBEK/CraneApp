@@ -1,10 +1,14 @@
 package user
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/skip2/go-qrcode"
 
 	"craneapp/backend-v2/internal/platform/authctx"
 	"craneapp/backend-v2/internal/platform/httpx"
@@ -16,6 +20,55 @@ type Handler struct {
 
 func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
+}
+
+func (h *Handler) SubscribePremium(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		httpx.ErrorJSON(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	current := authctx.MustUser(r)
+	if err := h.service.SubscribePremium(r.Context(), current.ID); err != nil {
+		httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", "subscription failed")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]bool{"success": true})
+}
+
+func (h *Handler) QRCode(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		httpx.ErrorJSON(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	username := r.URL.Query().Get("username")
+	if username == "" {
+		httpx.ErrorJSON(w, r, http.StatusBadRequest, "validation_failed", "username is required")
+		return
+	}
+	// Verify user exists
+	users, err := h.service.Search(r.Context(), "", username)
+	if err != nil || len(users) == 0 {
+		httpx.ErrorJSON(w, r, http.StatusNotFound, "user_not_found", "user not found")
+		return
+	}
+
+	host := r.Host
+	protocol := r.Header.Get("X-Forwarded-Proto")
+	if protocol == "" {
+		protocol = "http"
+	}
+
+	url := fmt.Sprintf("%s://%s/user/@%s", protocol, host, username)
+	png, err := qrcode.Encode(url, qrcode.Medium, 256)
+	if err != nil {
+		httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", "qr generation failed")
+		return
+	}
+	
+	base64Encoded := base64.StdEncoding.EncodeToString(png)
+	dataURL := fmt.Sprintf("data:image/png;base64,%s", base64Encoded)
+
+	httpx.JSON(w, http.StatusOK, map[string]string{"qrCode": dataURL})
 }
 
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {

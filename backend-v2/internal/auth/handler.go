@@ -1,12 +1,19 @@
 package auth
 
 import (
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/skip2/go-qrcode"
 
 	"craneapp/backend-v2/internal/platform/authctx"
 	"craneapp/backend-v2/internal/platform/httpx"
@@ -14,8 +21,15 @@ import (
 
 var usernamePattern = regexp.MustCompile(`^[a-zA-Z0-9_]{3,32}$`)
 
+type QRTokenData struct {
+	ExpiresAt time.Time
+	Confirmed bool
+	AuthToken string
+}
+
 type Handler struct {
-	service *Service
+	service  *Service
+	qrTokens sync.Map
 }
 
 func NewHandler(service *Service) *Handler {
@@ -60,14 +74,23 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
+		Username      string `json:"username"`
+		Password      string `json:"password"`
+		TwoFAPassword string `json:"twoFAPassword"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&input); err != nil {
 		httpx.ErrorJSON(w, r, http.StatusBadRequest, "invalid_json", "invalid JSON body")
 		return
 	}
-	user, token, err := h.service.Login(r.Context(), input.Username, input.Password)
+	user, token, err := h.service.Login(r.Context(), input.Username, input.Password, input.TwoFAPassword)
+	if errors.Is(err, ErrTwoFARequired) {
+		httpx.JSON(w, http.StatusOK, map[string]any{"twoFARequired": true, "userId": user.ID})
+		return
+	}
+	if errors.Is(err, ErrInvalidTwoFA) {
+		httpx.ErrorJSON(w, r, http.StatusUnauthorized, "invalid_2fa", "invalid 2fa password")
+		return
+	}
 	if errors.Is(err, ErrInvalidCredentials) {
 		httpx.ErrorJSON(w, r, http.StatusUnauthorized, "invalid_credentials", "invalid username or password")
 		return
@@ -264,4 +287,138 @@ func (h *Handler) TwoFAVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{"success": true, "required": required})
+}
+
+func (h *Handler) QRToken(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		httpx.ErrorJSON(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+
+	var buf [16]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", "failed to generate token")
+		return
+	}
+	qrToken := hex.EncodeToString(buf[:])
+	expiresAt := time.Now().Add(5 * time.Minute)
+
+	h.qrTokens.Store(qrToken, &QRTokenData{
+		ExpiresAt: expiresAt,
+		Confirmed: false,
+	})
+
+	host := r.Host
+	protocol := r.Header.Get("X-Forwarded-Proto")
+	if protocol == "" {
+		if r.TLS != nil {
+			protocol = "https"
+		} else {
+			protocol = "http"
+		}
+	}
+
+	qrUrl := fmt.Sprintf("%s://%s/api/v2/auth/qr-confirm?token=%s", protocol, host, qrToken)
+	png, err := qrcode.Encode(qrUrl, qrcode.Medium, 256)
+	if err != nil {
+		httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", "failed to generate qr code")
+		return
+	}
+	qrImage := "data:image/png;base64," + base64.StdEncoding.EncodeToString(png)
+
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"qrToken":   qrToken,
+		"qrImage":   qrImage,
+		"expiresAt": expiresAt.UnixMilli(),
+	})
+}
+
+func (h *Handler) QRStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		httpx.ErrorJSON(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+
+	token := r.PathValue("token")
+	if token == "" {
+		httpx.ErrorJSON(w, r, http.StatusBadRequest, "invalid_request", "token required")
+		return
+	}
+
+	val, ok := h.qrTokens.Load(token)
+	if !ok {
+		httpx.JSON(w, http.StatusOK, map[string]string{"status": "expired"})
+		return
+	}
+
+	data := val.(*QRTokenData)
+	if time.Now().After(data.ExpiresAt) {
+		h.qrTokens.Delete(token)
+		httpx.JSON(w, http.StatusOK, map[string]string{"status": "expired"})
+		return
+	}
+
+	if data.Confirmed {
+		authToken := data.AuthToken
+		h.qrTokens.Delete(token)
+		httpx.JSON(w, http.StatusOK, map[string]string{
+			"status":    "confirmed",
+			"authToken": authToken,
+		})
+		return
+	}
+
+	httpx.JSON(w, http.StatusOK, map[string]any{
+		"status":    "pending",
+		"expiresAt": data.ExpiresAt.UnixMilli(),
+	})
+}
+
+func (h *Handler) QRConfirm(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		httpx.ErrorJSON(w, r, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+
+	current := authctx.MustUser(r)
+
+	var input struct {
+		QRToken string `json:"qrToken"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&input); err != nil {
+		httpx.ErrorJSON(w, r, http.StatusBadRequest, "invalid_json", "invalid JSON body")
+		return
+	}
+
+	if input.QRToken == "" {
+		httpx.ErrorJSON(w, r, http.StatusBadRequest, "invalid_request", "qrToken required")
+		return
+	}
+
+	val, ok := h.qrTokens.Load(input.QRToken)
+	if !ok {
+		httpx.ErrorJSON(w, r, http.StatusBadRequest, "invalid_token", "QR connection expired or invalid")
+		return
+	}
+
+	data := val.(*QRTokenData)
+	if time.Now().After(data.ExpiresAt) {
+		h.qrTokens.Delete(input.QRToken)
+		httpx.ErrorJSON(w, r, http.StatusBadRequest, "invalid_token", "QR connection expired or invalid")
+		return
+	}
+
+	authToken, err := h.service.IssueQRToken(r.Context(), current.ID)
+	if err != nil {
+		httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", "failed to issue token")
+		return
+	}
+
+	h.qrTokens.Store(input.QRToken, &QRTokenData{
+		ExpiresAt: data.ExpiresAt,
+		Confirmed: true,
+		AuthToken: authToken,
+	})
+
+	httpx.JSON(w, http.StatusOK, map[string]bool{"success": true})
 }

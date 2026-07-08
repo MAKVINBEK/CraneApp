@@ -156,6 +156,16 @@ func main() {
 		httpx.ErrorJSON(w, r, http.StatusBadGateway, "upstream_unavailable", "media service unavailable")
 	}
 
+	adminURL, err := url.Parse(config.Value("ADMIN_URL", "http://127.0.0.1:8085"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	adminProxy := httputil.NewSingleHostReverseProxy(adminURL)
+	adminProxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		log.Printf("admin upstream: %v", err)
+		httpx.ErrorJSON(w, r, http.StatusBadGateway, "upstream_unavailable", "admin service unavailable")
+	}
+
 	frontendDir := config.Value("FRONTEND_DIR", "../dist")
 	fs := http.FileServer(http.Dir(frontendDir))
 
@@ -172,6 +182,7 @@ func main() {
 	mux.Handle("/api/v2/users/", userProxy)
 	mux.Handle("/api/v2/encryption/", userProxy)
 	mux.Handle("/api/v2/support/", userProxy)
+	mux.Handle("/api/v2/premium/", userProxy)
 
 	// Chat service
 	mux.Handle("/api/v2/chats", chatProxy)
@@ -185,6 +196,15 @@ func main() {
 	// Media service
 	mux.Handle("/api/v2/media", mediaProxy)
 	mux.Handle("/api/v2/media/", mediaProxy)
+
+	// Admin service
+	mux.Handle("/api/v2/admin/", adminProxy)
+	mux.Handle("/api/v2/emojis", mediaProxy)
+	mux.Handle("/api/v2/emojis/", mediaProxy)
+	mux.Handle("/api/v2/gifs", mediaProxy)
+	mux.Handle("/api/v2/gifs/", mediaProxy)
+	mux.Handle("/api/v2/stickers", mediaProxy)
+	mux.Handle("/api/v2/stickers/", mediaProxy)
 
 	// Serve static files for frontend, fallback to index.html for React Router
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

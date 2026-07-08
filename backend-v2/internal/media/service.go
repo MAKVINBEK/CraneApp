@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -66,6 +68,49 @@ func NewService(db *sql.DB, store Store, bucket string) *Service {
 	return &Service{db: db, store: store, bucket: bucket}
 }
 
+func (s *Service) UploadRaw(ctx context.Context, userID, filename, contentType string, data []byte, isEncrypted bool, encryptionJSON string) (Upload, error) {
+	if int64(len(data)) > maxUploadBytes {
+		return Upload{}, ErrTooBig
+	}
+
+	base := strings.SplitN(contentType, ";", 2)[0]
+
+	ext := filepath.Ext(filename)
+	if ext == "" {
+		if base == "image/jpeg" { ext = ".jpg" }
+		if base == "image/png" { ext = ".png" }
+		if base == "video/mp4" { ext = ".mp4" }
+	}
+	objectKey := fmt.Sprintf("%s/%d%s", userID, time.Now().UnixNano(), ext)
+
+	if err := s.store.Put(ctx, s.bucket, objectKey, bytes.NewReader(data), int64(len(data)), base); err != nil {
+		return Upload{}, err
+	}
+
+	var up Upload
+	err := s.db.QueryRowContext(ctx, `
+		INSERT INTO media.uploads (uploader_id, bucket, object_key, filename, content_type, size_bytes, is_encrypted, encryption_key_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id::text, uploader_id::text, filename, content_type, size_bytes, created_at::text
+	`, userID, s.bucket, objectKey, filename, base, len(data), isEncrypted, encryptionJSON).
+		Scan(&up.ID, &up.UploaderID, &up.Filename, &up.ContentType, &up.SizeBytes, &up.CreatedAt)
+	if err != nil {
+		_ = s.store.Delete(ctx, s.bucket, objectKey)
+		return Upload{}, err
+	}
+
+	up.URL, _ = s.store.PresignGet(ctx, s.bucket, objectKey, 24*time.Hour)
+	return up, nil
+}
+
+func (s *Service) UploadEncrypted(ctx context.Context, userID, base64Ciphertext, encryptionJSON, contentType string) (Upload, error) {
+	data, err := base64.StdEncoding.DecodeString(base64Ciphertext)
+	if err != nil {
+		return Upload{}, fmt.Errorf("invalid ciphertext base64: %w", err)
+	}
+	return s.UploadRaw(ctx, userID, "", contentType, data, true, encryptionJSON)
+}
+
 func (s *Service) Upload(ctx context.Context, userID string, fh *multipart.FileHeader) (Upload, error) {
 	if fh.Size > maxUploadBytes {
 		return Upload{}, ErrTooBig
@@ -89,31 +134,8 @@ func (s *Service) Upload(ctx context.Context, userID string, fh *multipart.FileH
 	if err != nil {
 		return Upload{}, err
 	}
-	if int64(len(data)) > maxUploadBytes {
-		return Upload{}, ErrTooBig
-	}
 
-	ext := filepath.Ext(fh.Filename)
-	objectKey := fmt.Sprintf("%s/%d%s", userID, time.Now().UnixNano(), ext)
-
-	if err := s.store.Put(ctx, s.bucket, objectKey, bytes.NewReader(data), int64(len(data)), base); err != nil {
-		return Upload{}, err
-	}
-
-	var up Upload
-	err = s.db.QueryRowContext(ctx, `
-		INSERT INTO media.uploads (uploader_id, bucket, object_key, filename, content_type, size_bytes)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING id::text, uploader_id::text, filename, content_type, size_bytes, created_at::text
-	`, userID, s.bucket, objectKey, fh.Filename, base, len(data)).
-		Scan(&up.ID, &up.UploaderID, &up.Filename, &up.ContentType, &up.SizeBytes, &up.CreatedAt)
-	if err != nil {
-		_ = s.store.Delete(ctx, s.bucket, objectKey)
-		return Upload{}, err
-	}
-
-	up.URL, _ = s.store.PresignGet(ctx, s.bucket, objectKey, 24*time.Hour)
-	return up, nil
+	return s.UploadRaw(ctx, userID, fh.Filename, base, data, false, "")
 }
 
 func (s *Service) Get(ctx context.Context, userID, uploadID string) (Upload, error) {
@@ -138,9 +160,13 @@ func (s *Service) Get(ctx context.Context, userID, uploadID string) (Upload, err
 
 func (s *Service) ServeProxy(ctx context.Context, uploadID string, w http.ResponseWriter) error {
 	var objectKey, bucket, contentType string
+	var isEncrypted bool
+	var encryptionJSON sql.NullString
 	err := s.db.QueryRowContext(ctx, `
-		SELECT bucket, object_key, content_type FROM media.uploads WHERE id = $1
-	`, uploadID).Scan(&bucket, &objectKey, &contentType)
+		SELECT bucket, object_key, content_type, is_encrypted, encryption_key_id 
+		FROM media.uploads WHERE id = $1
+	`, uploadID).Scan(&bucket, &objectKey, &contentType, &isEncrypted, &encryptionJSON)
+	
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -150,6 +176,48 @@ func (s *Service) ServeProxy(ctx context.Context, uploadID string, w http.Respon
 	if err != nil {
 		return err
 	}
+
+	if isEncrypted {
+		// Download object, encode as base64, return JSON
+		url, err := s.store.PresignGet(ctx, bucket, objectKey, 5*time.Minute)
+		if err != nil {
+			return err
+		}
+		
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		
+		data, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		
+		var encMeta map[string]any
+		if encryptionJSON.Valid && encryptionJSON.String != "" {
+			_ = json.Unmarshal([]byte(encryptionJSON.String), &encMeta)
+		} else {
+			encMeta = map[string]any{}
+		}
+		encMeta["encrypted"] = true
+		encMeta["ciphertext"] = base64.StdEncoding.EncodeToString(data)
+		
+		if encMeta["mimeType"] == nil {
+			encMeta["mimeType"] = contentType
+		}
+		if encMeta["sizeBytes"] == nil {
+			encMeta["sizeBytes"] = len(data)
+		}
+
+		w.Header().Set("Cache-Control", "private, max-age=86400")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(encMeta)
+		return nil
+	}
+
 	url, err := s.store.PresignGet(ctx, bucket, objectKey, 5*time.Minute)
 	if err != nil {
 		return err
