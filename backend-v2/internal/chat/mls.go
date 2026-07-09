@@ -182,6 +182,15 @@ func (s *Service) MLSCommit(ctx context.Context, userID, chatID string, commitBy
 		return 0, err
 	}
 
+	// Clean up processed proposals
+	_, err = tx.ExecContext(ctx, `
+		DELETE FROM crypto.group_mls_proposals 
+		WHERE chat_id = $1 AND epoch <= $2
+	`, chatID, currentEpoch)
+	if err != nil {
+		return 0, err
+	}
+
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
@@ -241,4 +250,66 @@ func (s *Service) assertMember(ctx context.Context, chatID, userID string) error
 		return errors.New("access denied")
 	}
 	return err
+}
+
+func (s *Service) MLSAddProposal(ctx context.Context, senderID, chatID, proposalType, proposalBytes string, epoch int64, cryptoURL string) error {
+	if err := s.assertMember(ctx, chatID, senderID); err != nil {
+		return err
+	}
+
+	v, err := callRustMLS(ctx, cryptoURL, "/api/v2/crypto/mls/validate-proposal", map[string]string{
+		"proposal_bytes": proposalBytes,
+		"proposal_type":  proposalType,
+	})
+	if err != nil {
+		return errors.New("crypto service unavailable")
+	}
+	if !v.Valid {
+		return errors.New("invalid proposal format")
+	}
+
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO crypto.group_mls_proposals (chat_id, sender_id, proposal_type, proposal_bytes, epoch, created_at)
+		VALUES ($1, $2, $3, $4, $5, NOW())
+	`, chatID, senderID, proposalType, proposalBytes, epoch)
+	return err
+}
+
+func (s *Service) MLSGetProposals(ctx context.Context, userID, chatID string) ([]map[string]any, error) {
+	if err := s.assertMember(ctx, chatID, userID); err != nil {
+		return nil, err
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, sender_id, proposal_type, proposal_bytes, epoch 
+		FROM crypto.group_mls_proposals
+		WHERE chat_id = $1
+		ORDER BY created_at ASC
+	`, chatID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var proposals []map[string]any
+	for rows.Next() {
+		var id, senderID, pType, pBytes string
+		var epoch int64
+		if err := rows.Scan(&id, &senderID, &pType, &pBytes, &epoch); err != nil {
+			return nil, err
+		}
+		proposals = append(proposals, map[string]any{
+			"id":            id,
+			"senderId":      senderID,
+			"proposalType":  pType,
+			"proposalBytes": pBytes,
+			"epoch":         epoch,
+		})
+	}
+	
+	if proposals == nil {
+		proposals = []map[string]any{}
+	}
+	
+	return proposals, nil
 }

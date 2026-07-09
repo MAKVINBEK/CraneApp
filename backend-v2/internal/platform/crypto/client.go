@@ -112,6 +112,19 @@ func (c *Client) ValidateWelcome(ctx context.Context, welcomeBytes string) (bool
 	return response.Valid, err
 }
 
+func (c *Client) ValidateSignalRegistration(ctx context.Context, identityKey, signedPreKey, signature string) (bool, error) {
+	var response struct {
+		Valid bool `json:"valid"`
+	}
+	reqBody := map[string]string{
+		"identity_key":   identityKey,
+		"signed_pre_key": signedPreKey,
+		"signature":      signature,
+	}
+	err := c.post(ctx, "/api/v2/crypto/signal/validate-registration", reqBody, &response)
+	return response.Valid, err
+}
+
 func (c *Client) post(ctx context.Context, path string, request, response any) error {
 	body, err := json.Marshal(request)
 	if err != nil {
