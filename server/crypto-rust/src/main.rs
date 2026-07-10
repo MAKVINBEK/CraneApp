@@ -199,8 +199,8 @@ async fn health() -> Json<serde_json::Value> {
 }
 
 async fn hash_password(Json(payload): Json<PasswordRequest>) -> ApiResult<HashResponse> {
-    if payload.password.len() < 10 || payload.password.len() > 1024 {
-        return Err(error(StatusCode::BAD_REQUEST, "invalid_password", "password length must be between 10 and 1024"));
+    if payload.password.len() < 6 || payload.password.len() > 1024 {
+        return Err(error(StatusCode::BAD_REQUEST, "invalid_password", "password length must be between 6 and 1024"));
     }
     let salt = SaltString::generate(&mut OsRng);
     let hash = Argon2::default()

@@ -52,7 +52,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		httpx.ErrorJSON(w, r, http.StatusBadRequest, "invalid_json", "invalid JSON body")
 		return
 	}
-	if !usernamePattern.MatchString(input.Username) || len(input.Password) < 10 || strings.TrimSpace(input.FirstName) == "" {
+	if !usernamePattern.MatchString(input.Username) || len(input.Password) < 6 || strings.TrimSpace(input.FirstName) == "" {
 		httpx.ErrorJSON(w, r, http.StatusBadRequest, "validation_failed", "username, password or firstName is invalid")
 		return
 	}
