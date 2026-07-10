@@ -61,8 +61,8 @@ export function RegisterPage({
       showToast('error', t('usernameFormatError', 'Только буквы, цифры и _'), '⚠️');
       return;
     }
-    if (password.length < 10) {
-      showToast('error', t('passwordMinError', 'Пароль минимум 10 символов'), '⚠️');
+    if (password.length < 6) {
+      showToast('error', t('passwordMinError', 'Пароль минимум 6 символов'), '⚠️');
       return;
     }
     if (password !== passwordRepeat) {
@@ -188,7 +188,7 @@ function CredentialsStep(props) {
         <label htmlFor="username">{props.t('username', 'Юзернейм')}</label>
         <input id="username" type="text" value={props.username} onChange={(event) => props.onUsernameChange(event.target.value.replace(/[^a-zA-Z0-9_]/g, ''))} placeholder="@username" autoComplete="username" minLength={3} maxLength={32} />
       </div>
-      <PasswordField id="password" label={props.t('password', 'Пароль')} onChange={props.onPasswordChange} onToggle={props.onTogglePassword} placeholder={props.t('passwordMin', 'Минимум 10 символов')} show={props.showPassword} value={props.password} />
+      <PasswordField id="password" label={props.t('password', 'Пароль')} onChange={props.onPasswordChange} onToggle={props.onTogglePassword} placeholder={props.t('passwordMin', 'Минимум 6 символов')} show={props.showPassword} value={props.password} />
       <div className="pw-strength"><div className="pw-strength-bar" style={strength} /></div>
       <PasswordField id="password2" label={props.t('repeatPassword', 'Повторите пароль')} onChange={props.onPasswordRepeatChange} onToggle={props.onTogglePasswordRepeat} placeholder={props.t('repeatPassword', 'Повторите пароль')} show={props.showPasswordRepeat} value={props.passwordRepeat} />
 
@@ -259,7 +259,7 @@ function FragmentLine({ index, line }) {
 
 function getPasswordScore(password) {
   return [
-    password.length >= 10,
+    password.length >= 6,
     password.length >= 10,
     /[A-Z]/.test(password),
     /[0-9]/.test(password),
