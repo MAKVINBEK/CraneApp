@@ -48,7 +48,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=natsdownload /usr/local/bin/nats-server /usr/local/bin/nats-server
 COPY --from=natsdownload /usr/local/bin/minio /usr/local/bin/minio
 
-RUN echo "gobins-v1"
+RUN echo "gobins-v2"
 COPY --from=gobuilder   /binaries/auth     /usr/local/bin/auth
 COPY --from=gobuilder   /binaries/user     /usr/local/bin/user
 COPY --from=gobuilder   /binaries/chat     /usr/local/bin/chat
