@@ -11,6 +11,7 @@ import { CreateGroupPage } from './components/Chats/CreateGroupPage.jsx';
 import { CallProvider } from './components/Calls/CallProvider.jsx';
 import { CallOverlay } from './components/Calls/CallOverlay.jsx';
 import { useRealtimeSocket } from './hooks/useRealtimeSocket.js';
+import { services } from '../application/services/serviceContainer.js';
 
 export function App({ basename = '', forceMobile = false }) {
   const homePath = withBasePath(basename, '/chats');
@@ -296,17 +297,42 @@ function ChatLayout({ forceMobile = false }) {
 
 function AuthGuard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
   useEffect(() => {
     function handleUnauthorized() {
-      localStorage.removeItem('craneapp_auth_token');
+      clearAuthSession();
       navigateRef.current('/login', { replace: true });
     }
     window.addEventListener('craneapp:unauthorized', handleUnauthorized);
     return () => window.removeEventListener('craneapp:unauthorized', handleUnauthorized);
   }, []);
+
+  useEffect(() => {
+    const token = localStorage.getItem('craneapp_auth_token');
+    const isPublicRoute = location.pathname === '/login' || location.pathname === '/register' || location.pathname === '/rate-limit';
+    if (!token || isPublicRoute) return undefined;
+
+    let cancelled = false;
+    services.userService.getMe().catch(() => {
+      if (cancelled) return;
+      clearAuthSession();
+      navigateRef.current('/login', { replace: true });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [location.pathname]);
+
   return null;
+}
+
+function clearAuthSession() {
+  localStorage.removeItem('craneapp_auth_token');
+  localStorage.removeItem('craneapp_user_data');
+  localStorage.removeItem('craneapp_settings');
 }
 
 function translate(key, fallback, vars) {
