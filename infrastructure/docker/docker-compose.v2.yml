@@ -87,7 +87,6 @@ services:
       args:
         SERVICE: chat
     environment:
-      ALLOWED_ORIGINS: http://localhost:3000,http://localhost:8080,http://127.0.0.1:8080
       DATABASE_URL: postgres://craneapp:craneapp-local@postgres:5432/craneapp?sslmode=disable
       CRYPTO_URL: http://crypto:5005
       NATS_URL: nats://nats:4222
@@ -140,7 +139,6 @@ services:
       args:
         SERVICE: edge
     environment:
-      FRONTEND_DIR: /dist
       AUTH_URL: http://auth:8081
       USER_URL: http://user:8082
       CHAT_URL: http://chat:8083
@@ -148,8 +146,6 @@ services:
       ADMIN_URL: http://admin:8085
       ALLOWED_ORIGINS: http://localhost:3000,http://localhost:8080
       CRANE_ENV: production
-    volumes:
-      - ../../dist:/dist:ro
     ports:
       - "8080:8080"
     depends_on:
