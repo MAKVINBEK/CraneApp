@@ -144,6 +144,25 @@ struct ValidateWelcomeRequest {
     welcome_bytes: String,
 }
 
+#[derive(Deserialize)]
+struct ValidateProposalRequest {
+    proposal_bytes: String,
+    proposal_type: String, // "ADD", "UPDATE", "REMOVE"
+}
+
+#[derive(Serialize)]
+struct ValidateProposalResponse {
+    valid: bool,
+    error: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ValidateSignalRegistrationRequest {
+    identity_key: String,   // Base64
+    signed_pre_key: String, // Base64
+    signature: String,      // Base64
+}
+
 #[tokio::main]
 async fn main() {
     require_secret("CRYPTO_SIGNING_SECRET");
@@ -161,7 +180,9 @@ async fn main() {
         .route("/api/v2/crypto/verify-key", post(verify_key))
         .route("/api/v2/crypto/mls/validate-keypackage", post(validate_keypackage))
         .route("/api/v2/crypto/mls/validate-commit", post(validate_commit))
-        .route("/api/v2/crypto/mls/validate-welcome", post(validate_welcome));
+        .route("/api/v2/crypto/mls/validate-welcome", post(validate_welcome))
+        .route("/api/v2/crypto/mls/validate-proposal", post(validate_proposal))
+        .route("/api/v2/crypto/signal/validate-registration", post(validate_signal_registration));
 
     let port = env::var("CRYPTO_PORT")
         .ok()
@@ -178,8 +199,8 @@ async fn health() -> Json<serde_json::Value> {
 }
 
 async fn hash_password(Json(payload): Json<PasswordRequest>) -> ApiResult<HashResponse> {
-    if payload.password.len() < 10 || payload.password.len() > 1024 {
-        return Err(error(StatusCode::BAD_REQUEST, "invalid_password", "password length must be between 10 and 1024"));
+    if payload.password.len() < 6 || payload.password.len() > 1024 {
+        return Err(error(StatusCode::BAD_REQUEST, "invalid_password", "password length must be between 6 and 1024"));
     }
     let salt = SaltString::generate(&mut OsRng);
     let hash = Argon2::default()
@@ -342,6 +363,55 @@ async fn validate_welcome(Json(payload): Json<ValidateWelcomeRequest>) -> Json<V
     // Welcome contains ephemeralPub (65B) + iv (12B) + sealed (32B+tag) encoded as JSON+base64
     // Minimum meaningful size: 64 bytes decoded
     Json(ValidResponse { valid: decode_artifact(&payload.welcome_bytes, 64).is_ok() })
+}
+
+async fn validate_proposal(Json(payload): Json<ValidateProposalRequest>) -> Json<ValidateProposalResponse> {
+    let min_len = match payload.proposal_type.as_str() {
+        "ADD" | "UPDATE" => 65, // Typically includes a KeyPackage or similar length structure
+        "REMOVE" => 16,         // Typically includes a short LeafNode identifier
+        _ => return Json(ValidateProposalResponse { 
+            valid: false, 
+            error: Some("invalid proposal_type".to_string()) 
+        }),
+    };
+
+    match decode_artifact(&payload.proposal_bytes, min_len) {
+        Ok(_) => Json(ValidateProposalResponse { valid: true, error: None }),
+        Err(_) => Json(ValidateProposalResponse {
+            valid: false,
+            error: Some(format!("proposal must be at least {} bytes", min_len)),
+        }),
+    }
+}
+
+async fn validate_signal_registration(Json(payload): Json<ValidateSignalRegistrationRequest>) -> Json<ValidResponse> {
+    let identity_key_bytes = match general_purpose::STANDARD.decode(&payload.identity_key) {
+        Ok(b) if b.len() == 32 => b,
+        _ => return Json(ValidResponse { valid: false }),
+    };
+    let signed_pre_key_bytes = match general_purpose::STANDARD.decode(&payload.signed_pre_key) {
+        Ok(b) if b.len() == 32 => b,
+        _ => return Json(ValidResponse { valid: false }),
+    };
+    let signature_bytes = match general_purpose::STANDARD.decode(&payload.signature) {
+        Ok(b) if b.len() == 64 => b,
+        _ => return Json(ValidResponse { valid: false }),
+    };
+
+    use ed25519_dalek::Verifier;
+    let verifying_key = match ed25519_dalek::VerifyingKey::from_bytes(
+        &identity_key_bytes.try_into().unwrap_or([0; 32])
+    ) {
+        Ok(key) => key,
+        Err(_) => return Json(ValidResponse { valid: false }),
+    };
+
+    let signature = ed25519_dalek::Signature::from_bytes(
+        &signature_bytes.try_into().unwrap_or([0; 64])
+    );
+
+    let valid = verifying_key.verify(&signed_pre_key_bytes, &signature).is_ok();
+    Json(ValidResponse { valid })
 }
 
 fn sign(body: &[u8]) -> Result<String, (StatusCode, Json<ApiError>)> {

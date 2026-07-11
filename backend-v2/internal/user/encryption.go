@@ -25,6 +25,29 @@ type ChatEncryptedKey struct {
 	KeyEpoch     int     `json:"keyEpoch"`
 }
 
+type SignalIdentityKey struct {
+	IdentityKey    string `json:"identityKey"`
+	RegistrationID int    `json:"registrationId"`
+}
+
+type SignalSignedPreKey struct {
+	KeyID     int    `json:"keyId"`
+	PublicKey string `json:"publicKey"`
+	Signature string `json:"signature"`
+}
+
+type SignalOneTimePreKey struct {
+	KeyID     int    `json:"keyId"`
+	PublicKey string `json:"publicKey"`
+}
+
+type SignalPreKeyBundle struct {
+	IdentityKey    string               `json:"identityKey"`
+	RegistrationID int                  `json:"registrationId"`
+	SignedPreKey   SignalSignedPreKey   `json:"signedPreKey"`
+	OneTimePreKey  *SignalOneTimePreKey `json:"oneTimePreKey,omitempty"`
+}
+
 func isValidBase64(s string) bool {
 	if len(s) == 0 {
 		return false
@@ -177,4 +200,92 @@ func (s *Service) assertChatMember(ctx context.Context, chatID, userID string) e
 		return errors.New("access denied")
 	}
 	return err
+}
+
+func (s *Service) UpsertSignalKeys(ctx context.Context, userID string, identity SignalIdentityKey, signed SignalSignedPreKey, onetime []SignalOneTimePreKey) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO crypto.signal_identity_keys (user_id, identity_key, registration_id, updated_at)
+		VALUES ($1, $2, $3, NOW())
+		ON CONFLICT (user_id) DO UPDATE
+		SET identity_key = EXCLUDED.identity_key, registration_id = EXCLUDED.registration_id, updated_at = NOW()
+	`, userID, identity.IdentityKey, identity.RegistrationID)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO crypto.signal_signed_prekeys (user_id, key_id, public_key, signature, created_at)
+		VALUES ($1, $2, $3, $4, NOW())
+		ON CONFLICT (user_id, key_id) DO UPDATE
+		SET public_key = EXCLUDED.public_key, signature = EXCLUDED.signature, created_at = NOW()
+	`, userID, signed.KeyID, signed.PublicKey, signed.Signature)
+	if err != nil {
+		return err
+	}
+
+	for _, k := range onetime {
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO crypto.signal_onetime_prekeys (user_id, key_id, public_key, created_at)
+			VALUES ($1, $2, $3, NOW())
+			ON CONFLICT (user_id, key_id) DO NOTHING
+		`, userID, k.KeyID, k.PublicKey)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+func (s *Service) GetSignalBundle(ctx context.Context, targetUserID string) (SignalPreKeyBundle, error) {
+	var bundle SignalPreKeyBundle
+	err := s.db.QueryRowContext(ctx, `
+		SELECT identity_key, registration_id FROM crypto.signal_identity_keys WHERE user_id = $1
+	`, targetUserID).Scan(&bundle.IdentityKey, &bundle.RegistrationID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return bundle, ErrKeyNotFound
+	} else if err != nil {
+		return bundle, err
+	}
+
+	err = s.db.QueryRowContext(ctx, `
+		SELECT key_id, public_key, signature FROM crypto.signal_signed_prekeys WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1
+	`, targetUserID).Scan(&bundle.SignedPreKey.KeyID, &bundle.SignedPreKey.PublicKey, &bundle.SignedPreKey.Signature)
+	if err != nil {
+		return bundle, err
+	}
+
+	var otpk SignalOneTimePreKey
+	err = s.db.QueryRowContext(ctx, `
+		DELETE FROM crypto.signal_onetime_prekeys
+		WHERE ctid IN (
+			SELECT ctid FROM crypto.signal_onetime_prekeys WHERE user_id = $1 LIMIT 1 FOR UPDATE SKIP LOCKED
+		)
+		RETURNING key_id, public_key
+	`, targetUserID).Scan(&otpk.KeyID, &otpk.PublicKey)
+	if err == nil {
+		bundle.OneTimePreKey = &otpk
+	}
+
+	return bundle, nil
+}
+
+func (s *Service) ReplenishSignalPreKeys(ctx context.Context, userID string, onetime []SignalOneTimePreKey) error {
+	for _, k := range onetime {
+		_, err := s.db.ExecContext(ctx, `
+			INSERT INTO crypto.signal_onetime_prekeys (user_id, key_id, public_key, created_at)
+			VALUES ($1, $2, $3, NOW())
+			ON CONFLICT (user_id, key_id) DO NOTHING
+		`, userID, k.KeyID, k.PublicKey)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

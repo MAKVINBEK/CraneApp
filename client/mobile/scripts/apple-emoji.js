@@ -66,6 +66,14 @@
             if (!EMOJI_REGEX.test(text)) return;
             EMOJI_REGEX.lastIndex = 0;
 
+            const matches = Array.from(text.matchAll(EMOJI_REGEX));
+            const hasReplacement = matches.some(match => {
+                const cp = getCodePoint(match[0]);
+                return Boolean(map[cp]);
+            });
+            if (!hasReplacement) return;
+            EMOJI_REGEX.lastIndex = 0;
+
             const frag = document.createDocumentFragment();
             let lastIndex = 0;
             let match;

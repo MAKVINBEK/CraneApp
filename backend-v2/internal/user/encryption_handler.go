@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 	"strings"
 
 	"craneapp/backend-v2/internal/platform/authctx"
+	"craneapp/backend-v2/internal/platform/crypto"
 	"craneapp/backend-v2/internal/platform/httpx"
 )
 
@@ -63,6 +65,23 @@ func (h *Handler) EncryptionRoutes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.getMyKey(w, r, current.ID, chatID)
+
+	// POST /api/v2/encryption/signal/keys
+	case path == "/api/v2/encryption/signal/keys" && r.Method == http.MethodPost:
+		h.uploadSignalKeys(w, r, current.ID)
+
+	// GET /api/v2/encryption/signal/bundle/:userId
+	case strings.HasPrefix(path, "/api/v2/encryption/signal/bundle/") && r.Method == http.MethodGet:
+		targetID := strings.TrimPrefix(path, "/api/v2/encryption/signal/bundle/")
+		if targetID == "" {
+			httpx.ErrorJSON(w, r, http.StatusBadRequest, "missing_user_id", "userId is required")
+			return
+		}
+		h.getSignalBundle(w, r, current.ID, targetID)
+
+	// POST /api/v2/encryption/signal/prekeys
+	case path == "/api/v2/encryption/signal/prekeys" && r.Method == http.MethodPost:
+		h.replenishPreKeys(w, r, current.ID)
 
 	default:
 		httpx.ErrorJSON(w, r, http.StatusNotFound, "route_not_found", "route not found")
@@ -168,4 +187,63 @@ func (h *Handler) getMyKey(w http.ResponseWriter, r *http.Request, userID, chatI
 		return
 	}
 	httpx.JSON(w, http.StatusOK, key)
+}
+
+func (h *Handler) uploadSignalKeys(w http.ResponseWriter, r *http.Request, userID string) {
+	var input struct {
+		IdentityKey    SignalIdentityKey     `json:"identityKey"`
+		SignedPreKey   SignalSignedPreKey    `json:"signedPreKey"`
+		OneTimePreKeys []SignalOneTimePreKey `json:"oneTimePreKeys"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 512<<10)).Decode(&input); err != nil {
+		httpx.ErrorJSON(w, r, http.StatusBadRequest, "invalid_json", "invalid JSON body")
+		return
+	}
+	
+	cryptoURL := os.Getenv("CRYPTO_SERVICE_URL")
+	if cryptoURL == "" {
+		cryptoURL = "http://localhost:5005"
+	}
+	cryptoClient := crypto.NewClient(cryptoURL)
+	valid, err := cryptoClient.ValidateSignalRegistration(r.Context(), input.IdentityKey.IdentityKey, input.SignedPreKey.PublicKey, input.SignedPreKey.Signature)
+	if err != nil || !valid {
+		httpx.ErrorJSON(w, r, http.StatusBadRequest, "invalid_registration", "cryptographic validation failed")
+		return
+	}
+
+	err = h.service.UpsertSignalKeys(r.Context(), userID, input.IdentityKey, input.SignedPreKey, input.OneTimePreKeys)
+	if err != nil {
+		httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (h *Handler) getSignalBundle(w http.ResponseWriter, r *http.Request, requesterID, targetID string) {
+	bundle, err := h.service.GetSignalBundle(r.Context(), targetID)
+	if errors.Is(err, ErrKeyNotFound) {
+		httpx.ErrorJSON(w, r, http.StatusNotFound, "key_not_found", "bundle not found")
+		return
+	}
+	if err != nil {
+		httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	httpx.JSON(w, http.StatusOK, bundle)
+}
+
+func (h *Handler) replenishPreKeys(w http.ResponseWriter, r *http.Request, userID string) {
+	var input struct {
+		OneTimePreKeys []SignalOneTimePreKey `json:"oneTimePreKeys"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 512<<10)).Decode(&input); err != nil {
+		httpx.ErrorJSON(w, r, http.StatusBadRequest, "invalid_json", "invalid JSON body")
+		return
+	}
+	err := h.service.ReplenishSignalPreKeys(r.Context(), userID, input.OneTimePreKeys)
+	if err != nil {
+		httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

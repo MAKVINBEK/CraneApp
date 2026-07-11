@@ -46,6 +46,16 @@ func (h *Handler) MLSRoutes(w http.ResponseWriter, r *http.Request) {
 		chatID := strings.TrimSuffix(strings.TrimPrefix(path, "/api/v2/mls/group/"), "/welcome")
 		h.mlsGetWelcome(w, r, current.ID, chatID)
 
+	// POST /api/v2/mls/group/:chatId/proposals
+	case strings.HasPrefix(path, "/api/v2/mls/group/") && strings.HasSuffix(path, "/proposals") && r.Method == http.MethodPost:
+		chatID := strings.TrimSuffix(strings.TrimPrefix(path, "/api/v2/mls/group/"), "/proposals")
+		h.mlsAddProposal(w, r, current.ID, chatID, cryptoURL)
+
+	// GET /api/v2/mls/group/:chatId/proposals
+	case strings.HasPrefix(path, "/api/v2/mls/group/") && strings.HasSuffix(path, "/proposals") && r.Method == http.MethodGet:
+		chatID := strings.TrimSuffix(strings.TrimPrefix(path, "/api/v2/mls/group/"), "/proposals")
+		h.mlsGetProposals(w, r, current.ID, chatID)
+
 	default:
 		httpx.ErrorJSON(w, r, http.StatusNotFound, "route_not_found", "route not found")
 	}
@@ -145,4 +155,32 @@ func (h *Handler) mlsGetWelcome(w http.ResponseWriter, r *http.Request, userID, 
 		return
 	}
 	httpx.JSON(w, http.StatusOK, result)
+}
+
+func (h *Handler) mlsAddProposal(w http.ResponseWriter, r *http.Request, senderID, chatID, cryptoURL string) {
+	var input struct {
+		ProposalType  string `json:"proposalType"`
+		ProposalBytes string `json:"proposalBytes"`
+		Epoch         int64  `json:"epoch"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 512<<10)).Decode(&input); err != nil {
+		httpx.ErrorJSON(w, r, http.StatusBadRequest, "invalid_json", "invalid JSON body")
+		return
+	}
+	
+	err := h.service.MLSAddProposal(r.Context(), senderID, chatID, input.ProposalType, input.ProposalBytes, input.Epoch, cryptoURL)
+	if err != nil {
+		httpx.ErrorJSON(w, r, http.StatusBadRequest, "invalid_proposal", err.Error())
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (h *Handler) mlsGetProposals(w http.ResponseWriter, r *http.Request, userID, chatID string) {
+	proposals, err := h.service.MLSGetProposals(r.Context(), userID, chatID)
+	if err != nil {
+		httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	httpx.JSON(w, http.StatusOK, proposals)
 }
