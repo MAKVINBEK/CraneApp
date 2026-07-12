@@ -635,7 +635,7 @@
     @apply min-h-[70px] grid gap-[10px] items-center;
     padding: calc(12px + env(safe-area-inset-top, 0px)) 12px 12px;
     border-bottom: 1px solid rgba(255,255,255,0.08);
-    grid-template-columns: 40px 44px minmax(0,1fr);
+    grid-template-columns: 40px 44px minmax(0,1fr) auto;
     background: rgba(14,14,14,0.86);
     backdrop-filter: blur(14px);
   }
@@ -649,6 +649,17 @@
     & h1 { @apply overflow-hidden m-0 text-white text-[17px] leading-[1.2] text-ellipsis whitespace-nowrap; }
     & p  { margin: 3px 0 0; color: rgba(255,255,255,0.48); font-size: 12px; }
   }
+  .thread-call-actions { @apply h-full flex items-center justify-end gap-2; }
+  .thread-call-button {
+    @apply w-9 h-9 p-0 border-0 bg-transparent flex items-center justify-center cursor-pointer rounded-[10px];
+    color: #2AABEE;
+    transition: background 0.16s ease, transform 0.16s ease, color 0.16s ease;
+  }
+  .thread-call-button:hover { background: rgba(42,171,238,0.12); transform: translateY(-1px); }
+  .thread-call-button:active { transform: translateY(0); background: rgba(42,171,238,0.18); }
+  .thread-call-button:focus-visible { outline: 2px solid rgba(42,171,238,0.72); outline-offset: 2px; }
+  .thread-call-icon { @apply block w-6 h-6; }
+  .thread-call-icon-video { width: 31px; height: 31px; opacity: 0.9; }
   .thread-messages { @apply min-h-0 overflow-y-auto flex flex-col gap-[10px]; padding: 18px 12px; }
 
   .message-bubble {

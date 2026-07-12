@@ -167,22 +167,58 @@ export function ChatThreadPage({ chatId, t = fallbackTranslate }) {
           <h1>{title}</h1>
           <p>{chat?.type === 'group' ? t('groupChat', 'Группа') : t('privateChat', 'ЛС')}</p>
         </div>
-        <div className="thread-call-actions" style={{ marginLeft: 'auto', display: 'flex', gap: 12 }}>
+        <div className="thread-call-actions">
           <button
+            className="thread-call-button"
             onClick={() => initiateCall(chatId, chat?.type, title, 'audio')}
             title={t('audioCall', 'Аудиозвонок')}
             type="button"
-            style={{ background: 'none', border: 0, fontSize: 20, cursor: 'pointer' }}
           >
-            📞
+            <svg
+              aria-hidden="true"
+              className="thread-call-icon"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <g fill="none">
+                <path d="M0 0h24v24H0z" />
+
+                <path
+                  fill="currentColor"
+                  d="M4.477 4.116c-2.924 3.217-1.362 8.196 2.932 12.51 4.204 4.222 9.407 5.8 12.486 2.936 1.685-1.567 1.436-4.343-.645-6.198l-.19-.161c-1.931-1.563-4.734-1.568-6.445-.027l-.088.082-.05-.042c-.187-.16-.43-.381-.724-.673l-.298-.303-.306-.326q-.138-.152-.246-.277l-.124-.147-.07.075c1.69-1.697 1.706-4.72.006-6.75-1.887-2.255-4.75-2.335-6.238-.699M9.335 5.97c1.18 1.41 1.049 3.371.099 4.325l-.148.14c-.63.567-1.246.901 1.032 3.218 2.458 2.499 2.765 1.622 3.405.952 1.006-1.01 2.975-1.104 4.329.103 1.497 1.334 1.335 2.868.617 3.536-2.222 2.067-6.476.636-9.984-2.888S3.621 7.734 5.81 5.326c.508-.558 2.101-1.057 3.526.644"
+                />
+              </g>
+            </svg>
+
           </button>
           <button
+            className="thread-call-button"
             onClick={() => initiateCall(chatId, chat?.type, title, 'video')}
             title={t('videoCall', 'Видеозвонок')}
             type="button"
-            style={{ background: 'none', border: 0, fontSize: 20, cursor: 'pointer' }}
           >
-            📹
+            <svg
+              aria-hidden="true"
+              className="thread-call-icon thread-call-icon-video"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <g fill="none">
+                <path d="M0 0h24v24H0z" />
+
+                <path
+                  fill="currentColor"
+                  fillRule="evenodd"
+                  clipRule="evenodd"
+                  d="M6.5 5.75A3.5 3.5 0 0 0 3 9.25v5.5a3.5 3.5 0 0 0 3.5 3.5h7a3.5 3.5 0 0 0 3.5-3.5v-.52l2.65 2.07A1.45 1.45 0 0 0 22 15.15v-6.3a1.45 1.45 0 0 0-2.35-1.15L17 9.77v-.52a3.5 3.5 0 0 0-3.5-3.5h-7Zm-1.7 3.5A1.7 1.7 0 0 1 6.5 7.55h7a1.7 1.7 0 0 1 1.7 1.7v5.5a1.7 1.7 0 0 1-1.7 1.7h-7a1.7 1.7 0 0 1-1.7-1.7v-5.5Zm12.2 2.8 3.2 2.5v-5.1L17 11.95v.1Z"
+                />
+              </g>
+            </svg>
+
           </button>
         </div>
       </header>
@@ -234,13 +270,13 @@ export function ChatThreadPage({ chatId, t = fallbackTranslate }) {
           {isSending ? '⏳' : '➤'}
         </button>
       </form>
-      
+
       {chat?.type === 'group' && (
-        <GroupInfoModal 
-          chatId={chatId} 
-          isOpen={isGroupInfoOpen} 
-          onClose={() => setIsGroupInfoOpen(false)} 
-          t={t} 
+        <GroupInfoModal
+          chatId={chatId}
+          isOpen={isGroupInfoOpen}
+          onClose={() => setIsGroupInfoOpen(false)}
+          t={t}
         />
       )}
     </main>
