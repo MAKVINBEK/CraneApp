@@ -180,8 +180,27 @@
   .chats-kicker { @apply m-0 mb-1 text-xs font-extrabold uppercase tracking-[0.08em]; color: rgba(255,255,255,0.42); }
   .chats-user { @apply w-11 h-11 border border-[rgba(255,255,255,0.1)] rounded-[14px] flex items-center justify-center text-white font-extrabold; background: linear-gradient(135deg, #1e8fff, var(--color-accent)); }
   .chats-toolbar { @apply block mb-3; }
-  .chats-search { @apply min-w-0 h-11 px-3.5 border border-border rounded-xl flex items-center gap-2.5; background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.5); }
-  .chats-search input { @apply min-w-0 w-full border-0 outline-none bg-transparent text-white text-[15px]; }
+  .chats-search {
+    @apply min-w-0 h-11 px-3.5 border border-border rounded-xl flex items-center gap-2.5 no-underline cursor-pointer select-none;
+    background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.5);
+    transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
+  }
+  .chats-search:hover {
+    background: rgba(255,255,255,0.09);
+    border-color: rgba(255,255,255,0.16);
+    color: rgba(255,255,255,0.76);
+    transform: translateY(-1px);
+  }
+  .chats-search:active {
+    background: rgba(255,255,255,0.12);
+    transform: translateY(0);
+  }
+  .chats-search:focus-visible {
+    outline: 2px solid rgba(43,119,231,0.72);
+    outline-offset: 2px;
+  }
+  .chats-search-icon { @apply shrink-0 text-[15px] leading-none; }
+  .chats-search-placeholder { @apply min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[15px]; }
   .chats-icon-button { @apply w-8 h-8 flex items-center justify-center bg-transparent text-white text-2xl no-underline; }
   .chats-list { @apply overflow-hidden; }
 
