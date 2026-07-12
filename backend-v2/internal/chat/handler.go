@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -482,6 +483,7 @@ func (h *Handler) Messages(w http.ResponseWriter, r *http.Request) {
 		}
 		msg, err := h.service.SendMessage(r.Context(), current.ID, targetID, input.Content, input.Type, input.ReplyTo)
 		if err != nil {
+			slog.Error("send message failed", "err", err, "chatId", targetID, "userId", current.ID, "type", input.Type)
 			httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", "failed to send message")
 			return
 		}
