@@ -57,3 +57,17 @@ func TestUserMuteCompatMigrationBackfillsSendMessageDependencies(t *testing.T) {
 		}
 	}
 }
+
+func TestListMessagesReturnsChronologicalPage(t *testing.T) {
+	source, err := os.ReadFile("service.go")
+	if err != nil {
+		t.Fatalf("read chat service: %v", err)
+	}
+	query := string(source)
+	if !strings.Contains(query, "ORDER BY m.created_at DESC") {
+		t.Fatal("ListMessages should select the latest page first")
+	}
+	if !strings.Contains(query, "ORDER BY created_at ASC") {
+		t.Fatal("ListMessages should return the selected page in chronological order")
+	}
+}
