@@ -42,9 +42,9 @@ export function ChatsPage({ t = fallbackTranslate }) {
       </header>
 
       <section className="chats-toolbar">
-        <Link className="chats-search" to="/contacts" style={{ textDecoration: 'none', color: 'inherit' }}>
-          <span aria-hidden="true">⌕</span>
-          <input disabled placeholder={t('search', 'Поиск чатов и людей...')} type="search" style={{ cursor: 'pointer' }} />
+        <Link className="chats-search" to="/contacts" aria-label={t('search', 'Поиск чатов и людей...')}>
+          <span className="chats-search-icon" aria-hidden="true">🔎</span>
+          <span className="chats-search-placeholder">{t('search', 'Поиск чатов и людей...')}</span>
         </Link>
       </section>
 
