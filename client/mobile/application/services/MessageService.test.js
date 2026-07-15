@@ -25,8 +25,56 @@ describe('MessageService', () => {
     const messages = await service.getMessages('chat-1');
 
     expect(apiClient.get).toHaveBeenCalledWith('/messages/chat-1', { limit: 50, offset: 0 });
-    expect(cryptoService.decryptDM).toHaveBeenCalledWith('encrypted_content', 'peer-key');
+    expect(cryptoService.decryptDM).toHaveBeenCalledWith('encrypted_content', 'peer-key', {
+      preferEmbeddedSenderKey: true,
+    });
     expect(messages[0].content).toBe('Hello');
+  });
+
+  it('decrypts own DM messages with the peer public key after reload', async () => {
+    localStorage.setItem('craneapp_user_data', JSON.stringify({ id: 'me' }));
+    const apiClient = createApiClient();
+    apiClient.get.mockImplementation(async (url) => {
+      if (url.includes('/messages/')) {
+        return { data: { messages: [{ id: 'm1', chatId: 'chat-1', senderId: 'me', type: 'text', content: 'encrypted_content' }] } };
+      }
+      if (url.includes('/chats/')) return { data: { chat: { type: 'private', peerPublicKey: 'peer-key' } } };
+      return {};
+    });
+
+    const cryptoService = { decryptDM: vi.fn().mockResolvedValue('Hello from me') };
+    const service = new MessageService(apiClient, cryptoService);
+
+    const messages = await service.getMessages('chat-1');
+
+    expect(cryptoService.decryptDM).toHaveBeenCalledWith('encrypted_content', 'peer-key', {
+      preferEmbeddedSenderKey: false,
+    });
+    expect(messages[0].content).toBe('Hello from me');
+  });
+
+  it('returns loaded messages in chronological order', async () => {
+    const apiClient = createApiClient();
+    apiClient.get.mockImplementation(async (url) => {
+      if (url.includes('/messages/')) {
+        return {
+          data: {
+            messages: [
+              { id: 'new', chatId: 'chat-1', senderId: 'u1', type: 'text', content: 'new', createdAt: '2026-06-03T12:02:00Z' },
+              { id: 'old', chatId: 'chat-1', senderId: 'u1', type: 'text', content: 'old', createdAt: '2026-06-03T12:01:00Z' },
+            ],
+          },
+        };
+      }
+      if (url.includes('/chats/')) return { data: { chat: { type: 'private' } } };
+      return {};
+    });
+
+    const service = new MessageService(apiClient, { decryptDM: vi.fn((content) => Promise.resolve(content)) });
+
+    const messages = await service.getMessages('chat-1');
+
+    expect(messages.map((message) => message.id)).toEqual(['old', 'new']);
   });
 
   it('unwraps the send response message payload', async () => {
