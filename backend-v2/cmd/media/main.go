@@ -17,6 +17,9 @@ import (
 	_ "github.com/lib/pq"
 )
 
+const minioEnsureRetries = 10
+const minioEnsureRetryDelay = 2 * time.Second
+
 func main() {
 	pool, err := db.Open(config.Required("DATABASE_URL"))
 	if err != nil {
@@ -39,12 +42,25 @@ func main() {
 	bucket := config.Value("MEDIA_BUCKET", "crane-media")
 
 	// Ensure the bucket exists before accepting uploads.
-	initCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	if err := store.EnsureBucket(initCtx, bucket); err != nil {
-		cancel()
-		log.Fatalf("media: failed to ensure bucket %q: %v", bucket, err)
+	// Retry because MinIO may still be starting up when the media service starts.
+	initCtx, cancel := context.WithTimeout(context.Background(), time.Duration(minioEnsureRetries)*minioEnsureRetryDelay+5*time.Second)
+	defer cancel()
+
+	var ensureErr error
+	for i := 0; i < minioEnsureRetries; i++ {
+		if i > 0 {
+			log.Printf("media: retrying bucket ensure %q (%d/%d) after error: %v", bucket, i+1, minioEnsureRetries, ensureErr)
+			time.Sleep(minioEnsureRetryDelay)
+		}
+		ensureErr = store.EnsureBucket(initCtx, bucket)
+		if ensureErr == nil {
+			log.Printf("media: bucket %q ensured", bucket)
+			break
+		}
 	}
-	cancel()
+	if ensureErr != nil {
+		log.Fatalf("media: failed to ensure bucket %q after %d retries: %v", bucket, minioEnsureRetries, ensureErr)
+	}
 
 	svc := media.NewService(pool, store, bucket)
 	handler := media.NewHandler(svc)
