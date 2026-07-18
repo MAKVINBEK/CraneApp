@@ -74,6 +74,15 @@ func (ws *WSServer) CallRooms() *CallRoomManager {
 	return ws.callRooms
 }
 
+func (ws *WSServer) IsUserConnected(userID string) bool {
+	if ws == nil || userID == "" {
+		return false
+	}
+	ws.mu.RLock()
+	defer ws.mu.RUnlock()
+	return len(ws.clients[userID]) > 0
+}
+
 func (ws *WSServer) run() {
 	for {
 		select {
@@ -191,6 +200,8 @@ func (ws *WSServer) readPump(client *Client) {
 			chatID, _ := msg["chatId"].(string)
 			if chatID != "" {
 				content, _ := msg["content"].(string)
+				content = sanitizeMessageContent(content)
+				msg["content"] = content
 				mType, _ := msg["messageType"].(string)
 				if mType == "" {
 					mType = "text"
@@ -223,7 +234,10 @@ func (ws *WSServer) readPump(client *Client) {
 				var isMember bool
 				ws.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM chats.members WHERE chat_id = $1 AND user_id = $2)`, chatID, client.UserID).Scan(&isMember)
 				if isMember {
-					ws.BroadcastToChat(chatID, message, client.UserID)
+					msg["userId"] = client.UserID
+					msg["senderId"] = client.UserID
+					typingMessage, _ := json.Marshal(msg)
+					ws.BroadcastToChat(chatID, typingMessage, client.UserID)
 				}
 			}
 
@@ -359,14 +373,14 @@ func (ws *WSServer) handleCallInvite(client *Client, msg map[string]interface{})
 		return
 	}
 	invite, _ := json.Marshal(map[string]interface{}{
-		"type":        "call_incoming",
-		"roomId":      roomID,
-		"kind":        strOrDefault(msg["kind"], "video"),
-		"callType":    strOrDefault(msg["callType"], "p2p"),
-		"from":        client.UserID,
-		"fromName":    msg["fromName"],
-		"fromAvatar":  msg["fromAvatar"],
-		"title":       msg["title"],
+		"type":       "call_incoming",
+		"roomId":     roomID,
+		"kind":       strOrDefault(msg["kind"], "video"),
+		"callType":   strOrDefault(msg["callType"], "p2p"),
+		"from":       client.UserID,
+		"fromName":   msg["fromName"],
+		"fromAvatar": msg["fromAvatar"],
+		"title":      msg["title"],
 	})
 	ws.sendToUser(to, invite)
 	// Store for offline delivery

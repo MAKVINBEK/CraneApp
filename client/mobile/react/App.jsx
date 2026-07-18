@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation, useNavigate } from 'react-router-dom';
 import { RegisterPage } from './components/Auth/RegisterPage.jsx';
 import { LoginPage } from './components/Auth/LoginPage.jsx';
-import { ChatThreadPage } from './components/Chats/ChatThreadPage.jsx';
+import { ChatThreadPage, UserProfilePanel } from './components/Chats/ChatThreadPage.jsx';
 import { ChatsPage } from './components/Chats/ChatsPage.jsx';
 import { RateLimitPage } from './components/RateLimit/RateLimitPage.jsx';
 import { SettingsPage } from './components/Settings/SettingsPage.jsx';
@@ -10,7 +10,7 @@ import { ContactsPage } from './components/Contacts/ContactsPage.jsx';
 import { CreateGroupPage } from './components/Chats/CreateGroupPage.jsx';
 import { CallProvider } from './components/Calls/CallProvider.jsx';
 import { CallOverlay } from './components/Calls/CallOverlay.jsx';
-import { useRealtimeSocket } from './hooks/useRealtimeSocket.js';
+import { disconnectRealtimeSocket, useRealtimeSocket } from './hooks/useRealtimeSocket.js';
 import { services } from '../application/services/serviceContainer.js';
 
 export function App({ basename = '', forceMobile = false }) {
@@ -266,6 +266,10 @@ function ChatLayout({ forceMobile = false }) {
   const { chatId } = useParams();
   const isMobileScreen = useIsMobile();
   const isMobile = forceMobile || isMobileScreen;
+  const [sidebarWidth, setSidebarWidth] = useState(360);
+  const [profileWidth, setProfileWidth] = useState(null);
+  const [profileState, setProfileState] = useState({ isOpen: false, isLoading: false, error: '', user: null, chat: null });
+  const [profileCloseToken, setProfileCloseToken] = useState(0);
 
   if (isMobile) {
     if (chatId) {
@@ -275,14 +279,51 @@ function ChatLayout({ forceMobile = false }) {
     }
   }
 
+  function startResize(kind, event) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startSidebarWidth = sidebarWidth;
+    const startProfileWidth = profileWidth || Math.round(window.innerWidth * 0.28);
+
+    function handleMove(moveEvent) {
+      if (kind === 'sidebar') {
+        const nextWidth = Math.min(Math.max(startSidebarWidth + moveEvent.clientX - startX, 280), 520);
+        setSidebarWidth(nextWidth);
+      } else {
+        const nextWidth = Math.min(Math.max(startProfileWidth - (moveEvent.clientX - startX), 300), 560);
+        setProfileWidth(nextWidth);
+      }
+    }
+
+    function handleUp() {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+    }
+
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
+  }
+
   return (
-    <div style={{ display: 'flex', width: '100%', height: '100%', overflow: 'hidden' }}>
-      <div className="app-sidebar-pane">
+    <div className={`chat-workspace ${profileState.isOpen ? 'has-profile' : ''}`}>
+      <div className="app-sidebar-pane" style={{ flexBasis: sidebarWidth }}>
         <ChatsPage t={translate} />
       </div>
+      <div
+        aria-label="Изменить ширину списка чатов"
+        className="app-pane-resizer app-pane-resizer-sidebar"
+        onPointerDown={(event) => startResize('sidebar', event)}
+        role="separator"
+      />
       <div className="app-chat-pane">
         {chatId ? (
-          <ChatThreadPage chatId={chatId} t={translate} />
+          <ChatThreadPage
+            chatId={chatId}
+            onProfileStateChange={setProfileState}
+            profileCloseToken={profileCloseToken}
+            profileMode="panel"
+            t={translate}
+          />
         ) : (
           <div className="empty-chat-placeholder">
             <div className="empty-chat-icon">💬</div>
@@ -291,6 +332,32 @@ function ChatLayout({ forceMobile = false }) {
           </div>
         )}
       </div>
+      {profileState.isOpen ? (
+        <>
+          <div
+            aria-label="Изменить ширину профиля"
+            className="app-pane-resizer app-pane-resizer-profile"
+            onPointerDown={(event) => startResize('profile', event)}
+            role="separator"
+          />
+          <div
+            className="app-profile-pane"
+            style={profileWidth ? { flexBasis: profileWidth } : undefined}
+          >
+            <UserProfilePanel
+              chat={profileState.chat}
+              error={profileState.error}
+              isLoading={profileState.isLoading}
+              onClose={() => {
+                setProfileState({ isOpen: false, isLoading: false, error: '', user: null, chat: null });
+                setProfileCloseToken((value) => value + 1);
+              }}
+              t={translate}
+              user={profileState.user}
+            />
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -330,6 +397,7 @@ function AuthGuard() {
 }
 
 function clearAuthSession() {
+  disconnectRealtimeSocket();
   localStorage.removeItem('craneapp_auth_token');
   localStorage.removeItem('craneapp_user_data');
   localStorage.removeItem('craneapp_settings');

@@ -49,7 +49,8 @@ npm test
 npm run test:react
 ```
 
-`npm test` currently runs the architecture/syntax guard. React tests run through
+`npm test` currently runs the architecture/syntax guard. 
+React tests run through
 Vitest.
 
 ## Mobile Web

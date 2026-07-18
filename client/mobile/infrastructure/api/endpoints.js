@@ -3,6 +3,7 @@ export const API_ENDPOINTS = {
   AUTH_VERIFY_CODE: '/auth/verify-code',
   AUTH_REGISTER: '/auth/register',
   AUTH_LOGIN: '/auth/login',
+  AUTH_LOGOUT: '/auth/logout',
   AUTH_RESEND_CODE: '/auth/resend-code',
   AUTH_VALIDATE: '/auth/validate',
   AUTH_PUBLIC_KEY: '/auth/public-key',
@@ -21,6 +22,7 @@ export const API_ENDPOINTS = {
   CHAT_ARCHIVE: (chatId) => `/chats/${chatId}/archive`,
 
   USER_SEARCH: '/users/search',
+  USER_PROFILE: (userId) => `/users/${userId}/profile`,
   USER_SETTINGS: '/users/settings',
   USER_PRIVACY: '/users/privacy',
   USER_NOTIFICATIONS: '/users/notifications',
