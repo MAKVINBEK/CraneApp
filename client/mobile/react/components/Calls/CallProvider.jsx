@@ -164,12 +164,13 @@ export function CallProvider({ children }) {
     setIncomingCall(null);
   }
 
-  async function initiateCall(chatId, type, title, kind) {
+  async function initiateCall(chatId, type, title, kind, peerId = null) {
     if (activeCall) return;
 
     // 1. Создаем комнату звонка через API
     try {
-      const room = await services.callService.createRoom({ type, chatId, title });
+      const callType = type === 'group' ? 'group' : 'p2p';
+      const room = await services.callService.createRoom({ type: callType, chatId, title, callKind: kind });
       const roomId = room.id;
       if (!roomId) throw new Error('Room creation failed');
 
@@ -179,9 +180,9 @@ export function CallProvider({ children }) {
         const userStr = localStorage.getItem('craneapp_user_data') || '{}';
         const user = JSON.parse(userStr);
 
-        if (type !== 'group') {
+        if (callType !== 'group') {
           // Личный чат
-          targets = [chatId];
+          if (peerId) targets = [peerId];
         } else {
           // Для группы запрашиваем участников
           const members = await services.chatService.getMembers(chatId);
@@ -203,7 +204,7 @@ export function CallProvider({ children }) {
         invitePayloads.forEach(p => socket.send(p));
       }
 
-      setActiveCall({ roomId, type, kind, title });
+      setActiveCall({ roomId, type: callType, kind, title, chatId });
       setIsMinimized(false);
     } catch (err) {
       console.error('Call initiation failed:', err);

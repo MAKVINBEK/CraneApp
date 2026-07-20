@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 )
 
@@ -40,10 +42,16 @@ func Middleware(next http.Handler) http.Handler {
 		w.Header().Set("X-Request-ID", requestID)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
-		w.Header().Set("X-Frame-Options", "DENY")
-		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		w.Header().Set("Permissions-Policy", "camera=(self), microphone=(self), geolocation=()")
 		w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
 		w.Header().Set("X-CSP-Test", "v2-unsafe-eval")
+		frameAncestors := "'self'"
+		for _, origin := range strings.Split(os.Getenv("ALLOWED_ORIGINS"), ",") {
+			origin = strings.TrimSpace(origin)
+			if origin != "" && origin != "*" {
+				frameAncestors += " " + origin
+			}
+		}
 		w.Header().Set("Content-Security-Policy",
 			"default-src 'self'; "+
 				"script-src 'self' 'unsafe-inline' 'unsafe-eval'; "+
@@ -52,7 +60,7 @@ func Middleware(next http.Handler) http.Handler {
 				"media-src 'self' blob:; "+
 				"connect-src 'self' wss: ws: https://api.ipify.org; "+
 				"font-src 'self' data: https://fonts.gstatic.com; "+
-				"frame-ancestors 'none'",
+				"frame-ancestors "+frameAncestors,
 		)
 		defer func() {
 			if rec := recover(); rec != nil {

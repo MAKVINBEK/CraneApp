@@ -1,4 +1,5 @@
 import { useCall } from './CallProvider.jsx';
+import { config } from '../../../app/config.js';
 
 export function CallOverlay() {
   const {
@@ -39,11 +40,16 @@ export function CallOverlay() {
   }
 
   if (activeCall) {
-    const url = `/call.html?room=${encodeURIComponent(activeCall.roomId)}` +
-      `&type=${encodeURIComponent(activeCall.type)}` +
-      `&kind=${encodeURIComponent(activeCall.kind)}` +
-      `&title=${encodeURIComponent(activeCall.title)}` +
-      '&embedded=1';
+    const apiOrigin = new URL(config.apiBaseUrl, window.location.href).origin;
+    const url = new URL('/call.html', apiOrigin);
+    url.searchParams.set('room', activeCall.roomId);
+    url.searchParams.set('type', activeCall.type);
+    url.searchParams.set('kind', activeCall.kind);
+    url.searchParams.set('title', activeCall.title);
+    url.searchParams.set('chatId', activeCall.chatId || '');
+    url.searchParams.set('apiBase', config.apiBaseUrl);
+    url.searchParams.set('socketUrl', config.socketUrl);
+    url.searchParams.set('embedded', '1');
 
     if (isMinimized) {
       return (
@@ -64,7 +70,7 @@ export function CallOverlay() {
       <div className="fullscreen-call-overlay">
         <iframe
           id="callFrame"
-          src={url}
+          src={url.toString()}
           title="WebRTC Call"
           allow="camera; microphone; display-capture"
         />

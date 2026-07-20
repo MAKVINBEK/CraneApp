@@ -124,12 +124,12 @@ app.use(helmet({
             fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com'],
             objectSrc: ["'none'"],
             baseUri: ["'self'"],
-            frameAncestors: ["'self'"],
+            frameAncestors: ["'self'", ...allowedOrigins],
             formAction: ["'self'"],
         },
     },
     crossOriginEmbedderPolicy: false,
-    frameguard: { action: 'sameorigin' },
+    frameguard: false,
     hsts: process.env.NODE_ENV !== 'development'
 }));
 

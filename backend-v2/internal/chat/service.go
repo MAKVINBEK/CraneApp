@@ -1240,12 +1240,16 @@ func (s *Service) CreateCallRoom(ctx context.Context, userID, chatID, callType, 
 	if ok, err := s.IsMember(ctx, userID, chatID); err != nil || !ok {
 		return "", ErrForbidden
 	}
+	dbCallType := "video"
+	if callKind == "audio" || callType == "voice" {
+		dbCallType = "voice"
+	}
 	var roomID string
 	err := s.db.QueryRowContext(ctx, `
 		INSERT INTO calls.rooms (chat_id, type, title, initiator_id)
 		VALUES ($1, $2, $3, $4)
 		RETURNING id::text
-	`, chatID, callType, title, userID).Scan(&roomID)
+	`, chatID, dbCallType, title, userID).Scan(&roomID)
 	if err == nil {
 		s.CallRooms().CreateRoom(userID, roomID, callType, callKind, chatID, title)
 	}
