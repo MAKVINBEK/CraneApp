@@ -79,6 +79,25 @@ describe('ChatThreadPage', () => {
     expect(screen.getByText('Hi')).toBeInTheDocument();
   });
 
+  it('renders call messages without showing raw JSON content', async () => {
+    services.chatService.getChat.mockResolvedValue({ id: 'chat-1', name: 'Team', type: 'group' });
+    services.messageService.getMessages.mockResolvedValue([
+      {
+        id: 'call-1',
+        senderId: 'u1',
+        type: 'call',
+        content: '{"callKind":"audio","duration":24,"initiatorId":"u1","status":"answered"}',
+        timestamp: new Date('2026-06-03T12:00:00Z'),
+      },
+    ]);
+
+    render(<ChatThreadPage chatId="chat-1" />);
+
+    expect(await screen.findByText('Звонок завершен')).toBeInTheDocument();
+    expect(screen.getByText('24 сек')).toBeInTheDocument();
+    expect(screen.queryByText(/callKind/)).not.toBeInTheDocument();
+  });
+
   it('marks loaded incoming messages as read', async () => {
     services.chatService.getChat.mockResolvedValue({ id: 'chat-1', name: 'Team', type: 'group' });
     services.messageService.getMessages.mockResolvedValue([
