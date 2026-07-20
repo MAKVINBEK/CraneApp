@@ -532,6 +532,42 @@ function renderMessageContent(content) {
   return parts.length > 0 ? parts : content;
 }
 
+function parseCallContent(content) {
+  if (!content || typeof content !== 'string') return {};
+  try {
+    const parsed = JSON.parse(content);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function formatCallDuration(seconds) {
+  const total = Number(seconds) || 0;
+  if (total <= 0) return '';
+  const minutes = Math.floor(total / 60);
+  const rest = total % 60;
+  if (!minutes) return `${rest} сек`;
+  return `${minutes}:${String(rest).padStart(2, '0')}`;
+}
+
+function CallMessageContent({ message, t }) {
+  const call = parseCallContent(message.content);
+  const duration = formatCallDuration(call.duration);
+
+  return (
+    <div className="message-call-content">
+      <div className="message-call-icon" aria-hidden="true">
+        <PhoneIcon />
+      </div>
+      <div className="message-call-copy">
+        <strong>{t('callEnded', 'Звонок завершен')}</strong>
+        {duration ? <span>{duration}</span> : null}
+      </div>
+    </div>
+  );
+}
+
 function MessageBubble({
   currentUserId,
   isActionTarget,
@@ -605,7 +641,11 @@ function MessageBubble({
       ) : null}
       {message.replyToContent ? <div className="message-reply-preview">{message.replyToContent}</div> : null}
       <MessageMedia message={message} t={t} />
-      <div className="message-content">{renderMessageContent(message.content)}</div>
+      {message.type === 'call' ? (
+        <CallMessageContent message={message} t={t} />
+      ) : (
+        <div className="message-content">{renderMessageContent(message.content)}</div>
+      )}
       {message.reactions?.length ? (
         <div className="message-reactions">
           {message.reactions.map((reaction) => (

@@ -782,6 +782,29 @@
   .message-actions-backdrop { display: none; }
   .message-sender { @apply mb-[3px] text-[#f5c84b] text-xs font-extrabold; }
   .message-content { @apply whitespace-pre-wrap leading-[1.38]; overflow-wrap: anywhere; }
+  .message-call-content {
+    @apply flex items-center gap-3;
+    min-width: 190px;
+  }
+  .message-call-icon {
+    @apply flex shrink-0 items-center justify-center rounded-full;
+    width: 42px;
+    height: 42px;
+    background: rgba(255,255,255,0.14);
+    color: rgba(255,255,255,0.94);
+    & svg { width: 24px; height: 24px; }
+  }
+  .message-call-copy {
+    @apply min-w-0 flex flex-col gap-0.5;
+    & strong {
+      @apply text-[16px] font-extrabold leading-tight;
+      color: rgba(255,255,255,0.96);
+    }
+    & span {
+      @apply text-[13px] font-semibold;
+      color: rgba(255,255,255,0.62);
+    }
+  }
   .message-media { @apply block mb-[7px] rounded-[10px] object-contain; width: min(100%,360px); max-height: 360px; background: rgba(0,0,0,0.18); }
   .message-media-sticker { background: transparent; width: min(180px,100%); }
   .message-media-file, .message-media-unavailable {
