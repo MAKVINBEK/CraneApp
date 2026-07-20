@@ -342,7 +342,7 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
         <div className="thread-call-actions">
           <button
             className="thread-call-button"
-            onClick={() => initiateCall(chatId, chat?.type, title, 'audio')}
+            onClick={() => initiateCall(chatId, chat?.type, title, 'audio', chat?.peerId)}
             title={t('audioCall', 'Аудиозвонок')}
             type="button"
           >
@@ -367,7 +367,7 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
           </button>
           <button
             className="thread-call-button"
-            onClick={() => initiateCall(chatId, chat?.type, title, 'video')}
+            onClick={() => initiateCall(chatId, chat?.type, title, 'video', chat?.peerId)}
             title={t('videoCall', 'Видео')}
             type="button"
           >
@@ -776,12 +776,12 @@ export function UserProfilePanel({ chat, error, isLoading, onClose, stopPropagat
 
   function startAudioCall() {
     if (!canCall) return;
-    initiateCall(chat.id, chat?.type, displayName, 'audio');
+    initiateCall(chat.id, chat?.type, displayName, 'audio', chat?.peerId);
   }
 
   function startVideoCall() {
     if (!canCall) return;
-    initiateCall(chat.id, chat?.type, displayName, 'video');
+    initiateCall(chat.id, chat?.type, displayName, 'video', chat?.peerId);
   }
 
   function copyText(value) {

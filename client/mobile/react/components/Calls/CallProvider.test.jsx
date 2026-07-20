@@ -34,7 +34,7 @@ function TestChild() {
     <div>
       {incomingCall && <button onClick={acceptCall}>Accept Call from {incomingCall.fromName}</button>}
       {activeCall && <div data-testid="active-call">Active Call in Room {activeCall.roomId}</div>}
-      <button onClick={() => initiateCall('chat123', 'p2p', 'Alice', 'video')}>Start Call</button>
+      <button onClick={() => initiateCall('chat123', 'private', 'Alice', 'video', 'user-2')}>Start Call</button>
     </div>
   );
 }
@@ -103,7 +103,7 @@ describe('CallProvider', () => {
     // Check if socket sent invite
     expect(mockSocket.send).toHaveBeenCalledWith(expect.objectContaining({
       type: 'call_invite',
-      to: 'chat123', // Since it's p2p, to is chat123
+      to: 'user-2',
       roomId: 'room-123'
     }));
     

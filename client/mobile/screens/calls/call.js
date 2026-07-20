@@ -10,6 +10,8 @@
     const ROOM_TYPE = qs.get('type') || 'group';
     const ROOM_KIND = (qs.get('kind') === 'audio') ? 'audio' : 'video'; // audio | video
     const CHAT_ID = qs.get('chatId') || '';
+    const API_BASE_URL = (qs.get('apiBase') || `${location.origin}/api/v2`).replace(/\/+$/, '');
+    const SOCKET_URL = qs.get('socketUrl') || `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws`;
     const IS_GROUP_CHAT_CALL = !!CHAT_ID || (ROOM_ID && ROOM_ID.startsWith('grp_'));
     const IS_EMBEDDED = qs.get('embedded') === '1';
     if (IS_EMBEDDED) document.body.classList.add('embedded');
@@ -37,6 +39,16 @@
 
     let localStream = null;
 
+    function apiUrl(path){
+        return API_BASE_URL + '/' + String(path || '').replace(/^\/+/, '');
+    }
+
+    function socketUrlWithToken(){
+        const url = new URL(SOCKET_URL, location.href);
+        url.searchParams.set('token', TOKEN);
+        return url.toString();
+    }
+
     function exitLobby(){
         if (localStream) {
             localStream.getTracks().forEach(t => t.stop());
@@ -49,11 +61,11 @@
         if (window.opener && !window.opener.closed) {
             try { window.close(); return; } catch(_) {}
         }
-        location.href = '../chats/chats.html';
+        location.href = '/chats';
     }
 
     if (!TOKEN || !userData.id) {
-        location.href = '../auth/login.html';
+        location.href = '/login';
         return;
     }
     if (!ROOM_ID) {
@@ -256,7 +268,7 @@
     // ---------- Запросить ICE-серверы и метаданные комнаты ----------
     async function fetchRoomConfig(){
         try {
-            const res = await fetch('/api/v1/calls/rooms/' + encodeURIComponent(ROOM_ID), {
+            const res = await fetch(apiUrl('/calls/rooms/' + encodeURIComponent(ROOM_ID)), {
                 headers: { 'Authorization': 'Bearer ' + TOKEN }
             });
             if (res.ok) {
@@ -265,13 +277,13 @@
                 if (data.room && data.room.title) document.getElementById('callTitle').textContent = data.room.title;
             } else if (res.status === 404) {
                 // Комнаты ещё нет — создадим и возьмём ICE-серверы из ответа
-                const cr = await fetch('/api/v1/calls/rooms', {
+                const cr = await fetch(apiUrl('/calls/rooms'), {
                     method:'POST',
                     headers:{ 'Authorization':'Bearer '+TOKEN, 'Content-Type':'application/json' },
                     body: JSON.stringify({
                         type: ROOM_TYPE,
+                        callKind: ROOM_KIND,
                         title: ROOM_TITLE,
-                        roomId: ROOM_ID,
                         chatId: CHAT_ID || null
                     })
                 });
@@ -385,8 +397,7 @@
     // ---------- WebSocket-сигналинг ----------
     function connectWS(){
         return new Promise((resolve)=>{
-            const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            ws = new WebSocket(proto + '//' + location.host + '/ws?userId=' + encodeURIComponent(ME.id));
+            ws = new WebSocket(socketUrlWithToken());
             ws.onopen = () => {
                 wsReady = true;
                 resolve();
@@ -673,7 +684,7 @@
         } else if (returnHome) {
             // На десктопе — закрыть окно если оно было открыто; иначе вернуться в чаты
             if (window.opener && !window.opener.closed) { try { window.close(); return; } catch(_){} }
-            location.href = '../chats/chats.html';
+            location.href = '/chats';
         } else {
             document.getElementById('callView').style.display = 'none';
             document.getElementById('lobby').classList.remove('hidden');
