@@ -204,6 +204,16 @@ async function decryptChatPreview(chat) {
     return chat;
   }
 
+  if (chat.lastMessage.type === 'call') {
+    return {
+      ...chat,
+      lastMessage: {
+        ...chat.lastMessage,
+        content: formatCallPreview(chat.lastMessage.content),
+      },
+    };
+  }
+
   try {
     const message = await services.messageService.processMessageForDisplay(chat.id, {
       ...chat.lastMessage,
@@ -233,6 +243,28 @@ function getCurrentUser() {
 function getInitials(user) {
   const source = user?.firstName || user?.username || 'C';
   return source.slice(0, 1).toUpperCase();
+}
+
+function formatCallPreview(content) {
+  if (!content || typeof content !== 'string') return 'Звонок завершен';
+  try {
+    const parsed = JSON.parse(content);
+    const duration = Number(parsed?.duration) || 0;
+    if (duration > 0) {
+      return `Звонок завершен · ${formatCallDuration(duration)}`;
+    }
+  } catch (_) {
+    // Ignore malformed legacy payloads and show a friendly fallback.
+  }
+  return 'Звонок завершен';
+}
+
+function formatCallDuration(seconds) {
+  const total = Number(seconds) || 0;
+  const minutes = Math.floor(total / 60);
+  const rest = total % 60;
+  if (!minutes) return `${rest} сек`;
+  return `${minutes}:${String(rest).padStart(2, '0')}`;
 }
 
 function getLastMessageText(chat, t) {

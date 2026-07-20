@@ -120,6 +120,35 @@ describe('ChatsPage', () => {
     }));
   });
 
+  it('formats call message previews without showing raw JSON', async () => {
+    services.chatService.getChats.mockResolvedValue([
+      {
+        id: 'chat-1',
+        name: 'Paul',
+        type: 'private',
+        lastMessage: {
+          id: 'call-1',
+          senderId: 'u2',
+          type: 'call',
+          content: '{"callKind":"audio","duration":24,"initiatorId":"u2","status":"answered"}',
+          createdAt: '2026-06-03T12:00:00Z',
+        },
+        unreadCount: 0,
+        createdAt: new Date('2026-06-03T12:00:00Z'),
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <ChatsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Звонок завершен · 24 сек')).toBeInTheDocument();
+    expect(screen.queryByText(/callKind/)).not.toBeInTheDocument();
+    expect(services.messageService.processMessageForDisplay).not.toHaveBeenCalled();
+  });
+
   it('updates the last message preview from realtime events', async () => {
     services.chatService.getChats.mockResolvedValue([
       {
