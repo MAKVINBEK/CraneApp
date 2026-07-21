@@ -679,6 +679,12 @@
     &.reject  { background: #ff3366; color: white; box-shadow: 0 8px 24px rgba(255,51,102,0.4); }
   }
   .fullscreen-call-overlay { @apply fixed inset-0 z-[9998] bg-black; & iframe { @apply w-full h-full border-0; } }
+  .fullscreen-call-overlay.is-minimized {
+    @apply pointer-events-none overflow-hidden;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+  }
   .minimized-call-bar {
     @apply fixed left-1/2 -translate-x-1/2 z-[9997] flex items-center justify-between cursor-pointer;
     top: calc(10px + env(safe-area-inset-top, 0px)); width: min(90%,450px);
