@@ -109,4 +109,51 @@ describe('CallProvider', () => {
     
     expect(screen.getByTestId('active-call')).toBeInTheDocument();
   });
+
+  it('should reject incoming calls while already in a call', async () => {
+    localStorage.setItem('craneapp_user_data', JSON.stringify({ id: 'user-1', firstName: 'Alice' }));
+
+    render(
+      <CallProvider>
+        <TestChild />
+      </CallProvider>
+    );
+
+    await act(async () => {
+      screen.getByText('Start Call').click();
+    });
+
+    act(() => {
+      eventBus.emit('call_incoming', { roomId: 'room-456', from: 'user-3', fromName: 'Bob', kind: 'audio' });
+    });
+
+    expect(mockSocket.send).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'call_invite_response',
+      to: 'user-3',
+      roomId: 'room-456',
+      accepted: false,
+      reason: 'busy',
+    }));
+  });
+
+  it('should close the active call when the invite is rejected', async () => {
+    localStorage.setItem('craneapp_user_data', JSON.stringify({ id: 'user-1', firstName: 'Alice' }));
+
+    render(
+      <CallProvider>
+        <TestChild />
+      </CallProvider>
+    );
+
+    await act(async () => {
+      screen.getByText('Start Call').click();
+    });
+    expect(screen.getByTestId('active-call')).toBeInTheDocument();
+
+    act(() => {
+      eventBus.emit('call_invite_response', { roomId: 'room-123', from: 'user-2', accepted: false, reason: 'busy' });
+    });
+
+    expect(screen.queryByTestId('active-call')).not.toBeInTheDocument();
+  });
 });

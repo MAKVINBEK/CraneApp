@@ -7,8 +7,10 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"craneapp/backend-v2/internal/platform/authctx"
 	"craneapp/backend-v2/internal/platform/config"
@@ -297,12 +299,40 @@ func getIceServers() []IceServer {
 		{URLs: "stun:stun1.l.google.com:19302"},
 		{URLs: "stun:stun2.l.google.com:19302"},
 	}
+	if metered := fetchMeteredIceServers(); len(metered) > 0 {
+		return metered
+	}
 	if turnURL := config.Value("TURN_URL", ""); turnURL != "" {
 		servers = append(servers, IceServer{
 			URLs:       turnURL,
 			Username:   config.Value("TURN_USERNAME", ""),
 			Credential: config.Value("TURN_CREDENTIAL", ""),
 		})
+	}
+	return servers
+}
+
+func fetchMeteredIceServers() []IceServer {
+	apiKey := config.Value("METERED_API_KEY", "")
+	domain := config.Value("METERED_DOMAIN", "")
+	if apiKey == "" || domain == "" {
+		return nil
+	}
+	client := http.Client{Timeout: 4 * time.Second}
+	resp, err := client.Get("https://" + domain + "/api/v2/turn/credentials?apiKey=" + url.QueryEscape(apiKey))
+	if err != nil {
+		slog.Warn("fetch metered turn credentials failed", "err", err)
+		return nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		slog.Warn("fetch metered turn credentials failed", "status", resp.StatusCode)
+		return nil
+	}
+	var servers []IceServer
+	if err := json.NewDecoder(resp.Body).Decode(&servers); err != nil {
+		slog.Warn("decode metered turn credentials failed", "err", err)
+		return nil
 	}
 	return servers
 }
