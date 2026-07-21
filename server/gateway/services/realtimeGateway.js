@@ -231,6 +231,16 @@ function createRealtimeGateway({ callRoom, jwt, jwtSecret, logger, query, saveCa
                     case 'call_invite': {
                         // Приглашение конкретного пользователя в комнату
                         if (!msg.to || !msg.roomId) break;
+                        if (callRoom.getUserRoom && callRoom.getUserRoom(msg.to)) {
+                            sendToUser(ws.userId, {
+                                type: 'call_invite_response',
+                                roomId: msg.roomId,
+                                from: msg.to,
+                                accepted: false,
+                                reason: 'busy'
+                            });
+                            break;
+                        }
                         const _invite = {
                             type: 'call_incoming',
                             roomId: msg.roomId,
@@ -253,7 +263,8 @@ function createRealtimeGateway({ callRoom, jwt, jwtSecret, logger, query, saveCa
                             type: 'call_invite_response',
                             roomId: msg.roomId,
                             from: ws.userId,
-                            accepted: !!msg.accepted
+                            accepted: !!msg.accepted,
+                            reason: msg.reason || null
                         });
                         // Invite обработан — убираем pending
                         pendingCallInvites.delete(ws.userId);

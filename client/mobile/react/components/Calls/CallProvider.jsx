@@ -14,6 +14,22 @@ export function CallProvider({ children }) {
   // Рингтон через WebAudio
   const [ringtone, setRingtone] = useState(null);
 
+  function sendInviteResponse(call, accepted, reason = null) {
+    try {
+      if (socket && socket.isConnected && call?.from) {
+        socket.send({
+          type: 'call_invite_response',
+          to: call.from,
+          roomId: call.roomId,
+          accepted,
+          ...(reason ? { reason } : {})
+        });
+      }
+    } catch (err) {
+      console.warn('Failed to send call invite response:', err);
+    }
+  }
+
   function startRingtone() {
     stopRingtone();
     try {
@@ -83,6 +99,10 @@ export function CallProvider({ children }) {
   useEffect(() => {
     const unsubIncoming = eventBus.on('call_incoming', (payload) => {
       // payload: { roomId, from, fromName, fromAvatar, kind, title }
+      if (activeCall || incomingCall) {
+        sendInviteResponse(payload, false, 'busy');
+        return;
+      }
       setIncomingCall(payload);
       startRingtone();
     });
@@ -94,11 +114,22 @@ export function CallProvider({ children }) {
       }
     });
 
+    const unsubInviteResponse = eventBus.on('call_invite_response', (payload) => {
+      if (!activeCall || payload?.roomId !== activeCall.roomId || payload?.accepted) return;
+      try {
+        const frame = document.getElementById('callFrame');
+        frame?.contentWindow?.postMessage({ type: 'crane_hangup' }, '*');
+      } catch (_) {}
+      setActiveCall(null);
+      setIsMinimized(false);
+    });
+
     return () => {
       unsubIncoming();
       unsubCancelled();
+      unsubInviteResponse();
     };
-  }, [incomingCall, ringtone]);
+  }, [activeCall, incomingCall, ringtone, socket]);
 
   // Слушатель сообщений от iframe
   useEffect(() => {
@@ -122,18 +153,7 @@ export function CallProvider({ children }) {
     stopRingtone();
 
     // Отправка ответа инициатору через сокет
-    try {
-      if (socket && socket.isConnected) {
-        socket.send({
-          type: 'call_invite_response',
-          to: incomingCall.from,
-          roomId: incomingCall.roomId,
-          accepted: true
-        });
-      }
-    } catch (err) {
-      console.warn('Failed to send call accept response:', err);
-    }
+    sendInviteResponse(incomingCall, true);
 
     setActiveCall({
       roomId: incomingCall.roomId,
@@ -148,24 +168,13 @@ export function CallProvider({ children }) {
     if (!incomingCall) return;
     stopRingtone();
 
-    try {
-      if (socket && socket.isConnected) {
-        socket.send({
-          type: 'call_invite_response',
-          to: incomingCall.from,
-          roomId: incomingCall.roomId,
-          accepted: false
-        });
-      }
-    } catch (err) {
-      console.warn('Failed to send call reject response:', err);
-    }
+    sendInviteResponse(incomingCall, false, 'rejected');
 
     setIncomingCall(null);
   }
 
   async function initiateCall(chatId, type, title, kind, peerId = null) {
-    if (activeCall) return;
+    if (activeCall || incomingCall) return;
 
     // 1. Создаем комнату звонка через API
     try {

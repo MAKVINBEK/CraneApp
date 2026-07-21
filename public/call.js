@@ -173,6 +173,8 @@
     let connected = false; // первый peer подключился (для audio-режима)
     let dialingTimer = null;
     let inCall = false;
+    let wsKeepaliveTimer = null;
+    let isLeaving = false;
     let wsReconnectTimer = null;
     let ringbackCtx = null;
     let ringbackGain = null;
@@ -400,6 +402,8 @@
             ws = new WebSocket(socketUrlWithToken());
             ws.onopen = () => {
                 wsReady = true;
+                clearInterval(wsKeepaliveTimer);
+                wsKeepaliveTimer = setInterval(() => wsSend({ type:'ping' }), 25000);
                 resolve();
                 // При реконнекте во время звонка — пересоздаём peers и переподключаемся
                 if (inCall) {
@@ -432,6 +436,9 @@
 
     async function handleWS(msg){
         switch(msg.type){
+            case 'ping':
+                wsSend({ type:'pong' });
+                break;
             case 'call_joined':
                 // Создать pc и offer для каждого существующего peer-а
                 for (const peer of (msg.peers||[])) {
@@ -443,7 +450,17 @@
                 // Не инициируем offer — ждём, пока новый peer пришлёт нам offer
                 break;
             case 'call_peer_left':
-                removePeer(msg.peer.userId);
+                if (IS_P2P) {
+                    removePeer(msg.peer.userId);
+                    showToast(tr('peerLeftCall', 'Собеседник покинул звонок'));
+                    setTimeout(() => leaveCall(true), 350);
+                } else {
+                    removePeer(msg.peer.userId);
+                }
+                break;
+            case 'call_cancelled':
+                showToast(tr('callEnded', 'Звонок завершён'));
+                setTimeout(() => leaveCall(true), 350);
                 break;
             case 'call_offer':
                 await onRemoteOffer(msg.from, msg.payload);
@@ -668,7 +685,10 @@
     };
 
     function leaveCall(returnHome){
+        if (isLeaving) return;
+        isLeaving = true;
         inCall = false;
+        clearInterval(wsKeepaliveTimer); wsKeepaliveTimer = null;
         clearTimeout(wsReconnectTimer);
         stopRingback();
         try { wsSend({ type:'call_leave', roomId: ROOM_ID }); } catch(_) {}
@@ -690,6 +710,7 @@
             document.getElementById('lobby').classList.remove('hidden');
             const btn = document.getElementById('lobbyJoinBtn');
             btn.disabled = false; btn.textContent = tr('join', 'Присоединиться');
+            isLeaving = false;
         }
     }
 

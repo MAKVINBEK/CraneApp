@@ -173,6 +173,19 @@ func (m *CallRoomManager) LeaveRoom(roomID, userID string) LeaveResult {
 	return m.leaveRoomLocked(roomID, userID)
 }
 
+func (m *CallRoomManager) GetUserRoom(userID string) *RoomPublic {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	roomID := m.userToRoom[userID]
+	if roomID == "" {
+		return nil
+	}
+	if r, ok := m.rooms[roomID]; ok {
+		return r.toPublic()
+	}
+	return nil
+}
+
 func (m *CallRoomManager) leaveRoomLocked(roomID, userID string) LeaveResult {
 	r, ok := m.rooms[roomID]
 	if !ok {

@@ -372,6 +372,17 @@ func (ws *WSServer) handleCallInvite(client *Client, msg map[string]interface{})
 	if to == "" || roomID == "" {
 		return
 	}
+	if ws.callRooms.GetUserRoom(to) != nil {
+		busy, _ := json.Marshal(map[string]interface{}{
+			"type":     "call_invite_response",
+			"roomId":   roomID,
+			"from":     to,
+			"accepted": false,
+			"reason":   "busy",
+		})
+		ws.sendToUser(client.UserID, busy)
+		return
+	}
 	invite, _ := json.Marshal(map[string]interface{}{
 		"type":       "call_incoming",
 		"roomId":     roomID,
@@ -396,11 +407,13 @@ func (ws *WSServer) handleCallInviteResponse(client *Client, msg map[string]inte
 	}
 	roomID, _ := msg["roomId"].(string)
 	accepted, _ := msg["accepted"].(bool)
+	reason, _ := msg["reason"].(string)
 	out, _ := json.Marshal(map[string]interface{}{
 		"type":     "call_invite_response",
 		"roomId":   roomID,
 		"from":     client.UserID,
 		"accepted": accepted,
+		"reason":   reason,
 	})
 	ws.sendToUser(to, out)
 	ws.inviteMu.Lock()
