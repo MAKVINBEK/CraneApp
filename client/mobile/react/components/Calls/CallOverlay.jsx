@@ -51,30 +51,29 @@ export function CallOverlay() {
     url.searchParams.set('socketUrl', config.socketUrl);
     url.searchParams.set('embedded', '1');
 
-    if (isMinimized) {
-      return (
-        <div className="minimized-call-bar" onClick={maximizeCall}>
-          <div className="minimized-call-info">
-            <span className="call-pulse-dot"></span>
-            <span>Идёт звонок: {activeCall.title}</span>
-          </div>
-          <div className="minimized-call-actions" onClick={(e) => e.stopPropagation()}>
-            <button className="minimized-return-btn" onClick={maximizeCall}>Вернуться</button>
-            <button className="minimized-end-btn" onClick={endCall}>×</button>
-          </div>
-        </div>
-      );
-    }
-
     return (
-      <div className="fullscreen-call-overlay">
-        <iframe
-          id="callFrame"
-          src={url.toString()}
-          title="WebRTC Call"
-          allow="camera; microphone; display-capture"
-        />
-      </div>
+      <>
+        {isMinimized ? (
+          <div className="minimized-call-bar" onClick={maximizeCall}>
+            <div className="minimized-call-info">
+              <span className="call-pulse-dot"></span>
+              <span>Идёт звонок: {activeCall.title}</span>
+            </div>
+            <div className="minimized-call-actions" onClick={(e) => e.stopPropagation()}>
+              <button className="minimized-return-btn" onClick={maximizeCall}>Вернуться</button>
+              <button className="minimized-end-btn" onClick={endCall}>×</button>
+            </div>
+          </div>
+        ) : null}
+        <div className={`fullscreen-call-overlay ${isMinimized ? 'is-minimized' : ''}`}>
+          <iframe
+            id="callFrame"
+            src={url.toString()}
+            title="WebRTC Call"
+            allow="camera; microphone; display-capture"
+          />
+        </div>
+      </>
     );
   }
 
