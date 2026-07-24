@@ -204,6 +204,7 @@ app.use(cors({
 app.use((req, res, next) => {
     const largePaths = [
         '/api/v2/upload',
+        '/api/v2/media',
         '/api/v2/stickers/packs',
         '/api/v2/users/profile',
         '/api/v2/users/avatar',
@@ -211,13 +212,16 @@ app.use((req, res, next) => {
         '/api/v2/chats/'
     ];
     const isLarge = largePaths.some(p => req.path.startsWith(p));
-    const limit = isLarge ? '100mb' : '2mb';
+    // Encrypted media is transported as Base64 JSON, which is about 33% larger
+    // than the original file. Keep enough headroom for the 100 MB file limit.
+    const limit = isLarge ? '140mb' : '2mb';
     express.json({ limit })(req, res, next);
 });
 
 app.use((req, res, next) => {
     const largePaths = [
         '/api/v2/upload',
+        '/api/v2/media',
         '/api/v2/stickers/packs',
         '/api/v2/users/profile',
         '/api/v2/users/avatar',
@@ -225,7 +229,7 @@ app.use((req, res, next) => {
         '/api/v2/chats/'
     ];
     const isLarge = largePaths.some(p => req.path.startsWith(p));
-    const limit = isLarge ? '100mb' : '2mb';
+    const limit = isLarge ? '140mb' : '2mb';
     express.urlencoded({ extended: true, limit })(req, res, next);
 });
 
