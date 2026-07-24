@@ -448,9 +448,9 @@ func migrateMessages(ctx context.Context, tx *sql.Tx) {
 	var favsAffected int64
 	if favsExists {
 		result, err = tx.ExecContext(ctx, `
-			INSERT INTO messages.favorites (user_id, message_id, created_at)
-			SELECT mf.user_id, mf.message_id, COALESCE(mf.created_at, NOW())
-			FROM public.favorite_messages mf
+				INSERT INTO messages.favorites (user_id, message_id, created_at)
+				SELECT mf.user_id, mf.message_id, COALESCE(mf.saved_at, NOW())
+				FROM public.favorite_messages mf
 			JOIN messages.messages m ON m.id = mf.message_id
 			JOIN auth.users u ON u.id = mf.user_id
 			ON CONFLICT DO NOTHING
