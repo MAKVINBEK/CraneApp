@@ -785,6 +785,10 @@
       filter: brightness(1.05);
     }
   }
+  .message-bubble.has-media {
+    width: fit-content;
+    max-width: min(384px, calc(100% - 20px));
+  }
   .message-actions-backdrop { display: none; }
   .message-sender { @apply mb-[3px] text-[#f5c84b] text-xs font-extrabold; }
   .message-content { @apply whitespace-pre-wrap leading-[1.38]; overflow-wrap: anywhere; }
@@ -1133,6 +1137,30 @@
     padding: 22px 12px;
     color: rgba(255,255,255,0.48);
     background: rgba(255,255,255,0.05);
+  }
+  .user-profile-media-grid {
+    @apply grid gap-1.5;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-top: 14px;
+    & a {
+      @apply relative block overflow-hidden rounded-[10px];
+      aspect-ratio: 1;
+      background: rgba(255,255,255,0.05);
+    }
+    & img,
+    & video {
+      @apply block w-full h-full object-cover;
+    }
+    & span {
+      @apply absolute flex items-center justify-center rounded-full;
+      inset: 50% auto auto 50%;
+      width: 32px;
+      height: 32px;
+      transform: translate(-50%, -50%);
+      color: #fff;
+      background: rgba(0,0,0,0.58);
+      font-size: 13px;
+    }
   }
   .user-profile-state { @apply py-10 text-[15px]; color: rgba(255,255,255,0.64); }
   .user-profile-state.is-error { color: #ff7777; }

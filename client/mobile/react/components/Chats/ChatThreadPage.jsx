@@ -31,9 +31,9 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
 
   useEffect(() => {
     if (profileMode !== 'panel' || typeof onProfileStateChange !== 'function') return undefined;
-    onProfileStateChange({ ...profileModal, chat });
+    onProfileStateChange({ ...profileModal, chat, messages });
     return undefined;
-  }, [chat, onProfileStateChange, profileMode, profileModal]);
+  }, [chat, messages, onProfileStateChange, profileMode, profileModal]);
 
   useEffect(() => {
     setProfileModal({ isOpen: false, isLoading: false, error: '', user: null });
@@ -526,11 +526,12 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
       )}
 
       {profileMode === 'modal' ? (
-        <UserProfileModal
+      <UserProfileModal
           chat={chat}
           error={profileModal.error}
           isLoading={profileModal.isLoading}
           isOpen={profileModal.isOpen}
+          messages={messages}
           onClose={() => setProfileModal({ isOpen: false, isLoading: false, error: '', user: null })}
           t={t}
           user={profileModal.user}
@@ -694,7 +695,7 @@ function MessageBubble({
 
   return (
     <article
-      className={`message-bubble ${mine ? 'is-mine' : ''} ${isActionTarget ? 'is-action-target' : ''}`}
+      className={`message-bubble ${mine ? 'is-mine' : ''} ${hasMessageMedia(message) ? 'has-media' : ''} ${isActionTarget ? 'is-action-target' : ''}`}
       onClickCapture={handleClickCapture}
       onContextMenu={handleContextMenu}
       onPointerCancel={clearLongPress}
@@ -842,7 +843,11 @@ function MessageMedia({ message, t }) {
   return null;
 }
 
-function UserProfileModal({ chat, error, isLoading, isOpen, onClose, t, user }) {
+function hasMessageMedia(message) {
+  return Boolean(message.mediaUrl || message.mediaUnavailable);
+}
+
+function UserProfileModal({ chat, error, isLoading, isOpen, messages, onClose, t, user }) {
   if (!isOpen) return null;
 
   return (
@@ -851,6 +856,7 @@ function UserProfileModal({ chat, error, isLoading, isOpen, onClose, t, user }) 
         chat={chat}
         error={error}
         isLoading={isLoading}
+        messages={messages}
         onClose={onClose}
         stopPropagation
         t={t}
@@ -860,7 +866,7 @@ function UserProfileModal({ chat, error, isLoading, isOpen, onClose, t, user }) 
   );
 }
 
-export function UserProfilePanel({ chat, error, isLoading, onClose, stopPropagation = false, t, user }) {
+export function UserProfilePanel({ chat, error, isLoading, messages = [], onClose, stopPropagation = false, t, user }) {
   const [editableUser, setEditableUser] = useState(user);
   const [isEditing, setIsEditing] = useState(false);
   const [editDraft, setEditDraft] = useState({ firstName: '', bio: '' });
@@ -881,6 +887,9 @@ export function UserProfilePanel({ chat, error, isLoading, onClose, stopPropagat
     : getChatSubtitle(chat, null, t);
   const avatarUrl = profileUser?.avatarUrl || chat?.avatarUrl || '';
   const canCall = Boolean(chat?.id);
+  const sharedMedia = messages.filter((message) => (
+    message.mediaUrl && ['image', 'gif', 'sticker', 'video'].includes(message.mediaType || message.type)
+  ));
 
   useEffect(() => {
     setEditableUser(user);
@@ -1019,9 +1028,33 @@ export function UserProfilePanel({ chat, error, isLoading, onClose, stopPropagat
           <div className="user-profile-tabs">
             <button className="active" type="button">{t('media', 'Медиа')}</button>
           </div>
-          <div className="user-profile-empty-media">
-            {t('profileMediaEmpty', 'Медиа пока не загружены')}
-          </div>
+          {sharedMedia.length ? (
+            <div className="user-profile-media-grid">
+              {sharedMedia.map((message) => {
+                const type = message.mediaType || message.type;
+                return (
+                  <a
+                    aria-label={t('openMedia', 'Открыть медиа')}
+                    href={message.mediaUrl}
+                    key={message.id}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    {type === 'video' ? (
+                      <video muted preload="metadata" src={message.mediaUrl} />
+                    ) : (
+                      <img alt="" loading="lazy" src={message.mediaUrl} />
+                    )}
+                    {type === 'video' ? <span aria-hidden="true">▶</span> : null}
+                  </a>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="user-profile-empty-media">
+              {t('profileMediaEmpty', 'Медиа пока не загружены')}
+            </div>
+          )}
         </div>
       )}
     </section>

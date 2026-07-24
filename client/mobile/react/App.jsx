@@ -348,6 +348,7 @@ function ChatLayout({ forceMobile = false }) {
               chat={profileState.chat}
               error={profileState.error}
               isLoading={profileState.isLoading}
+              messages={profileState.messages}
               onClose={() => {
                 setProfileState({ isOpen: false, isLoading: false, error: '', user: null, chat: null });
                 setProfileCloseToken((value) => value + 1);
