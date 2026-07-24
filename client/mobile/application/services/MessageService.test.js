@@ -107,7 +107,7 @@ describe('MessageService', () => {
     const apiClient = createApiClient();
     apiClient.get.mockResolvedValue({ data: { chat: { type: 'private', peerPublicKey: 'peer-key' } } });
     apiClient.post.mockImplementation(async (url) => {
-      if (url === '/upload') {
+      if (url === '/media') {
         return { data: { url: '/api/v2/media/media-1', encryption: { version: 1, encrypted: true, algorithm: 'AES-GCM', iv: 'iv', mimeType: 'image/png', sizeBytes: 3 } } };
       }
       return { data: { message: { id: 'm1', chatId: 'chat-1', senderId: 'u1', type: 'image', mediaUrl: '/api/v2/media/media-1' } } };
@@ -123,7 +123,7 @@ describe('MessageService', () => {
     await service.sendMediaMessage('chat-1', 'data:image/png;base64,YWJj', 'image', 'caption');
 
     expect(cryptoService.encryptMedia).toHaveBeenCalledWith('chat-1', 'data:image/png;base64,YWJj', expect.objectContaining({ peerPublicKey: 'peer-key' }));
-    expect(apiClient.post).toHaveBeenCalledWith('/upload', {
+    expect(apiClient.post).toHaveBeenCalledWith('/media', {
       file: encryptedMedia,
       type: 'image',
       purpose: 'message',

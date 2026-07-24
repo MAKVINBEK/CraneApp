@@ -80,7 +80,7 @@ class MessageService {
 
     const chatContext = await this.getChatContext(chatId, 'media encryption');
     const encryptedMedia = await this.cryptoService.encryptMedia(chatId, media, chatContext);
-    const uploadResponse = await this.apiClient.post('/upload', {
+    const uploadResponse = await this.apiClient.post(API_ENDPOINTS.MEDIA_UPLOAD, {
       file: encryptedMedia,
       type: mediaType,
       purpose: 'message',
@@ -123,15 +123,16 @@ class MessageService {
 
   async processMessageForDisplay(chatId, item, chatContext = null) {
     const context = chatContext || await this.getChatContext(chatId, 'display');
-    const type = item.type || item.mediaType || item.media_type || 'text';
+    const normalizedItem = { ...item.metadata, ...item };
+    const type = normalizedItem.type || normalizedItem.mediaType || normalizedItem.media_type || 'text';
     let content = item.content;
 
     if (content) {
       content = await this.decryptContent(chatId, content, context, item.senderId ?? item.sender_id);
     }
 
-    const mediaPatch = await this.resolveMediaForDisplay(chatId, { ...item, type }, context);
-    return Message.fromAPI({ ...item, type, content, ...mediaPatch });
+    const mediaPatch = await this.resolveMediaForDisplay(chatId, { ...normalizedItem, type }, context);
+    return Message.fromAPI({ ...normalizedItem, type, content, ...mediaPatch });
   }
 
   async getChatContext(chatId, purpose) {

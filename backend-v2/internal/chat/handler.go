@@ -501,9 +501,14 @@ func (h *Handler) Messages(w http.ResponseWriter, r *http.Request) {
 		httpx.JSON(w, http.StatusOK, map[string]any{"messages": msgs})
 	case suffix == "" && r.Method == http.MethodPost:
 		var input struct {
-			Content string  `json:"content"`
-			Type    string  `json:"type"`
-			ReplyTo *string `json:"replyTo"`
+			Content         string         `json:"content"`
+			Type            string         `json:"type"`
+			ReplyTo         *string        `json:"replyTo"`
+			MediaURL        string         `json:"mediaUrl"`
+			MediaType       string         `json:"mediaType"`
+			MediaEncrypted  bool           `json:"mediaEncrypted"`
+			MediaEncryption map[string]any `json:"mediaEncryption"`
+			IsEncrypted     bool           `json:"isEncrypted"`
 		}
 		if !decode(w, r, &input) {
 			return
@@ -511,7 +516,17 @@ func (h *Handler) Messages(w http.ResponseWriter, r *http.Request) {
 		if input.Type == "" {
 			input.Type = "text"
 		}
-		msg, err := h.service.SendMessage(r.Context(), current.ID, targetID, input.Content, input.Type, input.ReplyTo)
+		var metadata map[string]any
+		if input.MediaURL != "" {
+			metadata = map[string]any{
+				"mediaUrl":        input.MediaURL,
+				"mediaType":       input.MediaType,
+				"mediaEncrypted":  input.MediaEncrypted,
+				"mediaEncryption": input.MediaEncryption,
+				"isEncrypted":     input.IsEncrypted,
+			}
+		}
+		msg, err := h.service.SendMessage(r.Context(), current.ID, targetID, input.Content, input.Type, input.ReplyTo, metadata)
 		if err != nil {
 			slog.Error("send message failed", "err", err, "chatId", targetID, "userId", current.ID, "type", input.Type)
 			httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", "failed to send message")

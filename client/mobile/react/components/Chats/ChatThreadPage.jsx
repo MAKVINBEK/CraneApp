@@ -14,6 +14,7 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [pendingAttachment, setPendingAttachment] = useState(null);
   const [messages, setMessages] = useState([]);
   const [replyToMessage, setReplyToMessage] = useState(null);
   const [isGroupInfoOpen, setIsGroupInfoOpen] = useState(false);
@@ -22,6 +23,7 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
   const [profileModal, setProfileModal] = useState({ isOpen: false, isLoading: false, error: '', user: null });
   const currentUser = useMemo(() => getCurrentUser(), []);
   const bottomRef = useRef(null);
+  const attachmentInputRef = useRef(null);
   const lastTypingSentAtRef = useRef(0);
   const typingTimeoutRef = useRef(null);
   const { eventBus, socket } = useRealtimeSocket(Boolean(chatId));
@@ -158,7 +160,7 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
   async function handleSubmit(event) {
     event.preventDefault();
     const content = draft.trim();
-    if (!content || isSending) return;
+    if ((!content && !pendingAttachment) || isSending) return;
 
     setIsSending(true);
     try {
@@ -170,6 +172,18 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
           isEdited: true,
         }));
         setEditingMessage(null);
+      } else if (pendingAttachment) {
+        const message = await services.messageService.sendMediaMessage(
+          chatId,
+          pendingAttachment.file,
+          pendingAttachment.type,
+          content,
+          replyToMessage?.id || null,
+        );
+        setMessages((items) => appendUniqueMessage(items, message));
+        setPendingAttachment(null);
+        setReplyToMessage(null);
+        if (attachmentInputRef.current) attachmentInputRef.current.value = '';
       } else {
         const message = await services.messageService.sendMessage(chatId, content, 'text', replyToMessage?.id || null);
         setMessages((items) => appendUniqueMessage(items, message));
@@ -182,6 +196,24 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
     } finally {
       setIsSending(false);
     }
+  }
+
+  function handleAttachmentChange(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.size > 100 * 1024 * 1024) {
+      setError(t('attachmentTooLarge', 'Файл слишком большой. Максимальный размер — 100 МБ.'));
+      event.target.value = '';
+      return;
+    }
+    setPendingAttachment({ file, type: getMediaMessageType(file.type) });
+    setEditingMessage(null);
+    setError('');
+  }
+
+  function removePendingAttachment() {
+    setPendingAttachment(null);
+    if (attachmentInputRef.current) attachmentInputRef.current.value = '';
   }
 
   function handleDraftChange(event) {
@@ -447,6 +479,31 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
             <button aria-label={t('cancel', 'Отменить')} onClick={cancelComposerMode} type="button">×</button>
           </div>
         ) : null}
+        {pendingAttachment ? (
+          <div className="thread-attachment-preview">
+            <span aria-hidden="true">{getAttachmentIcon(pendingAttachment.type)}</span>
+            <span title={pendingAttachment.file.name}>{pendingAttachment.file.name}</span>
+            <small>{formatFileSize(pendingAttachment.file.size)}</small>
+            <button aria-label={t('removeAttachment', 'Убрать вложение')} onClick={removePendingAttachment} type="button">×</button>
+          </div>
+        ) : null}
+        <input
+          accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar"
+          aria-label={t('attachFile', 'Прикрепить файл')}
+          className="thread-file-input"
+          onChange={handleAttachmentChange}
+          ref={attachmentInputRef}
+          type="file"
+        />
+        <button
+          aria-label={t('attachFile', 'Прикрепить файл')}
+          className="thread-attach-button"
+          disabled={isSending || Boolean(editingMessage)}
+          onClick={() => attachmentInputRef.current?.click()}
+          type="button"
+        >
+          📎
+        </button>
         <input
           aria-label={t('message', 'Сообщение')}
           onChange={handleDraftChange}
@@ -454,7 +511,7 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
           placeholder={t('messagePlaceholder', 'Сообщение...')}
           value={draft}
         />
-        <button disabled={!draft.trim() || isSending} type="submit">
+        <button disabled={(!draft.trim() && !pendingAttachment) || isSending} type="submit">
           {isSending ? '⏳' : '➤'}
         </button>
       </form>
@@ -481,6 +538,23 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
       ) : null}
     </main>
   );
+}
+
+function getMediaMessageType(mimeType = '') {
+  if (mimeType.startsWith('image/')) return 'image';
+  if (mimeType.startsWith('video/')) return 'video';
+  if (mimeType.startsWith('audio/')) return 'audio';
+  return 'file';
+}
+
+function getAttachmentIcon(type) {
+  return { image: '🖼️', video: '🎬', audio: '🎵', file: '📄' }[type] || '📎';
+}
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return `${bytes} Б`;
+  if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)} КБ`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
 }
 
 function appendUniqueMessage(items, nextMessage) {

@@ -25,6 +25,7 @@ vi.mock('../../../application/services/serviceContainer.js', () => ({
       markAsRead: vi.fn(),
       reactToMessage: vi.fn(),
       sendMessage: vi.fn(),
+      sendMediaMessage: vi.fn(),
     },
     userService: {
       getProfile: vi.fn(),
@@ -134,6 +135,27 @@ describe('ChatThreadPage', () => {
       expect(services.messageService.sendMessage).toHaveBeenCalledWith('chat-1', 'New message', 'text', null);
     });
     expect(await screen.findByText('New message')).toBeInTheDocument();
+  });
+
+  it('selects and sends a media attachment with a caption', async () => {
+    const user = userEvent.setup();
+    const file = new File(['image'], 'photo.png', { type: 'image/png' });
+    services.chatService.getChat.mockResolvedValue({ id: 'chat-1', name: 'Team', type: 'group' });
+    services.messageService.getMessages.mockResolvedValue([]);
+    services.messageService.sendMediaMessage.mockResolvedValue({
+      id: 'media-1', senderId: 'u1', content: 'Caption', type: 'image', timestamp: new Date(),
+    });
+
+    render(<ChatThreadPage chatId="chat-1" />);
+
+    await screen.findByRole('heading', { name: 'Team' });
+    await user.upload(screen.getByLabelText('Прикрепить файл', { selector: 'input' }), file);
+    await user.type(screen.getByRole('textbox', { name: /сообщение/i }), 'Caption');
+    await user.click(screen.getByRole('button', { name: '➤' }));
+
+    await waitFor(() => {
+      expect(services.messageService.sendMediaMessage).toHaveBeenCalledWith('chat-1', file, 'image', 'Caption', null);
+    });
   });
 
   it('sends typing events while composing a message', async () => {
