@@ -90,7 +90,11 @@ class MessageService {
     const encryptedCaption = trimmedCaption
       ? await this.encryptContent(chatId, trimmedCaption, chatContext)
       : '';
-    const mediaEncryption = uploadResponse.data?.encryption || this.mediaMetadataFromPayload(encryptedMedia);
+    // Never copy the upload response wholesale into message metadata. Some
+    // deployments return the ciphertext inside `encryption`, which makes the
+    // subsequent /messages request as large as the file and trips the chat
+    // service JSON limit. The media service already stores the ciphertext.
+    const mediaEncryption = this.mediaMetadataFromPayload(encryptedMedia);
 
     const response = await this.apiClient.post(API_ENDPOINTS.MESSAGE_SEND(chatId), {
       content: encryptedCaption,

@@ -134,6 +134,8 @@ describe('MessageService', () => {
       mediaEncrypted: true,
       mediaEncryption: expect.objectContaining({ iv: 'iv', encrypted: true }),
     }));
+    const messageRequest = apiClient.post.mock.calls.find(([url]) => url === '/messages/chat-1')[1];
+    expect(messageRequest.mediaEncryption).not.toHaveProperty('ciphertext');
   });
 
   it('maps legacy unencrypted message media as unavailable', async () => {
