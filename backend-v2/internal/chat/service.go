@@ -792,7 +792,7 @@ func scanMessages(rows *sql.Rows) ([]Message, error) {
 	return messages, rows.Err()
 }
 
-func (s *Service) SendMessage(ctx context.Context, userID, chatID, content, msgType string, replyTo *string) (Message, error) {
+func (s *Service) SendMessage(ctx context.Context, userID, chatID, content, msgType string, replyTo *string, metadata map[string]any) (Message, error) {
 	content = sanitizeMessageContent(content)
 
 	var role string
@@ -827,10 +827,14 @@ func (s *Service) SendMessage(ctx context.Context, userID, chatID, content, msgT
 	var replyToStr sql.NullString
 	var deletedAt sql.NullString
 	var metadataBytes []byte
+	metadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		return Message{}, err
+	}
 	err = s.db.QueryRowContext(ctx, `
 		WITH inserted AS (
-			INSERT INTO messages.messages (chat_id, sender_id, content, type, reply_to)
-			VALUES ($1, $2, $3, $4, $5)
+			INSERT INTO messages.messages (chat_id, sender_id, content, type, reply_to, metadata)
+			VALUES ($1, $2, $3, $4, $5, $6)
 			RETURNING *
 		)
 		SELECT m.id::text, m.chat_id::text, m.sender_id::text,
@@ -841,7 +845,7 @@ func (s *Service) SendMessage(ctx context.Context, userID, chatID, content, msgT
 		FROM inserted m
 		LEFT JOIN auth.users au ON au.id = m.sender_id
 		LEFT JOIN users.profiles up ON up.user_id = m.sender_id
-	`, chatID, userID, content, msgType, replyToSQL).Scan(
+	`, chatID, userID, content, msgType, replyToSQL, metadataJSON).Scan(
 		&msg.ID, &msg.ChatID, &msg.SenderID,
 		&msg.SenderName, &msg.SenderAvatar,
 		&msg.Content, &msg.Type, &replyToStr, &metadataBytes,
@@ -855,6 +859,9 @@ func (s *Service) SendMessage(ctx context.Context, userID, chatID, content, msgT
 	}
 	if deletedAt.Valid {
 		msg.DeletedAt = &deletedAt.String
+	}
+	if metadataBytes != nil {
+		json.Unmarshal(metadataBytes, &msg.Metadata)
 	}
 
 	// Broadcast
@@ -994,7 +1001,7 @@ func (s *Service) ForwardMessage(ctx context.Context, userID, messageID, targetC
 	}
 
 	forwardedFrom := src.ID
-	msg, err := s.SendMessage(ctx, userID, targetChatID, src.Content, src.Type, nil)
+	msg, err := s.SendMessage(ctx, userID, targetChatID, src.Content, src.Type, nil, src.Metadata)
 	if err != nil {
 		return Message{}, err
 	}
