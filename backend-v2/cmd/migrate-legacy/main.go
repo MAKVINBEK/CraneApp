@@ -1,20 +1,26 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"flag"
 	"fmt"
 	"log"
+	"mime"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
+	"craneapp/backend-v2/internal/media"
 	_ "github.com/lib/pq"
 )
 
 func main() {
 	apply := flag.Bool("apply", false, "commit migrated records; without this flag the transaction is rolled back")
-	domain := flag.String("domain", "all", "domain to migrate: auth, users, chats, all")
+	domain := flag.String("domain", "all", "domain to migrate: auth, users, chats, messages, media, all")
 	flag.Parse()
 
 	databaseURL := os.Getenv("DATABASE_URL")
@@ -27,13 +33,33 @@ func main() {
 	}
 	defer db.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	timeout := 5 * time.Minute
+	if *domain == "media" || *domain == "all" {
+		timeout = 30 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer tx.Rollback()
+
+	var legacySchemaExists bool
+	if err := tx.QueryRowContext(ctx, `SELECT to_regclass('public.users') IS NOT NULL`).Scan(&legacySchemaExists); err != nil {
+		log.Fatalf("check legacy schema: %v", err)
+	}
+	if !legacySchemaExists {
+		if !*apply {
+			fmt.Println("legacy schema not found; dry-run has nothing to migrate")
+			return
+		}
+		if err := tx.Commit(); err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println("legacy schema not found; nothing to migrate")
+		return
+	}
 
 	if *domain == "auth" || *domain == "all" {
 		migrateAuth(ctx, tx)
@@ -47,7 +73,10 @@ func main() {
 	if *domain == "messages" || *domain == "all" {
 		migrateMessages(ctx, tx)
 	}
-	if *domain != "auth" && *domain != "users" && *domain != "chats" && *domain != "messages" && *domain != "all" {
+	if *domain == "media" || *domain == "all" {
+		migrateMedia(ctx, tx, *apply)
+	}
+	if *domain != "auth" && *domain != "users" && *domain != "chats" && *domain != "messages" && *domain != "media" && *domain != "all" {
 		log.Fatalf("unknown domain %q", *domain)
 	}
 
@@ -201,7 +230,7 @@ func migrateUsers(ctx context.Context, tx *sql.Tx) {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM public.user_sessions WHERE user_id NOT IN (SELECT id FROM auth.users)`); err != nil {
 		log.Fatalf("delete orphaned user_sessions: %v", err)
 	}
-	
+
 	// Drop old foreign key. We find it dynamically in case it has a different name.
 	if _, err := tx.ExecContext(ctx, `
 		DO $$
@@ -433,4 +462,327 @@ func migrateMessages(ctx context.Context, tx *sql.Tx) {
 	}
 
 	fmt.Printf("messages: affected_messages=%d affected_reactions=%d affected_pins=%d affected_favorites=%d\n", messagesAffected, reactionsAffected, pinsAffected, favsAffected)
+}
+
+type legacyMediaRow struct {
+	id             string
+	uploaderID     string
+	data           sql.NullString
+	mimeType       sql.NullString
+	sizeBytes      sql.NullInt64
+	encrypted      bool
+	encryptionJSON sql.NullString
+	originalName   sql.NullString
+	fileURL        sql.NullString
+	createdAt      time.Time
+}
+
+func migrateMedia(ctx context.Context, tx *sql.Tx, apply bool) {
+	gifsAffected := execRowsAffected(ctx, tx, "migrate gifs", `
+		INSERT INTO media.gifs (id, user_id, name, url, created_at)
+		SELECT g.id, g.user_id, COALESCE(g.name, ''), g.url, COALESCE(g.created_at, NOW())
+		FROM public.gifs g
+		LEFT JOIN auth.users u ON u.id = g.user_id
+		WHERE g.url IS NOT NULL AND g.url <> ''
+		  AND (g.user_id IS NULL OR u.id IS NOT NULL)
+		ON CONFLICT (id) DO UPDATE SET
+			user_id = EXCLUDED.user_id,
+			name = EXCLUDED.name,
+			url = EXCLUDED.url
+	`)
+
+	favoriteGifsAffected := execRowsAffected(ctx, tx, "migrate favorite gifs", `
+		INSERT INTO media.favorite_gifs (id, user_id, gif_id, created_at)
+		SELECT fg.id, fg.user_id, fg.gif_id, COALESCE(fg.created_at, NOW())
+		FROM public.favorite_gifs fg
+		JOIN auth.users u ON u.id = fg.user_id
+		JOIN media.gifs g ON g.id = fg.gif_id
+		ON CONFLICT (user_id, gif_id) DO UPDATE SET created_at = EXCLUDED.created_at
+	`)
+
+	packsAffected := execRowsAffected(ctx, tx, "migrate sticker packs", `
+		INSERT INTO media.sticker_packs (id, user_id, name, description, icon_url, created_at, updated_at)
+		SELECT sp.id, sp.user_id, sp.name, COALESCE(sp.description, ''), sp.icon_url,
+		       COALESCE(sp.created_at, NOW()), COALESCE(sp.updated_at, sp.created_at, NOW())
+		FROM public.sticker_packs sp
+		JOIN auth.users u ON u.id = sp.user_id
+		WHERE sp.name IS NOT NULL AND sp.name <> ''
+		ON CONFLICT (id) DO UPDATE SET
+			user_id = EXCLUDED.user_id,
+			name = EXCLUDED.name,
+			description = EXCLUDED.description,
+			icon_url = EXCLUDED.icon_url,
+			updated_at = EXCLUDED.updated_at
+	`)
+
+	stickersAffected := execRowsAffected(ctx, tx, "migrate stickers", `
+		INSERT INTO media.stickers (id, pack_id, image_url, created_at)
+		SELECT s.id, s.pack_id, s.image_url, COALESCE(s.created_at, NOW())
+		FROM public.stickers s
+		JOIN media.sticker_packs sp ON sp.id = s.pack_id
+		WHERE s.image_url IS NOT NULL AND s.image_url <> ''
+		ON CONFLICT (id) DO UPDATE SET
+			pack_id = EXCLUDED.pack_id,
+			image_url = EXCLUDED.image_url
+	`)
+
+	messageLinksAffected := execRowsAffected(ctx, tx, "rewrite migrated message media links", `
+		UPDATE messages.messages target
+		SET metadata = jsonb_set(
+			COALESCE(target.metadata, '{}'::jsonb),
+			'{media_url}',
+			to_jsonb('/api/v2/media/' || mf.id::text),
+			TRUE
+		)
+		FROM public.messages legacy
+		JOIN public.media_files mf ON mf.file_url = legacy.media_url
+		WHERE target.id = legacy.id
+		  AND legacy.media_url IS NOT NULL
+		  AND legacy.media_url <> ''
+	`)
+
+	rows, err := tx.QueryContext(ctx, `
+		SELECT mf.id::text
+		FROM public.media_files mf
+		JOIN auth.users u ON u.id = COALESCE(mf.user_id, mf.owner_id)
+		ORDER BY mf.created_at, mf.id
+	`)
+	if err != nil {
+		log.Fatalf("query legacy media files: %v", err)
+	}
+	defer rows.Close()
+
+	var mediaIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			log.Fatalf("scan legacy media id: %v", err)
+		}
+		mediaIDs = append(mediaIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		log.Fatalf("iterate legacy media ids: %v", err)
+	}
+	if err := rows.Close(); err != nil {
+		log.Fatalf("close legacy media id rows: %v", err)
+	}
+
+	if !apply {
+		for _, id := range mediaIDs {
+			row := loadLegacyMediaRow(ctx, tx, id)
+			if _, _, err := readLegacyMedia(row, os.Getenv("LEGACY_UPLOADS_DIR")); err != nil {
+				log.Fatalf("media dry-run validation failed for %s: %v", row.id, err)
+			}
+		}
+		fmt.Printf(
+			"media: dry-run files=%d gifs_affected=%d favorite_gifs_affected=%d packs_affected=%d stickers_affected=%d message_links_affected=%d (object uploads skipped)\n",
+			len(mediaIDs), gifsAffected, favoriteGifsAffected, packsAffected, stickersAffected, messageLinksAffected,
+		)
+		return
+	}
+
+	var store *media.MinioStore
+	bucket := envOrDefault("MEDIA_BUCKET", "crane-media")
+	if len(mediaIDs) > 0 {
+		store = media.NewMinioStore(
+			envOrDefault("MINIO_ENDPOINT", "http://127.0.0.1:9000"),
+			envOrDefault("MINIO_ACCESS_KEY", "craneapp"),
+			envOrDefault("MINIO_SECRET_KEY", "craneapp-local-secret"),
+			envOrDefault("MINIO_REGION", "us-east-1"),
+		)
+		if err := ensureLegacyMediaBucket(ctx, store, bucket); err != nil {
+			log.Fatalf("ensure media bucket %q: %v", bucket, err)
+		}
+	}
+
+	var uploadsAffected int64
+	for _, id := range mediaIDs {
+		row := loadLegacyMediaRow(ctx, tx, id)
+		data, contentType, err := readLegacyMedia(row, os.Getenv("LEGACY_UPLOADS_DIR"))
+		if err != nil {
+			log.Fatalf("read legacy media %s: %v", row.id, err)
+		}
+
+		filename := legacyFilename(row)
+		objectKey := legacyObjectKey(row, filename)
+		if err := store.Put(ctx, bucket, objectKey, bytes.NewReader(data), int64(len(data)), contentType); err != nil {
+			log.Fatalf("upload legacy media %s to object storage: %v", row.id, err)
+		}
+
+		encryptionMetadata := ""
+		if row.encryptionJSON.Valid {
+			encryptionMetadata = row.encryptionJSON.String
+		}
+		result, err := tx.ExecContext(ctx, `
+			INSERT INTO media.uploads
+				(id, uploader_id, bucket, object_key, filename, content_type, size_bytes, is_encrypted, encryption_key_id, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			ON CONFLICT (id) DO UPDATE SET
+				uploader_id = EXCLUDED.uploader_id,
+				bucket = EXCLUDED.bucket,
+				object_key = EXCLUDED.object_key,
+				filename = EXCLUDED.filename,
+				content_type = EXCLUDED.content_type,
+				size_bytes = EXCLUDED.size_bytes,
+				is_encrypted = EXCLUDED.is_encrypted,
+				encryption_key_id = EXCLUDED.encryption_key_id
+		`, row.id, row.uploaderID, bucket, objectKey, filename, contentType, len(data), row.encrypted, encryptionMetadata, row.createdAt)
+		if err != nil {
+			log.Fatalf("insert migrated media upload %s: %v", row.id, err)
+		}
+		affected, _ := result.RowsAffected()
+		uploadsAffected += affected
+	}
+
+	fmt.Printf(
+		"media: uploads_affected=%d gifs_affected=%d favorite_gifs_affected=%d packs_affected=%d stickers_affected=%d message_links_affected=%d\n",
+		uploadsAffected, gifsAffected, favoriteGifsAffected, packsAffected, stickersAffected, messageLinksAffected,
+	)
+}
+
+func ensureLegacyMediaBucket(ctx context.Context, store *media.MinioStore, bucket string) error {
+	var err error
+	for attempt := 1; attempt <= 15; attempt++ {
+		err = store.EnsureBucket(ctx, bucket)
+		if err == nil {
+			return nil
+		}
+		if attempt < 15 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Second):
+			}
+		}
+	}
+	return err
+}
+
+func loadLegacyMediaRow(ctx context.Context, tx *sql.Tx, id string) legacyMediaRow {
+	var row legacyMediaRow
+	err := tx.QueryRowContext(ctx, `
+		SELECT mf.id::text,
+		       COALESCE(mf.user_id, mf.owner_id)::text,
+		       mf.data,
+		       mf.mime_type,
+		       COALESCE(mf.size_bytes, 0),
+		       COALESCE(mf.encrypted, FALSE),
+		       mf.encryption::text,
+		       mf.original_name,
+		       mf.file_url,
+		       COALESCE(mf.created_at, NOW())
+		FROM public.media_files mf
+		JOIN auth.users u ON u.id = COALESCE(mf.user_id, mf.owner_id)
+		WHERE mf.id = $1
+	`, id).Scan(
+		&row.id,
+		&row.uploaderID,
+		&row.data,
+		&row.mimeType,
+		&row.sizeBytes,
+		&row.encrypted,
+		&row.encryptionJSON,
+		&row.originalName,
+		&row.fileURL,
+		&row.createdAt,
+	)
+	if err != nil {
+		log.Fatalf("load legacy media file %s: %v", id, err)
+	}
+	return row
+}
+
+func execRowsAffected(ctx context.Context, tx *sql.Tx, name, statement string) int64 {
+	result, err := tx.ExecContext(ctx, statement)
+	if err != nil {
+		log.Fatalf("%s: %v", name, err)
+	}
+	affected, _ := result.RowsAffected()
+	return affected
+}
+
+func readLegacyMedia(row legacyMediaRow, uploadsDir string) ([]byte, string, error) {
+	contentType := strings.TrimSpace(row.mimeType.String)
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	if row.data.Valid && strings.TrimSpace(row.data.String) != "" {
+		value := strings.TrimSpace(row.data.String)
+		if strings.HasPrefix(value, "data:") {
+			comma := strings.IndexByte(value, ',')
+			if comma < 0 {
+				return nil, "", fmt.Errorf("malformed data URL")
+			}
+			header := value[:comma]
+			if start := strings.Index(header, ":"); start >= 0 {
+				if end := strings.Index(header, ";"); end > start {
+					contentType = header[start+1 : end]
+				}
+			}
+			value = value[comma+1:]
+		}
+		decoded, err := base64.StdEncoding.DecodeString(value)
+		if err != nil {
+			return nil, "", fmt.Errorf("decode base64 data: %w", err)
+		}
+		return decoded, contentType, nil
+	}
+
+	if !row.fileURL.Valid || strings.TrimSpace(row.fileURL.String) == "" {
+		return nil, "", fmt.Errorf("neither embedded data nor file_url is available")
+	}
+	if strings.TrimSpace(uploadsDir) == "" {
+		return nil, "", fmt.Errorf("LEGACY_UPLOADS_DIR is required for file_url %q", row.fileURL.String)
+	}
+
+	relative := strings.TrimPrefix(strings.TrimSpace(row.fileURL.String), "/uploads/")
+	relative = strings.TrimPrefix(relative, "uploads/")
+	clean := filepath.Clean(relative)
+	if clean == "." || filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return nil, "", fmt.Errorf("unsafe legacy file_url %q", row.fileURL.String)
+	}
+	root, err := filepath.Abs(uploadsDir)
+	if err != nil {
+		return nil, "", err
+	}
+	filename := filepath.Join(root, clean)
+	if filename != root && !strings.HasPrefix(filename, root+string(filepath.Separator)) {
+		return nil, "", fmt.Errorf("legacy file path escapes uploads root")
+	}
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, "", fmt.Errorf("read %s: %w", filename, err)
+	}
+	if contentType == "application/octet-stream" {
+		if detected := mime.TypeByExtension(filepath.Ext(filename)); detected != "" {
+			contentType = detected
+		}
+	}
+	return data, contentType, nil
+}
+
+func legacyFilename(row legacyMediaRow) string {
+	if row.originalName.Valid && strings.TrimSpace(row.originalName.String) != "" {
+		return filepath.Base(strings.TrimSpace(row.originalName.String))
+	}
+	if row.fileURL.Valid && strings.TrimSpace(row.fileURL.String) != "" {
+		return filepath.Base(strings.TrimSpace(row.fileURL.String))
+	}
+	if ext, _ := mime.ExtensionsByType(strings.TrimSpace(row.mimeType.String)); len(ext) > 0 {
+		return row.id + ext[0]
+	}
+	return row.id
+}
+
+func legacyObjectKey(row legacyMediaRow, filename string) string {
+	ext := filepath.Ext(filename)
+	return fmt.Sprintf("legacy/%s/%s%s", row.uploaderID, row.id, ext)
+}
+
+func envOrDefault(key, fallback string) string {
+	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+		return value
+	}
+	return fallback
 }
