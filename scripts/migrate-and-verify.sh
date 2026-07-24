@@ -64,13 +64,17 @@ LEGACY_USERS=$(psql "$DATABASE_URL" -tAq -c "SELECT COUNT(*) FROM public.users" 
 V2_USERS=$(psql "$DATABASE_URL" -tAq -c "SELECT COUNT(*) FROM auth.users" 2>/dev/null || echo 0)
 LEGACY_CHATS=$(psql "$DATABASE_URL" -tAq -c "SELECT COUNT(*) FROM public.chats" 2>/dev/null || echo 0)
 V2_CHATS=$(psql "$DATABASE_URL" -tAq -c "SELECT COUNT(*) FROM chats.chats" 2>/dev/null || echo 0)
+LEGACY_MEDIA=$(psql "$DATABASE_URL" -tAq -c "SELECT COUNT(*) FROM public.media_files" 2>/dev/null || echo 0)
+V2_MEDIA=$(psql "$DATABASE_URL" -tAq -c "SELECT COUNT(*) FROM media.uploads" 2>/dev/null || echo 0)
 
 echo "  legacy public.users=$LEGACY_USERS  →  auth.users=$V2_USERS"
 echo "  legacy public.chats=$LEGACY_CHATS  →  chats.chats=$V2_CHATS"
+echo "  legacy public.media_files=$LEGACY_MEDIA  →  media.uploads=$V2_MEDIA"
 
 if [[ "$APPLY" == "--apply" ]]; then
   [[ "$V2_USERS" -ge "$LEGACY_USERS" ]] || fail "auth.users count ($V2_USERS) < legacy ($LEGACY_USERS)"
   [[ "$V2_CHATS" -ge "$LEGACY_CHATS" ]] || fail "chats.chats count ($V2_CHATS) < legacy ($LEGACY_CHATS)"
+  [[ "$V2_MEDIA" -ge "$LEGACY_MEDIA" ]] || fail "media.uploads count ($V2_MEDIA) < legacy ($LEGACY_MEDIA)"
   ok "Row counts match"
 fi
 

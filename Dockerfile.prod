@@ -21,7 +21,8 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /binaries/auth    ./cmd
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /binaries/chat    ./cmd/chat && \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /binaries/media   ./cmd/media && \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /binaries/edge    ./cmd/edge && \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /binaries/migrate ./cmd/migrate
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /binaries/migrate ./cmd/migrate && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /binaries/migrate-legacy ./cmd/migrate-legacy
 
 # Stage 3: Build crypto-rust
 FROM rust:1.94-slim AS cryptobuilder
@@ -33,9 +34,11 @@ RUN cargo build --release --locked
 # Stage 4: Download NATS server and MinIO
 FROM debian:bookworm-slim AS natsdownload
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && \
-    curl -fsSL https://github.com/nats-io/nats-server/releases/download/v2.10.22/nats-server-v2.10.22-linux-amd64.tar.gz \
-    | tar -xz --strip-components=1 -C /usr/local/bin nats-server-v2.10.22-linux-amd64/nats-server && \
-    curl -fsSL https://dl.min.io/server/minio/release/linux-amd64/minio -o /usr/local/bin/minio && \
+    curl -fsSL --retry 5 --retry-all-errors --connect-timeout 15 --max-time 180 \
+      https://github.com/nats-io/nats-server/releases/download/v2.10.22/nats-server-v2.10.22-linux-amd64.tar.gz \
+      | tar -xz --strip-components=1 -C /usr/local/bin nats-server-v2.10.22-linux-amd64/nats-server && \
+    curl -fsSL --retry 5 --retry-all-errors --connect-timeout 15 --max-time 180 \
+      https://dl.min.io/server/minio/release/linux-amd64/minio -o /usr/local/bin/minio && \
     chmod +x /usr/local/bin/minio
 
 # Stage 5: Final image
@@ -55,12 +58,16 @@ COPY --from=gobuilder   /binaries/chat     /usr/local/bin/chat
 COPY --from=gobuilder   /binaries/media    /usr/local/bin/media
 COPY --from=gobuilder   /binaries/edge     /usr/local/bin/edge
 COPY --from=gobuilder   /binaries/migrate  /usr/local/bin/migrate
+COPY --from=gobuilder   /binaries/migrate-legacy /usr/local/bin/migrate-legacy
 COPY --from=cryptobuilder /src/target/release/crypto-rust /usr/local/bin/crypto-rust
 COPY --from=frontend    /app/dist     /dist
 COPY supervisord.conf      /etc/supervisor/conf.d/craneapp.conf
 COPY backend-v2/migrations /app/migrations
 COPY docker-entrypoint.sh  /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+ENV RUN_LEGACY_MIGRATION=true
+ENV LEGACY_UPLOADS_DIR=/data/legacy-uploads
 
 EXPOSE 8080
 
