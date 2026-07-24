@@ -218,7 +218,17 @@ describe('ChatThreadPage', () => {
       peerId: 'u2',
       peerIsOnline: true,
     });
-    services.messageService.getMessages.mockResolvedValue([]);
+    services.messageService.getMessages.mockResolvedValue([
+      {
+        id: 'media-1',
+        senderId: 'u2',
+        content: '',
+        type: 'image',
+        mediaUrl: 'blob:shared-image',
+        mediaType: 'image',
+        timestamp: new Date('2026-06-03T12:00:00Z'),
+      },
+    ]);
     services.userService.getProfile.mockResolvedValue({
       id: 'u2',
       username: 'anna.123',
@@ -238,6 +248,8 @@ describe('ChatThreadPage', () => {
     expect(await screen.findByRole('heading', { name: 'Anna Smith' })).toBeInTheDocument();
     expect(screen.getByText('@anna.123')).toBeInTheDocument();
     expect(screen.getByText('Designer')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Открыть медиа' })).toHaveAttribute('href', 'blob:shared-image');
+    expect(document.querySelector('.message-bubble.has-media')).toBeInTheDocument();
   });
 
   it('uses the peer identicon in the private chat header', async () => {
