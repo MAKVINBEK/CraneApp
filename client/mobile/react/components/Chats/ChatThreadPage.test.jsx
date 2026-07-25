@@ -250,6 +250,10 @@ describe('ChatThreadPage', () => {
     expect(screen.getByText('Designer')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Открыть медиа' })).toHaveAttribute('href', 'blob:shared-image');
     expect(document.querySelector('.message-bubble.has-media')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Открыть изображение' }));
+    expect(screen.getByRole('dialog', { name: 'Просмотр изображения' })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Просмотр изображения' })).not.toBeInTheDocument();
   });
 
   it('uses the peer identicon in the private chat header', async () => {
