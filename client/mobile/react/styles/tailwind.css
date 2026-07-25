@@ -816,6 +816,15 @@
     }
   }
   .message-media { @apply block mb-[7px] rounded-[10px] object-contain; width: min(100%,360px); max-height: 360px; background: rgba(0,0,0,0.18); }
+  .message-bubble .message-media-open {
+    @apply block max-w-full border-0 bg-transparent cursor-zoom-in;
+    width: auto;
+    min-height: 0;
+    padding: 0;
+    border-radius: 10px;
+    color: inherit;
+    & .message-media { margin-bottom: 7px; }
+  }
   .message-media-sticker { background: transparent; width: min(180px,100%); }
   .message-media-file, .message-media-unavailable {
     @apply block max-w-full mb-[7px] rounded-lg text-white;
@@ -823,6 +832,35 @@
   }
   .message-media-file { @apply no-underline font-bold; }
   .message-media-unavailable { font-size: 13px; color: rgba(255,255,255,0.7); }
+  .image-viewer {
+    @apply fixed inset-0 z-[1500] flex items-center justify-center;
+    padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+    background: rgba(0,0,0,0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    cursor: zoom-out;
+    & > img {
+      display: block;
+      width: auto;
+      height: auto;
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      border-radius: 8px;
+      cursor: default;
+    }
+  }
+  .image-viewer-close {
+    @apply absolute flex items-center justify-center border-0 rounded-full cursor-pointer;
+    top: max(14px, env(safe-area-inset-top));
+    right: max(14px, env(safe-area-inset-right));
+    width: 44px;
+    height: 44px;
+    background: rgba(255,255,255,0.14);
+    color: #fff;
+    font-size: 30px;
+    line-height: 1;
+  }
   .message-reply-preview { @apply mb-[6px] rounded-lg text-xs; padding: 6px 8px; border-left: 3px solid rgba(245,200,75,0.9); background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.72); }
   .message-reactions {
     @apply mt-[7px] flex flex-wrap gap-[5px];

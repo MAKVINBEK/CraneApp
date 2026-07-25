@@ -18,6 +18,7 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
   const [messages, setMessages] = useState([]);
   const [replyToMessage, setReplyToMessage] = useState(null);
   const [isGroupInfoOpen, setIsGroupInfoOpen] = useState(false);
+  const [openedImage, setOpenedImage] = useState(null);
   const [typingUserId, setTypingUserId] = useState(null);
   const [actionMenu, setActionMenu] = useState(null);
   const [profileModal, setProfileModal] = useState({ isOpen: false, isLoading: false, error: '', user: null });
@@ -62,6 +63,15 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
       window.removeEventListener('keydown', closeOnEscape);
     };
   }, [actionMenu]);
+
+  useEffect(() => {
+    if (!openedImage) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setOpenedImage(null);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [openedImage]);
 
   useEffect(() => {
     let isMounted = true;
@@ -443,6 +453,7 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
             key={message.id}
             message={message}
             onOpenActions={openMessageActions}
+            onOpenImage={(url) => setOpenedImage(url)}
             t={t}
           />
         ))}
@@ -467,6 +478,30 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
       ) : null}
 
       {error && messages.length > 0 ? <div className="thread-inline-error">{error}</div> : null}
+
+      {openedImage ? (
+        <div
+          aria-label={t('imageViewer', 'Просмотр изображения')}
+          aria-modal="true"
+          className="image-viewer"
+          onClick={() => setOpenedImage(null)}
+          role="dialog"
+        >
+          <button
+            aria-label={t('close', 'Закрыть')}
+            className="image-viewer-close"
+            onClick={() => setOpenedImage(null)}
+            type="button"
+          >
+            ×
+          </button>
+          <img
+            alt=""
+            onClick={(event) => event.stopPropagation()}
+            src={openedImage}
+          />
+        </div>
+      ) : null}
 
       <form className="thread-composer" onSubmit={handleSubmit}>
         {editingMessage || replyToMessage ? (
@@ -648,6 +683,7 @@ function MessageBubble({
   isActionTarget,
   message,
   onOpenActions,
+  onOpenImage,
   t,
 }) {
   const mine = message.senderId === currentUserId;
@@ -715,7 +751,7 @@ function MessageBubble({
         </div>
       ) : null}
       {message.replyToContent ? <div className="message-reply-preview">{message.replyToContent}</div> : null}
-      <MessageMedia message={message} t={t} />
+      <MessageMedia message={message} onOpenImage={onOpenImage} t={t} />
       {message.type === 'call' ? (
         <CallMessageContent message={message} t={t} />
       ) : (
@@ -811,7 +847,7 @@ function TrashIcon() {
   );
 }
 
-function MessageMedia({ message, t }) {
+function MessageMedia({ message, onOpenImage, t }) {
   if (message.mediaUnavailable) {
     return (
       <div className="message-media-unavailable">
@@ -824,7 +860,16 @@ function MessageMedia({ message, t }) {
 
   const type = message.mediaType || message.type;
   if (type === 'image' || type === 'gif' || type === 'sticker') {
-    return <img alt="" className={`message-media message-media-${type}`} src={message.mediaUrl} />;
+    return (
+      <button
+        aria-label={t('openImage', 'Открыть изображение')}
+        className="message-media-open"
+        onClick={() => onOpenImage(message.mediaUrl)}
+        type="button"
+      >
+        <img alt="" className={`message-media message-media-${type}`} src={message.mediaUrl} />
+      </button>
+    );
   }
   if (type === 'video') {
     return <video className="message-media" controls src={message.mediaUrl} />;
