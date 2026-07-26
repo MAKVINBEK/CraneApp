@@ -731,9 +731,11 @@
 	    }
 	  }
   .thread-back {
-    @apply w-10 h-10 rounded-[12px] flex items-center justify-center text-white text-[30px] leading-none no-underline;
+    @apply w-10 h-10 rounded-[12px] flex items-center justify-center text-white text-[30px] leading-none no-underline transition-colors;
     background: rgba(255,255,255,0.06);
-    padding-bottom: 3px;
+  }
+  .thread-back:hover {
+    background: rgba(255,255,255,0.1);
   }
   .thread-avatar {
     @apply relative w-11 h-11 rounded-full flex items-center justify-center bg-[#2b77e7] text-white font-extrabold;
@@ -861,7 +863,10 @@
     font-size: 30px;
     line-height: 1;
   }
-  .message-reply-preview { @apply mb-[6px] rounded-lg text-xs; padding: 6px 8px; border-left: 3px solid rgba(245,200,75,0.9); background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.72); }
+  .message-reply-preview { @apply block mb-[6px] rounded-lg text-xs; padding: 6px 8px; border-left: 3px solid rgba(245,200,75,0.9); background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.72); }
+  .message-reply-preview-image {
+    @apply max-w-20;
+  }
   .message-reactions {
     @apply mt-[7px] flex flex-wrap gap-[5px];
     & span { min-height: 22px; padding: 2px 7px; border-radius: 11px; background: rgba(255,255,255,0.12); font-size: 12px; &.is-mine { background: rgba(245,200,75,0.28); } }
@@ -1233,6 +1238,10 @@
 
     .message-bubble.is-action-target {
       z-index: 1201;
+    }
+
+    .message-bubble.is-selected {
+      
     }
   }
   .thread-skeleton { @apply flex flex-col gap-[10px]; }
