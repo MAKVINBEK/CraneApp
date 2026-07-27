@@ -10,6 +10,7 @@ import { useToasts } from "../../hooks/useToasts.js";
 import { ToastStack } from "../common/ToastStack.jsx";
 import { MessageCheckbox } from "../common/MessageCheckbox.jsx";
 import { ForwardChatMessagesModal } from "./ForwardChatMessagesModal.jsx";
+import { PinnedMessages } from "../common/PinnedMessages.jsx";
 
 export function ChatThreadPage({
   chatId,
@@ -129,7 +130,7 @@ export function ChatThreadPage({
       bottomRef.current.scrollIntoView({ block: "end" });
     }
   }, [messages.length]);
-
+  
   useEffect(() => {
     const unsubscribeNew = eventBus.on("new_message", async (event) => {
       if (event.chatId !== chatId || !event.message) return;
@@ -699,6 +700,8 @@ export function ChatThreadPage({
           </button>
         </div>
       </header>
+
+      <PinnedMessages messages={pinnedMessages} t={t} />
 
       <section className="thread-messages" aria-busy={isLoading}>
         {isLoading ? <ThreadSkeleton /> : null}
@@ -1431,7 +1434,7 @@ function MessageMedia({ message, onOpenImage, t }) {
   }
 
   if (!message.mediaUrl) return null;
-  console.log(message);
+
   const type = message.mediaType || message.type;
   if (type === "image" || type === "gif" || type === "sticker") {
     return (

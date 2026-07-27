@@ -776,6 +776,30 @@
   .thread-call-icon-video { width: 31px; height: 31px; opacity: 0.9; }
   .thread-messages { @apply min-h-0 overflow-y-auto flex flex-col gap-[10px]; padding: 18px 12px; }
 
+  .pinned-messages {
+    @apply flex gap-2 py-3 px-2 cursor-pointer transition-colors border-b border-border bg-panel outline-0 hover:bg-[rgba(255,255,255,0.05)];
+  }
+
+  .pinned-messages__progress {
+    @apply flex w-0.5 flex-col gap-0.5;
+  }
+
+  .pinned-messages__segment {
+    @apply min-h-1.5 flex-1 rounded-full bg-gray-600;
+  }
+
+  .pinned-messages__segment--active {
+    @apply bg-red-400;
+  }
+
+  .pinned-messages__content {
+    @apply flex flex-col items-start border-0 bg-transparent p-0 text-left;
+  }
+
+  .pinned-messages__title {
+    @apply text-sm font-medium text-red-400;
+  }
+
   .message-bubble {
     @apply relative w-fit text-white;
     max-width: min(76%,560px); padding: 9px 11px 7px;
