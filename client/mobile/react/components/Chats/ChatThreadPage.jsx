@@ -1318,7 +1318,6 @@ function MessageActionsPopover({
         )}
         {!mine && !selectionMode && (
           <button
-            onClick={() => runAction(() => onCopy(message))}
             type="button"
           >
             <LanguageIcon />
