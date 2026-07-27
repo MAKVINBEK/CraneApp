@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-@theme {
+@theme{
   /* Brand colors */
   --color-accent:   #ff007f;
   --color-accent-2: #9d00ff;
@@ -715,6 +715,8 @@
     min-height: 100vh; min-height: 100dvh;
     grid-template-rows: auto minmax(0,1fr) auto;
     background: rgba(10,10,10,0.72);
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-panel) transparent;
   }
 	  .thread-header {
 	    @apply min-h-[70px] grid gap-[10px] items-center;
@@ -832,7 +834,7 @@
     @apply block max-w-full mb-[7px] rounded-lg text-white;
     padding: 9px 10px; background: rgba(0,0,0,0.2); overflow-wrap: anywhere;
   }
-  .message-media-file { @apply no-underline font-bold; }
+  .message-media-file { @apply no-underline font-bold flex gap-x-2; }
   .message-media-unavailable { font-size: 13px; color: rgba(255,255,255,0.7); }
   .image-viewer {
     @apply fixed inset-0 z-[1500] flex items-center justify-center;
@@ -874,7 +876,6 @@
   .message-meta { @apply mt-1 flex justify-end gap-[6px] text-[11px]; color: rgba(255,255,255,0.58); }
   .message-actions-popover {
     @apply fixed z-[1202] flex flex-col items-stretch gap-[8px];
-    width: min(292px, calc(100vw - 16px));
     filter: drop-shadow(0 18px 38px rgba(0,0,0,0.48));
     animation: message-menu-in 0.14s ease-out;
     transform-origin: top center;
@@ -915,7 +916,7 @@
     & button:active { transform: translateY(1px); }
   }
   .message-reaction-actions {
-    @apply flex items-center justify-between gap-[4px];
+    @apply flex items-center justify-between gap-0.5;
     padding: 7px;
     border-radius: 20px;
     background: rgba(20,20,24,0.96);
@@ -924,8 +925,8 @@
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
     & button {
-      width: 40px;
-      height: 40px;
+      width: 36px;
+      height: 36px;
       padding: 0;
       border-radius: 14px;
       background: transparent;
@@ -940,7 +941,7 @@
     }
   }
   .message-text-actions {
-    @apply flex flex-col items-stretch rounded-[18px] overflow-hidden;
+    @apply flex flex-col items-stretch self-center rounded-[18px] overflow-hidden max-w-50 w-full;
     padding: 5px;
     background: rgba(20,20,24,0.96);
     border: 1px solid rgba(255,255,255,0.12);
@@ -1239,10 +1240,6 @@
     .message-bubble.is-action-target {
       z-index: 1201;
     }
-
-    .message-bubble.is-selected {
-      
-    }
   }
   .thread-skeleton { @apply flex flex-col gap-[10px]; }
   .skeleton-message { width: 220px; }
@@ -1381,5 +1378,82 @@
     transition: transform 0.15s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.15s;
     &:disabled { @apply opacity-40 cursor-not-allowed; transform: none !important; }
     &:not(:disabled):active { transform: scale(0.96); }
+  }
+
+  /* =========================================================
+   Components — FowardChatMessagesModal
+   ========================================================= */
+  .modal-backdrop {
+    @apply fixed inset-0 overflow-hidden flex items-center justify-center z-1000 py-10;
+    background: rgba(0,0,0,0.7);
+  }
+
+  .forward-modal {
+    @apply flex flex-col bg-[#0a0a0d] rounded-2xl pt-4.5 w-full max-w-4/5 md:max-w-1/5 gap-y-4 h-full;
+  }
+
+  .forward-modal__header {
+    @apply flex justify-between px-6;
+  }
+  .forward-modal__header-title {
+    @apply text-xl w-full text-left;
+  }
+
+  .forward-modal__body {
+    @apply flex flex-col mb-auto;
+  }
+
+  .forward-modal__wrapper {
+    @apply px-6 border-b border-border;
+  }
+
+  .forward-modal__search {
+    @apply flex gap-x-2 items-center relative;
+  }
+  .forward-modal__search-icon {
+    @apply size-5 shrink-0 absolute top-1/2 -translate-y-1/2;
+  }
+  .forward-modal__search-field {
+    @apply py-3 text-lg pr-1 pl-7 w-full outline-none rounded-xl;
+  }
+  .forward-modal__list {
+    @apply flex flex-col overflow-y-auto overflow-x-hidden h-full;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+
+  .forward-modal__chat {
+    @apply w-full flex gap-x-2 cursor-pointer transition-colors hover:bg-panel px-6 py-3;
+  }
+
+  .forward-chat__title {
+    @apply text-left;
+  }
+
+  .forward-chat__preview {
+    @apply line-clamp-1 truncate min-w-0 overflow-hidden;
+  }
+
+  .forward-modal__content {
+    @apply flex flex-col gap-y-1 w-full;
+  }
+
+  .forward-modal__empty {
+    @apply mx-auto py-2;
+  }
+  .forward-modal__footer {
+    @apply px-6 flex justify-end border-t border-border w-full py-2;
+  }
+
+  .forward-modal__footer .button {
+    @apply hover:bg-panel px-4 py-2 rounded-lg;
+  }
+
+  .forward-modal__close {
+    @apply shrink-0
+  }
+
+  .forward-modal .button {
+    @apply cursor-pointer transition-colors text-[#2b77e7] hover:text-[rgba(43,119,231,.9)];
   }
 }

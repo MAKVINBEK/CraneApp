@@ -9,6 +9,7 @@ import { GroupInfoModal } from "./GroupInfoModal.jsx";
 import { useToasts } from "../../hooks/useToasts.js";
 import { ToastStack } from "../common/ToastStack.jsx";
 import { MessageCheckbox } from "../common/MessageCheckbox.jsx";
+import { ForwardChatMessagesModal } from "./ForwardChatMessagesModal.jsx";
 
 export function ChatThreadPage({
   chatId,
@@ -36,6 +37,7 @@ export function ChatThreadPage({
     error: "",
     user: null,
   });
+  const [isForwardModalOpen, setIsForwardModalOpen] = useState(false);
   const [pinnedMessages, setPinnedMessages] = useState([]);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedMessages, setSelectedMessages] = useState([]);
@@ -48,8 +50,6 @@ export function ChatThreadPage({
   const { eventBus, socket } = useRealtimeSocket(Boolean(chatId));
   const { initiateCall } = useCall();
   const { showToast, toasts } = useToasts();
-
-  console.log(messages)
 
   useEffect(() => {
     if (profileMode !== "panel" || typeof onProfileStateChange !== "function")
@@ -76,12 +76,12 @@ export function ChatThreadPage({
     };
 
     window.addEventListener("click", closeActionMenu);
-    window.addEventListener("scroll", closeActionMenu, true);
+    // window.addEventListener("scroll", closeActionMenu, true);
     window.addEventListener("keydown", closeOnEscape);
 
     return () => {
       window.removeEventListener("click", closeActionMenu);
-      window.removeEventListener("scroll", closeActionMenu, true);
+      // window.removeEventListener("scroll", closeActionMenu, true);
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [actionMenu]);
@@ -307,12 +307,7 @@ export function ChatThreadPage({
       cancelComposerMode();
       return;
     }
-    console.log(
-      event.key !== "ArrowUp",
-      draft.trim(),
-      editingMessage,
-      replyToMessage,
-    );
+
     if (
       event.key !== "ArrowUp" ||
       draft.trim() ||
@@ -325,7 +320,6 @@ export function ChatThreadPage({
       .find(
         (message) => message.senderId === currentUser?.id && !message.deletedAt,
       );
-    console.log(lastOwnMessage);
     if (!lastOwnMessage) return;
 
     event.preventDefault();
@@ -372,6 +366,7 @@ export function ChatThreadPage({
       }
 
       if (!selectionMode) {
+        if (message.senderId !== currentUser?.id) return;
         await services.messageService.deleteMessage(message.id);
         setMessages((items) => items.filter((item) => item.id !== message.id));
         if (editingMessage?.id === message.id) {
@@ -560,6 +555,26 @@ export function ChatThreadPage({
     });
   }
 
+  function handleForward(message) {
+    if (selectionMode) {
+      setIsForwardModalOpen(true);
+      return;
+    }
+
+    setSelectedMessages([message]);
+    setIsForwardModalOpen(true);
+  }
+
+  const handleCloseForwardModal = () => {
+    if (selectionMode) {
+      setIsForwardModalOpen(false);
+      return;
+    }
+
+    setSelectedMessages([]);
+    setIsForwardModalOpen(false);
+  };
+
   const title = chat?.name || chat?.title || t("chat", "Чат");
   const subtitle = getChatSubtitle(chat, typingUserId, t);
   const isPeerOnline = Boolean(chat?.type === "private" && chat?.peerIsOnline);
@@ -570,6 +585,14 @@ export function ChatThreadPage({
 
   return (
     <main className="thread-page">
+      {isForwardModalOpen && (
+        <ForwardChatMessagesModal
+          messages={selectedMessages}
+          onClose={handleCloseForwardModal}
+          setSelectedMessages={setSelectedMessages}
+          t={t}
+        />
+      )}
       <ToastStack toasts={toasts} />
       <header className="thread-header">
         <Link
@@ -732,6 +755,7 @@ export function ChatThreadPage({
             onUnpin={handleUnpinMessage}
             onStartSelection={startSelection}
             onSelection={toggleMessageSelection}
+            onForward={handleForward}
             t={t}
           />
         </>
@@ -1031,8 +1055,7 @@ function MessageBubble({
     clearLongPress();
     longPressTimerRef.current = window.setTimeout(() => {
       suppressNextClickRef.current = true;
-      onOpenActions(message, rect, point.x,
-      point.y,);
+      onOpenActions(message, rect, point.x, point.y);
     }, 550);
   }
 
@@ -1211,6 +1234,25 @@ const CheckCircleIcon = () => {
   );
 };
 
+const ForwardIcon = () => {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="m15 17 5-5-5-5" />
+      <path d="M4 18v-2a4 4 0 0 1 4-4h12" />
+    </svg>
+  );
+};
+
 function MessageActionsPopover({
   actionMenu,
   currentUserId,
@@ -1228,6 +1270,7 @@ function MessageActionsPopover({
   onUnpin,
   onStartSelection,
   onSelection,
+  onForward,
   t,
 }) {
   const mine = message.senderId === currentUserId;
@@ -1248,6 +1291,7 @@ function MessageActionsPopover({
             key={emoji}
             onClick={() => runAction(() => onReact(message, emoji))}
             type="button"
+            className="shrink-0"
           >
             {emoji}
           </button>
@@ -1305,6 +1349,13 @@ function MessageActionsPopover({
             <span>{t("unpin", "Открепить")}</span>
           </button>
         )}
+        <button
+          onClick={() => runAction(() => onForward(message))}
+          type="button"
+        >
+          <ForwardIcon />
+          <span>{t("forward", "Переслать")}</span>
+        </button>
         {mine && (
           <button
             className="is-danger"
@@ -1381,7 +1432,7 @@ function MessageMedia({ message, onOpenImage, t }) {
   }
 
   if (!message.mediaUrl) return null;
-
+  console.log(message);
   const type = message.mediaType || message.type;
   if (type === "image" || type === "gif" || type === "sticker") {
     return (
@@ -1408,6 +1459,21 @@ function MessageMedia({ message, onOpenImage, t }) {
   if (type === "file") {
     return (
       <a className="message-media-file" download href={message.mediaUrl}>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="lucide lucide-file-icon lucide-file"
+        >
+          <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+          <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+        </svg>
         {t("downloadFile", "Скачать файл")}
       </a>
     );
