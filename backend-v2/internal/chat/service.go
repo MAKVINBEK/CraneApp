@@ -1102,37 +1102,117 @@ func (s *Service) ToggleReaction(ctx context.Context, userID, messageID, emoji s
 // Message pin types.
 
 type Pin struct {
-	ID        string `json:"id"`
-	MessageID string `json:"messageId"`
-	ChatID    string `json:"chatId"`
-	PinnedBy  string `json:"pinnedBy"`
-	PinnedAt  string `json:"pinnedAt"`
+	ID        string  `json:"id"`
+	MessageID string  `json:"messageId"`
+	ChatID    string  `json:"chatId"`
+	PinnedBy  string  `json:"pinnedBy"`
+	PinnedAt  string  `json:"pinnedAt"`
+	Message   Message `json:"message"`
 }
 
-func (s *Service) ListPins(ctx context.Context, userID, chatID string) ([]Pin, error) {
-	if ok, err := s.isMember(ctx, userID, chatID); err != nil || !ok {
-		if err != nil {
-			return nil, err
-		}
+func (s *Service) ListPins(
+	ctx context.Context,
+	userID string, chatID string,
+) ([]Pin, error) {
+	// Получать закреплённые сообщения может только участник чата.
+	ok, err := s.isMember(ctx, userID, chatID)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
 		return nil, ErrForbidden
 	}
+
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id::text, message_id::text, chat_id::text, pinned_by::text, pinned_at::text
-		FROM messages.pins WHERE chat_id = $1 ORDER BY pinned_at DESC
+		SELECT
+			p.id::text,
+			p.message_id::text,
+			p.chat_id::text,
+			p.pinned_by::text,
+			p.pinned_at::text,
+
+			m.id::text,
+			m.chat_id::text,
+			m.sender_id::text,
+			COALESCE(up.first_name, au.first_name, au.username, ''),
+			COALESCE(up.avatar_url, ''),
+			m.content,
+			m.type,
+			m.reply_to::text,
+			m.metadata,
+			m.updated_at > m.created_at,
+			m.created_at::text,
+			m.updated_at::text
+		FROM messages.pins AS p
+		JOIN messages.messages AS m
+			ON m.id = p.message_id
+			AND m.chat_id = p.chat_id
+		LEFT JOIN auth.users AS au
+			ON au.id = m.sender_id
+		LEFT JOIN users.profiles AS up
+			ON up.user_id = m.sender_id
+		WHERE p.chat_id = $1
+			AND m.deleted_at IS NULL
+		ORDER BY p.pinned_at DESC
 	`, chatID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var pins []Pin
+
+	pins := make([]Pin, 0)
+
 	for rows.Next() {
-		var p Pin
-		if err := rows.Scan(&p.ID, &p.MessageID, &p.ChatID, &p.PinnedBy, &p.PinnedAt); err != nil {
+		var pin Pin
+		var replyTo sql.NullString
+		var metadataBytes []byte
+
+		if err := rows.Scan(
+			&pin.ID,
+			&pin.MessageID,
+			&pin.ChatID,
+			&pin.PinnedBy,
+			&pin.PinnedAt,
+
+			&pin.Message.ID,
+			&pin.Message.ChatID,
+			&pin.Message.SenderID,
+			&pin.Message.SenderName,
+			&pin.Message.SenderAvatar,
+			&pin.Message.Content,
+			&pin.Message.Type,
+			&replyTo,
+			&metadataBytes,
+			&pin.Message.IsEdited,
+			&pin.Message.CreatedAt,
+			&pin.Message.UpdatedAt,
+		); err != nil {
 			return nil, err
 		}
-		pins = append(pins, p)
+
+		if replyTo.Valid {
+			replyToValue := replyTo.String
+			pin.Message.ReplyTo = &replyToValue
+		}
+
+		if len(metadataBytes) > 0 {
+			if err := json.Unmarshal(metadataBytes, &pin.Message.Metadata); err != nil {
+				return nil, err
+			}
+		}
+
+		// Сообщение получено из таблицы закреплений.
+		pin.Message.IsPinned = true
+
+		// WHERE m.deleted_at IS NULL гарантирует, что DeletedAt остаётся nil.
+		pins = append(pins, pin)
 	}
-	return pins, rows.Err()
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return pins, nil
 }
 
 func (s *Service) PinMessage(ctx context.Context, userID, chatID, messageID string) error {

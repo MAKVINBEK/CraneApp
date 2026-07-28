@@ -11,6 +11,8 @@ import { ToastStack } from "../common/ToastStack.jsx";
 import { MessageCheckbox } from "../common/MessageCheckbox.jsx";
 import { ForwardChatMessagesModal } from "./ForwardChatMessagesModal.jsx";
 import { PinnedMessages } from "../common/PinnedMessages.jsx";
+import { formatSize } from "../../../utils/formatSize.js";
+import { translateText } from "../../services/translatorApi.js";
 
 export function ChatThreadPage({
   chatId,
@@ -42,6 +44,8 @@ export function ChatThreadPage({
   const [pinnedMessages, setPinnedMessages] = useState([]);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedMessages, setSelectedMessages] = useState([]);
+  const [translations, setTranslations] = useState({});
+  const [translatingIds, setTranslatingIds] = useState(new Set());
   const currentUser = useMemo(() => getCurrentUser(), []);
   const bottomRef = useRef(null);
   const attachmentInputRef = useRef(null);
@@ -50,7 +54,7 @@ export function ChatThreadPage({
   const draftRef = useRef(null);
   const { eventBus, socket } = useRealtimeSocket(Boolean(chatId));
   const { initiateCall } = useCall();
-  const { showToast, toasts } = useToasts();
+  const { showToast } = useToasts();
 
   useEffect(() => {
     if (profileMode !== "panel" || typeof onProfileStateChange !== "function")
@@ -77,12 +81,10 @@ export function ChatThreadPage({
     };
 
     window.addEventListener("click", closeActionMenu);
-    // window.addEventListener("scroll", closeActionMenu, true);
     window.addEventListener("keydown", closeOnEscape);
 
     return () => {
       window.removeEventListener("click", closeActionMenu);
-      // window.removeEventListener("scroll", closeActionMenu, true);
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [actionMenu]);
@@ -130,7 +132,7 @@ export function ChatThreadPage({
       bottomRef.current.scrollIntoView({ block: "end" });
     }
   }, [messages.length]);
-  
+
   useEffect(() => {
     const unsubscribeNew = eventBus.on("new_message", async (event) => {
       if (event.chatId !== chatId || !event.message) return;
@@ -488,18 +490,20 @@ export function ChatThreadPage({
     try {
       await services.messageService.pinMessage(chatId, message.id);
       setPinnedMessages((prev) => {
-        const pinnedMessage = prev.find(
-          (pinnedMessage) => pinnedMessage.id === message.id,
+        const alreadyPinned = prev.some(
+          (pinnedMessage) => pinnedMessage.messageId === message.id,
         );
-        if (pinnedMessage) {
+
+        if (alreadyPinned) {
           showToast(
             "error",
             t("messageAlreadyPinned", "Это сообщение уже закреплено"),
             "❌",
           );
+          return prev;
         }
 
-        return [...prev, message];
+        return [...prev, { message, messageId: message.id }];
       });
     } catch (err) {
       setError(
@@ -513,7 +517,7 @@ export function ChatThreadPage({
       await services.messageService.unpinMessage(chatId, message.id);
       setPinnedMessages((messages) => {
         const pinnedMessage = messages.find(
-          (pinned) => pinned.id === message.id,
+          (pinned) => pinned.messageId === message.id,
         );
         if (!pinnedMessage) {
           showToast(
@@ -523,7 +527,7 @@ export function ChatThreadPage({
           );
         }
 
-        return messages.filter((pinned) => pinned.id !== message.id);
+        return messages.filter((pinned) => pinned.messageId !== message.id);
       });
     } catch (err) {
       setError(
@@ -576,6 +580,46 @@ export function ChatThreadPage({
     setIsForwardModalOpen(false);
   };
 
+  async function handleTranslateMessage(message) {
+    if (translations[message.id]) {
+      setTranslations((prev) => {
+        const next = { ...prev };
+        delete next[message.id];
+        return next;
+      });
+      return;
+    }
+
+    setTranslatingIds((prev) => new Set(prev).add(message.id));
+    try {
+      const { translatedText, targetLanguage, detectedSourceLang } =
+        await translateText(message.content);
+
+      if (detectedSourceLang && detectedSourceLang === targetLanguage) {
+        showToast(
+          "success",
+          t("alreadySameLanguage", "Сообщение уже на вашем языке"),
+          "ℹ️",
+        );
+        return;
+      }
+
+      setTranslations((prev) => ({ ...prev, [message.id]: translatedText }));
+    } catch (err) {
+      showToast(
+        "error",
+        t("translateError", "Не удалось перевести сообщение"),
+        "❌",
+      );
+    } finally {
+      setTranslatingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(message.id);
+        return next;
+      });
+    }
+  }
+
   const title = chat?.name || chat?.title || t("chat", "Чат");
   const subtitle = getChatSubtitle(chat, typingUserId, t);
   const isPeerOnline = Boolean(chat?.type === "private" && chat?.peerIsOnline);
@@ -594,7 +638,6 @@ export function ChatThreadPage({
           t={t}
         />
       )}
-      <ToastStack toasts={toasts} />
       <header className="thread-header">
         <Link
           className="thread-back"
@@ -729,6 +772,7 @@ export function ChatThreadPage({
             message={message}
             messages={messages}
             selectedMessages={selectedMessages}
+            translations={translations}
             onOpenActions={openMessageActions}
             onOpenImage={(url) => setOpenedImage(url)}
             onSelection={toggleMessageSelection}
@@ -759,6 +803,7 @@ export function ChatThreadPage({
             onStartSelection={startSelection}
             onSelection={toggleMessageSelection}
             onForward={handleForward}
+            onTranslate={handleTranslateMessage}
             t={t}
           />
         </>
@@ -1006,6 +1051,7 @@ function MessageBubble({
   message,
   selectedMessages = [],
   messages,
+  translations,
   onOpenActions,
   onOpenImage,
   onSelection,
@@ -1094,7 +1140,7 @@ function MessageBubble({
       className={`flex justify-between gap-x-2 ${mine ? "justify-end" : ""}`}
     >
       <div
-        className={`message-bubble ${mine ? "is-mine" : ""} ${hasMessageMedia(message) ? "has-media" : ""} ${isActionTarget ? "is-action-target" : ""} ${isSelected ? "is-selected" : ""}`}
+        className={`message-bubble ${mine ? "is-mine" : ""} ${hasMessageMedia(message) ? "has-media" : ""} ${isActionTarget ? "is-action-target" : ""} ${isSelected ? "is-selected bg-accent" : ""}`}
       >
         {!mine && (
           <div className="message-sender">
@@ -1143,7 +1189,7 @@ function MessageBubble({
           <CallMessageContent message={message} t={t} />
         ) : (
           <div className="message-content">
-            {renderMessageContent(message.content)}
+            {renderMessageContent(translations[message.id] || message.content)}
           </div>
         )}
         {message.reactions?.length > 0 && (
@@ -1176,7 +1222,7 @@ function MessageBubble({
   );
 }
 
-const PinIcon = () => {
+const PinIcon = ({ className }) => {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -1184,7 +1230,7 @@ const PinIcon = () => {
       height="24"
       viewBox="0 0 24 24"
       stroke="currentColor"
-      className="opacity-90 fill-transparent"
+      className={`opacity-90 fill-transparent ${className}`}
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -1274,11 +1320,14 @@ function MessageActionsPopover({
   onStartSelection,
   onSelection,
   onForward,
+  onTranslate,
   t,
 }) {
   const mine = message.senderId === currentUserId;
   const reactions = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
-  const isPinned = pinnedMessages.find((pinned) => pinned.id === message.id);
+  const isPinned = pinnedMessages.find(
+    (pinned) => pinned.messageId === message.id,
+  );
   const isSelected = selectedMessages.find(({ id }) => id === message.id);
 
   return (
@@ -1322,6 +1371,7 @@ function MessageActionsPopover({
         {!mine && !selectionMode && (
           <button
             type="button"
+            onClick={() => runAction(() => onTranslate(message))}
           >
             <LanguageIcon />
             <span>{t("translate", "Перевести")}</span>
@@ -1468,15 +1518,21 @@ function MessageMedia({ message, onOpenImage, t }) {
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          class="lucide lucide-file-icon lucide-file"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
         >
           <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
           <path d="M14 2v5a1 1 0 0 0 1 1h5" />
         </svg>
-        {t("downloadFile", "Скачать файл")}
+        <div className="message-media-file__content">
+          <span className="message-media-file__title">
+            {message.mediaEncryption.fileName}
+          </span>
+          <span className="message-media-file__size">
+            {formatSize(message.mediaEncryption.sizeBytes)}
+          </span>
+        </div>
       </a>
     );
   }

@@ -22,7 +22,7 @@ export function MessageCheckbox({ isChecked, onChange, t, className }) {
     <button
       type="button"
       className={`size-6 flex items-center justify-center shrink-0 rounded-full
-        border-2 transition-colors ${isChecked ? "border-pink-600 bg-pink-600" : "border-zinc-500 bg-transparent"} ${className}`}
+        border-2 transition-colors ${isChecked ? "border-accent bg-accent" : "border-zinc-500 bg-transparent"} ${className}`}
       onClick={onChange}
       aria-pressed={!!isChecked}
       aria-label={
@@ -32,7 +32,7 @@ export function MessageCheckbox({ isChecked, onChange, t, className }) {
       }
     >
       <Check
-        className={`size-4 opacity-0 transition-opacity ${isChecked ? "fill-pink-600 opacity-100" : ""}`}
+        className={`size-4 opacity-0 transition-opacity ${isChecked ? "fill-accent opacity-100" : ""}`}
       />
     </button>
   );
