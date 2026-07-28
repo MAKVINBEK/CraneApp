@@ -281,10 +281,18 @@ class MessageService {
       .then((response) => response.data?.reactions ?? []);
   }
 
-  listPins(chatId) {
-    return this.apiClient
+  async listPins(chatId) {
+    const response = await this.apiClient
       .get(API_ENDPOINTS.CHAT_PINS(chatId))
       .then((response) => response.data?.pins ?? []);
+
+    const chatContext = await this.getChatContext(chatId, 'decryption');
+
+    const messages = sortMessagesChronologically(await Promise.all(this.normalizeList(response).map(async (item) => {
+      return {...item, message: await this.processMessageForDisplay(chatId, item.message, chatContext)}
+    })));
+
+    return messages;
   }
 
   pinMessage(chatId, messageId) {
@@ -337,7 +345,7 @@ function sortMessagesChronologically(messages) {
 }
 
 function messageTime(message) {
-  const value = message?.timestamp ?? message?.createdAt ?? message?.created_at;
+  const value = message?.timestamp ?? message?.createdAt ?? message?.created_at ?? message.pinnedAt;
   const time = value instanceof Date ? value.getTime() : new Date(value || 0).getTime();
   return Number.isNaN(time) ? 0 : time;
 }

@@ -1,17 +1,30 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { services } from '../../../application/services/serviceContainer.js';
-import Message from '../../../domain/entities/Message.js';
-import { useRealtimeSocket } from '../../hooks/useRealtimeSocket.js';
-import { Identicon } from '../common/Identicon.jsx';
-import { useCall } from '../Calls/CallProvider.jsx';
-import { GroupInfoModal } from './GroupInfoModal.jsx';
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import { services } from "../../../application/services/serviceContainer.js";
+import Message from "../../../domain/entities/Message.js";
+import { useRealtimeSocket } from "../../hooks/useRealtimeSocket.js";
+import { Identicon } from "../common/Identicon.jsx";
+import { useCall } from "../Calls/CallProvider.jsx";
+import { GroupInfoModal } from "./GroupInfoModal.jsx";
+import { useToasts } from "../../hooks/useToasts.js";
+import { ToastStack } from "../common/ToastStack.jsx";
+import { MessageCheckbox } from "../common/MessageCheckbox.jsx";
+import { ForwardChatMessagesModal } from "./ForwardChatMessagesModal.jsx";
+import { PinnedMessages } from "../common/PinnedMessages.jsx";
+import { formatSize } from "../../../utils/formatSize.js";
+import { translateText } from "../../services/translatorApi.js";
 
-export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken = 0, profileMode = 'modal', t = fallbackTranslate }) {
+export function ChatThreadPage({
+  chatId,
+  onProfileStateChange,
+  profileCloseToken = 0,
+  profileMode = "modal",
+  t = fallbackTranslate,
+}) {
   const [chat, setChat] = useState(null);
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState("");
   const [editingMessage, setEditingMessage] = useState(null);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [pendingAttachment, setPendingAttachment] = useState(null);
@@ -21,28 +34,42 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
   const [openedImage, setOpenedImage] = useState(null);
   const [typingUserId, setTypingUserId] = useState(null);
   const [actionMenu, setActionMenu] = useState(null);
-  const [profileModal, setProfileModal] = useState({ isOpen: false, isLoading: false, error: '', user: null });
+  const [profileModal, setProfileModal] = useState({
+    isOpen: false,
+    isLoading: false,
+    error: "",
+    user: null,
+  });
+  const [isForwardModalOpen, setIsForwardModalOpen] = useState(false);
+  const [pinnedMessages, setPinnedMessages] = useState([]);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedMessages, setSelectedMessages] = useState([]);
+  const [translations, setTranslations] = useState({});
+  const [translatingIds, setTranslatingIds] = useState(new Set());
   const currentUser = useMemo(() => getCurrentUser(), []);
   const bottomRef = useRef(null);
   const attachmentInputRef = useRef(null);
   const lastTypingSentAtRef = useRef(0);
   const typingTimeoutRef = useRef(null);
+  const draftRef = useRef(null);
   const { eventBus, socket } = useRealtimeSocket(Boolean(chatId));
   const { initiateCall } = useCall();
+  const { showToast } = useToasts();
 
   useEffect(() => {
-    if (profileMode !== 'panel' || typeof onProfileStateChange !== 'function') return undefined;
+    if (profileMode !== "panel" || typeof onProfileStateChange !== "function")
+      return undefined;
     onProfileStateChange({ ...profileModal, chat, messages });
     return undefined;
   }, [chat, messages, onProfileStateChange, profileMode, profileModal]);
 
   useEffect(() => {
-    setProfileModal({ isOpen: false, isLoading: false, error: '', user: null });
+    setProfileModal({ isOpen: false, isLoading: false, error: "", user: null });
   }, [chatId]);
 
   useEffect(() => {
     if (profileCloseToken === 0) return;
-    setProfileModal({ isOpen: false, isLoading: false, error: '', user: null });
+    setProfileModal({ isOpen: false, isLoading: false, error: "", user: null });
   }, [profileCloseToken]);
 
   useEffect(() => {
@@ -50,27 +77,25 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
 
     const closeActionMenu = () => setActionMenu(null);
     const closeOnEscape = (event) => {
-      if (event.key === 'Escape') closeActionMenu();
+      if (event.key === "Escape") closeActionMenu();
     };
 
-    window.addEventListener('click', closeActionMenu);
-    window.addEventListener('scroll', closeActionMenu, true);
-    window.addEventListener('keydown', closeOnEscape);
+    window.addEventListener("click", closeActionMenu);
+    window.addEventListener("keydown", closeOnEscape);
 
     return () => {
-      window.removeEventListener('click', closeActionMenu);
-      window.removeEventListener('scroll', closeActionMenu, true);
-      window.removeEventListener('keydown', closeOnEscape);
+      window.removeEventListener("click", closeActionMenu);
+      window.removeEventListener("keydown", closeOnEscape);
     };
   }, [actionMenu]);
 
   useEffect(() => {
     if (!openedImage) return undefined;
     const closeOnEscape = (event) => {
-      if (event.key === 'Escape') setOpenedImage(null);
+      if (event.key === "Escape") setOpenedImage(null);
     };
-    window.addEventListener('keydown', closeOnEscape);
-    return () => window.removeEventListener('keydown', closeOnEscape);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
   }, [openedImage]);
 
   useEffect(() => {
@@ -79,17 +104,19 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
     Promise.all([
       services.chatService.getChat(chatId),
       services.messageService.getMessages(chatId),
+      services.messageService.listPins(chatId),
     ])
-      .then(([nextChat, nextMessages]) => {
+      .then(([nextChat, nextMessages, nextPinnedMessages]) => {
         if (!isMounted) return;
         setChat(nextChat);
         setMessages(nextMessages);
         markMessagesAsRead(chatId, nextMessages);
-        setError('');
+        setPinnedMessages(nextPinnedMessages);
+        setError("");
       })
       .catch((err) => {
         if (!isMounted) return;
-        setError(err.message || t('chatLoadError', 'Не удалось загрузить чат'));
+        setError(err.message || t("chatLoadError", "Не удалось загрузить чат"));
       })
       .finally(() => {
         if (isMounted) setIsLoading(false);
@@ -101,33 +128,46 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
   }, [chatId, t]);
 
   useEffect(() => {
-    if (typeof bottomRef.current?.scrollIntoView === 'function') {
-      bottomRef.current.scrollIntoView({ block: 'end' });
+    if (typeof bottomRef.current?.scrollIntoView === "function") {
+      bottomRef.current.scrollIntoView({ block: "end" });
     }
   }, [messages.length]);
 
   useEffect(() => {
-    const unsubscribeNew = eventBus.on('new_message', async (event) => {
+    const unsubscribeNew = eventBus.on("new_message", async (event) => {
       if (event.chatId !== chatId || !event.message) return;
-      const nextMessage = typeof services.messageService.processMessageForDisplay === 'function'
-        ? await services.messageService.processMessageForDisplay(chatId, event.message)
-        : Message.fromAPI(event.message);
+      const nextMessage =
+        typeof services.messageService.processMessageForDisplay === "function"
+          ? await services.messageService.processMessageForDisplay(
+              chatId,
+              event.message,
+            )
+          : Message.fromAPI(event.message);
       services.messageService.addMessageToCache(chatId, nextMessage);
       setMessages((items) => appendUniqueMessage(items, nextMessage));
       markMessagesAsRead(chatId, [nextMessage]);
     });
 
-    const unsubscribeEdited = eventBus.on('message_edited', (event) => {
-      setMessages((items) => items.map((message) => (
-        message.id === event.messageId
-          ? { ...message, content: event.content, editedAt: event.editedAt, isEdited: true }
-          : message
-      )));
+    const unsubscribeEdited = eventBus.on("message_edited", (event) => {
+      setMessages((items) =>
+        items.map((message) =>
+          message.id === event.messageId
+            ? {
+                ...message,
+                content: event.content,
+                editedAt: event.editedAt,
+                isEdited: true,
+              }
+            : message,
+        ),
+      );
     });
 
-    const unsubscribeDeleted = eventBus.on('message_deleted', (event) => {
+    const unsubscribeDeleted = eventBus.on("message_deleted", (event) => {
       if (event.chatId && event.chatId !== chatId) return;
-      setMessages((items) => items.filter((message) => message.id !== event.messageId));
+      setMessages((items) =>
+        items.filter((message) => message.id !== event.messageId),
+      );
     });
 
     const handleTyping = (event) => {
@@ -136,16 +176,18 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
       if (!userId || userId === currentUser?.id) return;
 
       setTypingUserId(userId);
-      setChat((currentChat) => currentChat?.type === 'private'
-        ? { ...currentChat, peerIsOnline: true }
-        : currentChat);
+      setChat((currentChat) =>
+        currentChat?.type === "private"
+          ? { ...currentChat, peerIsOnline: true }
+          : currentChat,
+      );
       window.clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = window.setTimeout(() => {
         setTypingUserId(null);
       }, 3000);
     };
-    const unsubscribeTyping = eventBus.on('typing', handleTyping);
-    const unsubscribeUserTyping = eventBus.on('user_typing', handleTyping);
+    const unsubscribeTyping = eventBus.on("typing", handleTyping);
+    const unsubscribeUserTyping = eventBus.on("user_typing", handleTyping);
 
     return () => {
       unsubscribeNew();
@@ -157,14 +199,28 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
     };
   }, [chatId, currentUser?.id, eventBus]);
 
+  useEffect(() => {
+    window.addEventListener("keydown", handleComposerKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleComposerKeyDown);
+    };
+  }, [draft, editingMessage, replyToMessage, messages, currentUser?.id]);
+
   function markMessagesAsRead(targetChatId, nextMessages) {
     const messageIds = nextMessages
       .filter((message) => message?.id && message.senderId !== currentUser?.id)
       .map((message) => message.id);
-    if (messageIds.length === 0 || typeof services.messageService.markAsRead !== 'function') return;
-    services.messageService.markAsRead(targetChatId, messageIds).catch((err) => {
-      console.warn('Failed to mark messages as read', err);
-    });
+    if (
+      messageIds.length === 0 ||
+      typeof services.messageService.markAsRead !== "function"
+    )
+      return;
+    services.messageService
+      .markAsRead(targetChatId, messageIds)
+      .catch((err) => {
+        console.warn("Failed to mark messages as read", err);
+      });
   }
 
   async function handleSubmit(event) {
@@ -175,12 +231,17 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
     setIsSending(true);
     try {
       if (editingMessage) {
-        const result = await services.messageService.editMessage(editingMessage.id, content);
-        setMessages((items) => updateMessage(items, editingMessage.id, {
-          content: result.content,
-          editedAt: result.editedAt,
-          isEdited: true,
-        }));
+        const result = await services.messageService.editMessage(
+          editingMessage.id,
+          content,
+        );
+        setMessages((items) =>
+          updateMessage(items, editingMessage.id, {
+            content: result.content,
+            editedAt: result.editedAt,
+            isEdited: true,
+          }),
+        );
         setEditingMessage(null);
       } else if (pendingAttachment) {
         const message = await services.messageService.sendMediaMessage(
@@ -188,21 +249,28 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
           pendingAttachment.file,
           pendingAttachment.type,
           content,
-          replyToMessage?.id || null,
+          replyToMessage?.id,
         );
         setMessages((items) => appendUniqueMessage(items, message));
         setPendingAttachment(null);
         setReplyToMessage(null);
-        if (attachmentInputRef.current) attachmentInputRef.current.value = '';
+        if (attachmentInputRef.current) attachmentInputRef.current.value = "";
       } else {
-        const message = await services.messageService.sendMessage(chatId, content, 'text', replyToMessage?.id || null);
+        const message = await services.messageService.sendMessage(
+          chatId,
+          content,
+          "text",
+          replyToMessage?.id,
+        );
         setMessages((items) => appendUniqueMessage(items, message));
         setReplyToMessage(null);
       }
-      setDraft('');
-      setError('');
+      setDraft("");
+      setError("");
     } catch (err) {
-      setError(err.message || t('messageSendError', 'Не удалось отправить сообщение'));
+      setError(
+        err.message || t("messageSendError", "Не удалось отправить сообщение"),
+      );
     } finally {
       setIsSending(false);
     }
@@ -212,18 +280,23 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
     const file = event.target.files?.[0];
     if (!file) return;
     if (file.size > 100 * 1024 * 1024) {
-      setError(t('attachmentTooLarge', 'Файл слишком большой. Максимальный размер — 100 МБ.'));
-      event.target.value = '';
+      setError(
+        t(
+          "attachmentTooLarge",
+          "Файл слишком большой. Максимальный размер — 100 МБ.",
+        ),
+      );
+      event.target.value = "";
       return;
     }
     setPendingAttachment({ file, type: getMediaMessageType(file.type) });
     setEditingMessage(null);
-    setError('');
+    setError("");
   }
 
   function removePendingAttachment() {
     setPendingAttachment(null);
-    if (attachmentInputRef.current) attachmentInputRef.current.value = '';
+    if (attachmentInputRef.current) attachmentInputRef.current.value = "";
   }
 
   function handleDraftChange(event) {
@@ -232,15 +305,24 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
   }
 
   function handleComposerKeyDown(event) {
-    if (event.key === 'Escape' && (editingMessage || replyToMessage)) {
+    if (event.key === "Escape" && (editingMessage || replyToMessage)) {
       event.preventDefault();
       cancelComposerMode();
       return;
     }
-    if (event.key !== 'ArrowUp' || draft.trim() || editingMessage || replyToMessage) return;
-    const lastOwnMessage = [...messages].reverse().find((message) => (
-      message.senderId === currentUser?.id && !message.deletedAt
-    ));
+
+    if (
+      event.key !== "ArrowUp" ||
+      draft.trim() ||
+      editingMessage ||
+      replyToMessage
+    )
+      return;
+    const lastOwnMessage = [...messages]
+      .reverse()
+      .find(
+        (message) => message.senderId === currentUser?.id && !message.deletedAt,
+      );
     if (!lastOwnMessage) return;
 
     event.preventDefault();
@@ -255,52 +337,93 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
     lastTypingSentAtRef.current = now;
 
     try {
-      socket.send({ type: 'typing', chatId, userId: currentUser?.id });
+      socket.send({ type: "typing", chatId, userId: currentUser?.id });
     } catch (err) {
-      console.warn('Failed to send typing event', err);
+      console.warn("Failed to send typing event", err);
     }
   }
 
   async function handleDelete(message) {
     try {
-      await services.messageService.deleteMessage(message.id);
-      setMessages((items) => items.filter((item) => item.id !== message.id));
-      if (editingMessage?.id === message.id) {
-        setEditingMessage(null);
-        setDraft('');
+      if (selectionMode) {
+        await Promise.all(
+          selectedMessages.map((selectedMessage) => {
+            if (selectedMessage.senderId !== currentUser?.id) return;
+
+            services.messageService.deleteMessage(selectedMessage.id);
+          }),
+        );
+
+        const selectedIds = new Set(
+          selectedMessages.map((message) => {
+            if (message.senderId !== currentUser?.id) return;
+            return message.id;
+          }),
+        );
+
+        setMessages((messages) =>
+          messages.filter((message) => !selectedIds.has(message.id)),
+        );
+        setSelectedMessages([]);
+        setSelectionMode(false);
       }
-      if (replyToMessage?.id === message.id) {
-        setReplyToMessage(null);
+
+      if (!selectionMode) {
+        if (message.senderId !== currentUser?.id) return;
+        await services.messageService.deleteMessage(message.id);
+        setMessages((items) => items.filter((item) => item.id !== message.id));
+        if (editingMessage?.id === message.id) {
+          setEditingMessage(null);
+          setDraft("");
+        }
+        if (replyToMessage?.id === message.id) {
+          setReplyToMessage(null);
+        }
       }
-      setError('');
+      setError("");
     } catch (err) {
-      setError(err.message || t('messageDeleteError', 'Не удалось удалить сообщение'));
+      setError(
+        err.message ||
+          t("messageDeleteError", "Не удалось удалить сообщение(я)"),
+      );
     }
   }
 
   async function handleReact(message, emoji) {
     try {
-      const result = await services.messageService.reactToMessage(message.id, emoji);
-      setMessages((items) => updateMessage(items, message.id, { reactions: result.reactions || [] }));
-      setError('');
+      const result = await services.messageService.reactToMessage(
+        message.id,
+        emoji,
+      );
+      setMessages((items) =>
+        updateMessage(items, message.id, { reactions: result.reactions || [] }),
+      );
+      setError("");
     } catch (err) {
-      setError(err.message || t('reactionError', 'Не удалось обновить реакцию'));
+      setError(
+        err.message || t("reactionError", "Не удалось обновить реакцию"),
+      );
     }
   }
 
-  function openMessageActions(message, rect) {
+  function openMessageActions(message, rect, clientX, clientY) {
     const menuWidth = 232;
-    const menuHeight = 150;
+    const menuHeight = 350;
     const gap = 12;
+    const padding = 8;
+
     const viewportWidth = window.innerWidth || menuWidth;
     const viewportHeight = window.innerHeight || menuHeight;
-    const isMine = message.senderId === currentUser?.id;
-    const sideX = isMine ? rect.left - menuWidth - gap : rect.right + gap;
-    const fallbackX = isMine ? rect.left : rect.right - menuWidth;
-    const preferredX = sideX >= 8 && sideX + menuWidth <= viewportWidth - 8 ? sideX : fallbackX;
-    const preferredY = rect.top + rect.height / 2 - menuHeight / 2;
-    const x = Math.min(Math.max(preferredX, 8), Math.max(viewportWidth - menuWidth - 8, 8));
-    const y = Math.min(Math.max(preferredY, 8), Math.max(viewportHeight - menuHeight - 8, 8));
+
+    const x = Math.min(
+      Math.max(clientX + gap, padding),
+      viewportWidth - menuWidth - padding,
+    );
+
+    const y = Math.min(
+      Math.max(clientY + gap, padding),
+      viewportHeight - menuHeight - padding,
+    );
     setActionMenu({ messageId: message.id, x, y });
   }
 
@@ -316,76 +439,260 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
   function startEdit(message) {
     setEditingMessage(message);
     setReplyToMessage(null);
-    setDraft(message.content || '');
+    setDraft(message.content || "");
+    draftRef.current.focus();
   }
 
   function startReply(message) {
     setReplyToMessage(message);
     setEditingMessage(null);
+    draftRef.current.focus();
   }
 
   function cancelComposerMode() {
     setEditingMessage(null);
     setReplyToMessage(null);
-    setDraft('');
+    setDraft("");
   }
 
   async function openChatProfile() {
-    if (chat?.type === 'group') {
+    if (chat?.type === "group") {
       setIsGroupInfoOpen(true);
       return;
     }
-    if (chat?.type !== 'private' || !chat.peerId) return;
+    if (chat?.type !== "private" || !chat.peerId) return;
 
-    setProfileModal({ isOpen: true, isLoading: true, error: '', user: null });
+    setProfileModal({ isOpen: true, isLoading: true, error: "", user: null });
     try {
       const profile = await services.userService.getProfile(chat.peerId);
-      setProfileModal({ isOpen: true, isLoading: false, error: '', user: profile });
+      setProfileModal({
+        isOpen: true,
+        isLoading: false,
+        error: "",
+        user: profile,
+      });
     } catch (err) {
       setProfileModal({
         isOpen: true,
         isLoading: false,
-        error: err.message || t('profileLoadError', 'Не удалось загрузить профиль'),
+        error:
+          err.message || t("profileLoadError", "Не удалось загрузить профиль"),
         user: null,
       });
     }
   }
 
-  const title = chat?.name || chat?.title || t('chat', 'Чат');
+  function handleCopyMessage(message) {
+    navigator.clipboard.writeText(message.content);
+  }
+
+  async function handlePinMessage(message) {
+    try {
+      await services.messageService.pinMessage(chatId, message.id);
+      setPinnedMessages((prev) => {
+        const alreadyPinned = prev.some(
+          (pinnedMessage) => pinnedMessage.messageId === message.id,
+        );
+
+        if (alreadyPinned) {
+          showToast(
+            "error",
+            t("messageAlreadyPinned", "Это сообщение уже закреплено"),
+            "❌",
+          );
+          return prev;
+        }
+
+        return [...prev, { message, messageId: message.id }];
+      });
+    } catch (err) {
+      setError(
+        err.message || t("messagePinError", "Не удалось закрепить сообщение"),
+      );
+    }
+  }
+
+  async function handleUnpinMessage(message) {
+    try {
+      await services.messageService.unpinMessage(chatId, message.id);
+      setPinnedMessages((messages) => {
+        const pinnedMessage = messages.find(
+          (pinned) => pinned.messageId === message.id,
+        );
+        if (!pinnedMessage) {
+          showToast(
+            "error",
+            t("messageAlreadyUnpinned", "Это сообщение уже откреплено"),
+            "❌",
+          );
+        }
+
+        return messages.filter((pinned) => pinned.messageId !== message.id);
+      });
+    } catch (err) {
+      setError(
+        err.message || t("messagePinError", "Не удалось открепить сообщение"),
+      );
+    }
+  }
+
+  function startSelection(message) {
+    setSelectionMode(true);
+    setSelectedMessages([message]);
+    setActionMenu(null);
+  }
+
+  function toggleMessageSelection(message) {
+    setSelectedMessages((messages) => {
+      const isMessageSelected = messages.find(({ id }) => id === message.id);
+
+      if (isMessageSelected) {
+        const next = messages.filter(({ id }) => id !== message.id);
+
+        if (next.length === 0) {
+          setSelectionMode(false);
+        }
+
+        return next;
+      }
+
+      return [...messages, message];
+    });
+  }
+
+  function handleForward(message) {
+    if (selectionMode) {
+      setIsForwardModalOpen(true);
+      return;
+    }
+
+    setSelectedMessages([message]);
+    setIsForwardModalOpen(true);
+  }
+
+  const handleCloseForwardModal = () => {
+    if (selectionMode) {
+      setIsForwardModalOpen(false);
+      return;
+    }
+
+    setSelectedMessages([]);
+    setIsForwardModalOpen(false);
+  };
+
+  async function handleTranslateMessage(message) {
+    if (translations[message.id]) {
+      setTranslations((prev) => {
+        const next = { ...prev };
+        delete next[message.id];
+        return next;
+      });
+      return;
+    }
+
+    setTranslatingIds((prev) => new Set(prev).add(message.id));
+    try {
+      const { translatedText, targetLanguage, detectedSourceLang } =
+        await translateText(message.content);
+
+      if (detectedSourceLang && detectedSourceLang === targetLanguage) {
+        showToast(
+          "success",
+          t("alreadySameLanguage", "Сообщение уже на вашем языке"),
+          "ℹ️",
+        );
+        return;
+      }
+
+      setTranslations((prev) => ({ ...prev, [message.id]: translatedText }));
+    } catch (err) {
+      showToast(
+        "error",
+        t("translateError", "Не удалось перевести сообщение"),
+        "❌",
+      );
+    } finally {
+      setTranslatingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(message.id);
+        return next;
+      });
+    }
+  }
+
+  const title = chat?.name || chat?.title || t("chat", "Чат");
   const subtitle = getChatSubtitle(chat, typingUserId, t);
-  const isPeerOnline = Boolean(chat?.type === 'private' && chat?.peerIsOnline);
-  const peerAvatarUrl = chat?.avatarUrl || '';
+  const isPeerOnline = Boolean(chat?.type === "private" && chat?.peerIsOnline);
+  const peerAvatarUrl = chat?.avatarUrl || "";
   const selectedActionMessage = actionMenu
     ? messages.find((message) => message.id === actionMenu.messageId)
     : null;
 
   return (
     <main className="thread-page">
+      {isForwardModalOpen && (
+        <ForwardChatMessagesModal
+          messages={selectedMessages}
+          onClose={handleCloseForwardModal}
+          setSelectedMessages={setSelectedMessages}
+          t={t}
+        />
+      )}
       <header className="thread-header">
-        <Link className="thread-back" to="/chats" aria-label={t('back', 'Назад')}>‹</Link>
+        <Link
+          className="thread-back"
+          to="/chats"
+          aria-label={t("back", "Назад")}
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="size-5"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+        </Link>
         <button
           aria-label={title}
-          className={`thread-avatar ${isPeerOnline ? 'is-online' : ''}`}
+          className={`thread-avatar ${isPeerOnline ? "is-online" : ""}`}
           onClick={openChatProfile}
           type="button"
         >
           {peerAvatarUrl ? (
             <img alt="" src={peerAvatarUrl} />
-          ) : chat?.type === 'private' && chat?.peerId ? (
+          ) : chat?.type === "private" && chat?.peerId ? (
             <Identicon userId={chat.peerId} size={44} />
           ) : (
             title.slice(0, 1).toUpperCase()
           )}
         </button>
-        <div className="thread-title-wrap" onClick={openChatProfile} style={{ cursor: chat?.type === 'group' || chat?.type === 'private' ? 'pointer' : 'default' }}>
+        <div
+          className="thread-title-wrap"
+          onClick={openChatProfile}
+          style={{
+            cursor:
+              chat?.type === "group" || chat?.type === "private"
+                ? "pointer"
+                : "default",
+          }}
+        >
           <h1>{title}</h1>
           <p>{subtitle}</p>
         </div>
         <div className="thread-call-actions">
           <button
             className="thread-call-button"
-            onClick={() => initiateCall(chatId, chat?.type, title, 'audio', chat?.peerId)}
-            title={t('audioCall', 'Аудиозвонок')}
+            onClick={() =>
+              initiateCall(chatId, chat?.type, title, "audio", chat?.peerId)
+            }
+            title={t("audioCall", "Аудиозвонок")}
             type="button"
           >
             <svg
@@ -405,12 +712,13 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
                 />
               </g>
             </svg>
-
           </button>
           <button
             className="thread-call-button"
-            onClick={() => initiateCall(chatId, chat?.type, title, 'video', chat?.peerId)}
-            title={t('videoCall', 'Видео')}
+            onClick={() =>
+              initiateCall(chatId, chat?.type, title, "video", chat?.peerId)
+            }
+            title={t("videoCall", "Видео")}
             type="button"
           >
             <svg
@@ -432,63 +740,89 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
                 />
               </g>
             </svg>
-
           </button>
         </div>
       </header>
 
+      <PinnedMessages messages={pinnedMessages} t={t} />
+
       <section className="thread-messages" aria-busy={isLoading}>
         {isLoading ? <ThreadSkeleton /> : null}
-        {!isLoading && error && messages.length === 0 ? <ThreadState message={error} title={t('loadingError', 'Ошибка загрузки')} /> : null}
+        {!isLoading && error && messages.length === 0 ? (
+          <ThreadState
+            message={error}
+            title={t("loadingError", "Ошибка загрузки")}
+          />
+        ) : null}
         {!isLoading && !error && messages.length === 0 ? (
           <ThreadState
-            message={t('emptyThreadDescription', 'Напишите первое сообщение в этом чате.')}
-            title={t('emptyThread', 'Сообщений пока нет')}
+            message={t(
+              "emptyThreadDescription",
+              "Напишите первое сообщение в этом чате.",
+            )}
+            title={t("emptyThread", "Сообщений пока нет")}
           />
         ) : null}
         {messages.map((message) => (
           <MessageBubble
             currentUserId={currentUser?.id}
             isActionTarget={actionMenu?.messageId === message.id}
+            selectionMode={selectionMode}
             key={message.id}
             message={message}
+            messages={messages}
+            selectedMessages={selectedMessages}
+            translations={translations}
             onOpenActions={openMessageActions}
             onOpenImage={(url) => setOpenedImage(url)}
+            onSelection={toggleMessageSelection}
             t={t}
           />
         ))}
         <div ref={bottomRef} />
       </section>
 
-      {actionMenu && selectedActionMessage ? (
+      {actionMenu && selectedActionMessage && (
         <>
           <div aria-hidden="true" className="message-actions-backdrop" />
           <MessageActionsPopover
             actionMenu={actionMenu}
             currentUserId={currentUser?.id}
             message={selectedActionMessage}
+            pinnedMessages={pinnedMessages}
+            selectionMode={selectionMode}
+            selectedMessages={selectedMessages}
             onDelete={handleDelete}
             onEdit={startEdit}
             onReact={handleReact}
             onReply={startReply}
             runAction={runMessageAction}
+            onCopy={handleCopyMessage}
+            onPin={handlePinMessage}
+            onUnpin={handleUnpinMessage}
+            onStartSelection={startSelection}
+            onSelection={toggleMessageSelection}
+            onForward={handleForward}
+            onTranslate={handleTranslateMessage}
             t={t}
           />
         </>
-      ) : null}
+      )}
 
-      {error && messages.length > 0 ? <div className="thread-inline-error">{error}</div> : null}
+      {error && messages.length > 0 ? (
+        <div className="thread-inline-error">{error}</div>
+      ) : null}
 
       {openedImage ? (
         <div
-          aria-label={t('imageViewer', 'Просмотр изображения')}
+          aria-label={t("imageViewer", "Просмотр изображения")}
           aria-modal="true"
           className="image-viewer"
           onClick={() => setOpenedImage(null)}
           role="dialog"
         >
           <button
-            aria-label={t('close', 'Закрыть')}
+            aria-label={t("close", "Закрыть")}
             className="image-viewer-close"
             onClick={() => setOpenedImage(null)}
             type="button"
@@ -508,30 +842,46 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
           <div className="thread-composer-context">
             <span>
               {editingMessage
-                ? t('editingMessage', 'Редактирование')
-                : `${t('replyTo', 'Ответ')}: ${getMessagePreview(replyToMessage)}`}
+                ? t("editingMessage", "Редактирование")
+                : `${t("replyTo", "Ответ")}: ${getMessagePreview(replyToMessage)}`}
             </span>
-            <button aria-label={t('cancel', 'Отменить')} onClick={cancelComposerMode} type="button">×</button>
+            <button
+              aria-label={t("cancel", "Отменить")}
+              onClick={cancelComposerMode}
+              type="button"
+            >
+              ×
+            </button>
           </div>
         ) : null}
         {pendingAttachment ? (
           <div className="thread-attachment-preview">
-            <span aria-hidden="true">{getAttachmentIcon(pendingAttachment.type)}</span>
-            <span title={pendingAttachment.file.name}>{pendingAttachment.file.name}</span>
+            <span aria-hidden="true">
+              {getAttachmentIcon(pendingAttachment.type)}
+            </span>
+            <span title={pendingAttachment.file.name}>
+              {pendingAttachment.file.name}
+            </span>
             <small>{formatFileSize(pendingAttachment.file.size)}</small>
-            <button aria-label={t('removeAttachment', 'Убрать вложение')} onClick={removePendingAttachment} type="button">×</button>
+            <button
+              aria-label={t("removeAttachment", "Убрать вложение")}
+              onClick={removePendingAttachment}
+              type="button"
+            >
+              ×
+            </button>
           </div>
         ) : null}
         <input
           accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar"
-          aria-label={t('attachFile', 'Прикрепить файл')}
+          aria-label={t("attachFile", "Прикрепить файл")}
           className="thread-file-input"
           onChange={handleAttachmentChange}
           ref={attachmentInputRef}
           type="file"
         />
         <button
-          aria-label={t('attachFile', 'Прикрепить файл')}
+          aria-label={t("attachFile", "Прикрепить файл")}
           className="thread-attach-button"
           disabled={isSending || Boolean(editingMessage)}
           onClick={() => attachmentInputRef.current?.click()}
@@ -540,18 +890,21 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
           📎
         </button>
         <input
-          aria-label={t('message', 'Сообщение')}
+          ref={draftRef}
+          aria-label={t("message", "Сообщение")}
           onChange={handleDraftChange}
-          onKeyDown={handleComposerKeyDown}
-          placeholder={t('messagePlaceholder', 'Сообщение...')}
+          placeholder={t("messagePlaceholder", "Сообщение...")}
           value={draft}
         />
-        <button disabled={(!draft.trim() && !pendingAttachment) || isSending} type="submit">
-          {isSending ? '⏳' : '➤'}
+        <button
+          disabled={(!draft.trim() && !pendingAttachment) || isSending}
+          type="submit"
+        >
+          {isSending ? "⏳" : "➤"}
         </button>
       </form>
 
-      {chat?.type === 'group' && (
+      {chat?.type === "group" && (
         <GroupInfoModal
           chatId={chatId}
           isOpen={isGroupInfoOpen}
@@ -560,14 +913,21 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
         />
       )}
 
-      {profileMode === 'modal' ? (
-      <UserProfileModal
+      {profileMode === "modal" ? (
+        <UserProfileModal
           chat={chat}
           error={profileModal.error}
           isLoading={profileModal.isLoading}
           isOpen={profileModal.isOpen}
           messages={messages}
-          onClose={() => setProfileModal({ isOpen: false, isLoading: false, error: '', user: null })}
+          onClose={() =>
+            setProfileModal({
+              isOpen: false,
+              isLoading: false,
+              error: "",
+              user: null,
+            })
+          }
           t={t}
           user={profileModal.user}
         />
@@ -576,15 +936,15 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
   );
 }
 
-function getMediaMessageType(mimeType = '') {
-  if (mimeType.startsWith('image/')) return 'image';
-  if (mimeType.startsWith('video/')) return 'video';
-  if (mimeType.startsWith('audio/')) return 'audio';
-  return 'file';
+function getMediaMessageType(mimeType = "") {
+  if (mimeType.startsWith("image/")) return "image";
+  if (mimeType.startsWith("video/")) return "video";
+  if (mimeType.startsWith("audio/")) return "audio";
+  return "file";
 }
 
 function getAttachmentIcon(type) {
-  return { image: '🖼️', video: '🎬', audio: '🎵', file: '📄' }[type] || '📎';
+  return { image: "🖼️", video: "🎬", audio: "🎵", file: "📄" }[type] || "📎";
 }
 
 function formatFileSize(bytes) {
@@ -599,11 +959,13 @@ function appendUniqueMessage(items, nextMessage) {
 }
 
 function updateMessage(items, messageId, patch) {
-  return items.map((message) => (message.id === messageId ? { ...message, ...patch } : message));
+  return items.map((message) =>
+    message.id === messageId ? { ...message, ...patch } : message,
+  );
 }
 
 function renderMessageContent(content) {
-  if (!content) return '';
+  if (!content) return "";
   const parts = [];
   const regex = /(#[\wа-яА-ЯёЁ]+)/g;
   let lastIndex = 0;
@@ -619,9 +981,13 @@ function renderMessageContent(content) {
       <span
         key={match.index}
         className="hashtag-link"
-        style={{ color: 'var(--rd-accent, #ff2d8b)', cursor: 'pointer', fontWeight: 'bold' }}
+        style={{
+          color: "var(--rd-accent, #ff2d8b)",
+          cursor: "pointer",
+          fontWeight: "bold",
+        }}
         onClick={() => {
-          if (typeof window.handleUnifiedSearch === 'function') {
+          if (typeof window.handleUnifiedSearch === "function") {
             window.handleUnifiedSearch(hashtag);
           } else {
             alert(`Поиск по хэштегу: ${hashtag}`);
@@ -629,7 +995,7 @@ function renderMessageContent(content) {
         }}
       >
         {hashtag}
-      </span>
+      </span>,
     );
     lastIndex = regex.lastIndex;
   }
@@ -643,10 +1009,10 @@ function renderMessageContent(content) {
 }
 
 function parseCallContent(content) {
-  if (!content || typeof content !== 'string') return {};
+  if (!content || typeof content !== "string") return {};
   try {
     const parsed = JSON.parse(content);
-    return parsed && typeof parsed === 'object' ? parsed : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
   } catch (_) {
     return {};
   }
@@ -654,11 +1020,11 @@ function parseCallContent(content) {
 
 function formatCallDuration(seconds) {
   const total = Number(seconds) || 0;
-  if (total <= 0) return '';
+  if (total <= 0) return "";
   const minutes = Math.floor(total / 60);
   const rest = total % 60;
   if (!minutes) return `${rest} сек`;
-  return `${minutes}:${String(rest).padStart(2, '0')}`;
+  return `${minutes}:${String(rest).padStart(2, "0")}`;
 }
 
 function CallMessageContent({ message, t }) {
@@ -671,7 +1037,7 @@ function CallMessageContent({ message, t }) {
         <PhoneIcon />
       </div>
       <div className="message-call-copy">
-        <strong>{t('callEnded', 'Звонок завершен')}</strong>
+        <strong>{t("callEnded", "Звонок завершен")}</strong>
         {duration ? <span>{duration}</span> : null}
       </div>
     </div>
@@ -681,9 +1047,14 @@ function CallMessageContent({ message, t }) {
 function MessageBubble({
   currentUserId,
   isActionTarget,
+  selectionMode,
   message,
+  selectedMessages = [],
+  messages,
+  translations,
   onOpenActions,
   onOpenImage,
+  onSelection,
   t,
 }) {
   const mine = message.senderId === currentUserId;
@@ -699,6 +1070,11 @@ function MessageBubble({
   }
 
   function handleClickCapture(event) {
+    if (selectionMode) {
+      onSelection(message);
+      return;
+    }
+
     if (!suppressNextClickRef.current) return;
     suppressNextClickRef.current = false;
     event.preventDefault();
@@ -707,18 +1083,28 @@ function MessageBubble({
 
   function handleContextMenu(event) {
     event.preventDefault();
-    onOpenActions(message, event.currentTarget.getBoundingClientRect());
+
+    onOpenActions(
+      message,
+      event.currentTarget.getBoundingClientRect(),
+      event.clientX,
+      event.clientY,
+    );
   }
 
   function handlePointerDown(event) {
-    if (event.button !== 0 || (event.pointerType !== 'touch' && event.pointerType !== 'pen')) return;
+    if (
+      event.button !== 0 ||
+      (event.pointerType !== "touch" && event.pointerType !== "pen")
+    )
+      return;
     const point = { x: event.clientX, y: event.clientY };
     const rect = event.currentTarget.getBoundingClientRect();
     longPressPointRef.current = point;
     clearLongPress();
     longPressTimerRef.current = window.setTimeout(() => {
       suppressNextClickRef.current = true;
-      onOpenActions(message, rect);
+      onOpenActions(message, rect, point.x, point.y);
     }, 550);
   }
 
@@ -729,9 +1115,21 @@ function MessageBubble({
     if (deltaX > 8 || deltaY > 8) clearLongPress();
   }
 
+  const isSelected = selectedMessages.find(({ id }) => id === message.id);
+
+  const repliedMessage = message.replyTo
+    ? messages.find(({ id }) => id === message.replyTo)
+    : null;
+
+  const replyText =
+    repliedMessage?.content?.trim() || message.replyToContent?.trim() || "";
+
+  const replyImage =
+    repliedMessage?.mediaUrl || message.replyToMediaUrl || null;
+
   return (
     <article
-      className={`message-bubble ${mine ? 'is-mine' : ''} ${hasMessageMedia(message) ? 'has-media' : ''} ${isActionTarget ? 'is-action-target' : ''}`}
+      id={message.id}
       onClickCapture={handleClickCapture}
       onContextMenu={handleContextMenu}
       onPointerCancel={clearLongPress}
@@ -739,54 +1137,198 @@ function MessageBubble({
       onPointerLeave={clearLongPress}
       onPointerMove={handlePointerMove}
       onPointerUp={clearLongPress}
+      className={`flex justify-between gap-x-2 ${mine ? "justify-end" : ""}`}
     >
-      {!mine ? (
-        <div className="message-sender">
-          {/* {message.senderFirstName || message.senderUsername || 'User'} */}
-          {message.senderStatusEmoji ? (
-            <span className="sender-status-emoji" style={{ marginLeft: 6 }}>
-              {message.senderStatusEmoji}
-            </span>
-          ) : null}
+      <div
+        className={`message-bubble ${mine ? "is-mine" : ""} ${hasMessageMedia(message) ? "has-media" : ""} ${isActionTarget ? "is-action-target" : ""} ${isSelected ? "is-selected bg-accent" : ""}`}
+      >
+        {!mine && (
+          <div className="message-sender">
+            {/* {message.senderFirstName || message.senderUsername || 'User'} */}
+            {message.senderStatusEmoji && (
+              <span className="sender-status-emoji" style={{ marginLeft: 6 }}>
+                {message.senderStatusEmoji}
+              </span>
+            )}
+          </div>
+        )}
+        {replyText && !replyImage && (
+          <a
+            href={`#${message.replyTo}`}
+            className="message-reply-preview"
+            aria-label={t("goToMessage", "Перейти к сообщению")}
+          >
+            {replyText}
+          </a>
+        )}
+        {replyText && replyImage && (
+          <a
+            href={`#${message.replyTo}`}
+            className="message-reply-preview"
+            aria-label={t("goToMessage", "Перейти к сообщению")}
+          >
+            {replyText}
+          </a>
+        )}
+        {!replyText && replyImage && (
+          <div className="message-reply-preview">
+            <a
+              href={`#${message.replyTo}`}
+              aria-label={t("goToMessage", "Перейти к сообщению")}
+            >
+              <img
+                src={replyImage}
+                alt=""
+                className="message-reply-preview-image"
+              />
+            </a>
+          </div>
+        )}
+        <MessageMedia message={message} onOpenImage={onOpenImage} t={t} />
+        {message.type === "call" ? (
+          <CallMessageContent message={message} t={t} />
+        ) : (
+          <div className="message-content">
+            {renderMessageContent(translations[message.id] || message.content)}
+          </div>
+        )}
+        {message.reactions?.length > 0 && (
+          <div className="message-reactions">
+            {message.reactions.map((reaction) => (
+              <span
+                className={reaction.myReaction ? "is-mine" : ""}
+                key={reaction.emoji}
+              >
+                {reaction.emoji} {reaction.count}
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="message-meta">
+          {message.isEdited ? <span>{t("edited", "изменено")}</span> : null}
+          <time>
+            {formatMessageTime(message.timestamp || message.createdAt)}
+          </time>
         </div>
-      ) : null}
-      {message.replyToContent ? <div className="message-reply-preview">{message.replyToContent}</div> : null}
-      <MessageMedia message={message} onOpenImage={onOpenImage} t={t} />
-      {message.type === 'call' ? (
-        <CallMessageContent message={message} t={t} />
-      ) : (
-        <div className="message-content">{renderMessageContent(message.content)}</div>
-      )}
-      {message.reactions?.length ? (
-        <div className="message-reactions">
-          {message.reactions.map((reaction) => (
-            <span className={reaction.myReaction ? 'is-mine' : ''} key={reaction.emoji}>
-              {reaction.emoji} {reaction.count}
-            </span>
-          ))}
-        </div>
-      ) : null}
-      <div className="message-meta">
-        {message.isEdited ? <span>{t('edited', 'изменено')}</span> : null}
-        <time>{formatMessageTime(message.timestamp || message.createdAt)}</time>
       </div>
+      {selectionMode && (
+        <MessageCheckbox
+          isChecked={isSelected}
+          t={t}
+          className="grow-0 self-end"
+        />
+      )}
     </article>
   );
 }
+
+const PinIcon = ({ className }) => {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      className={`opacity-90 fill-transparent ${className}`}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 17v5" />
+      <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
+    </svg>
+  );
+};
+
+const LanguageIcon = () => {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      className="opacity-90 fill-transparent"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="m5 8 6 6" />
+      <path d="m4 14 6-6 2-3" />
+      <path d="M2 5h12" />
+      <path d="M7 2h1" />
+      <path d="m22 22-5-10-5 10" />
+      <path d="M14 18h6" />
+    </svg>
+  );
+};
+
+const CheckCircleIcon = () => {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      className="opacity-90 fill-transparent"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  );
+};
+
+const ForwardIcon = () => {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="m15 17 5-5-5-5" />
+      <path d="M4 18v-2a4 4 0 0 1 4-4h12" />
+    </svg>
+  );
+};
 
 function MessageActionsPopover({
   actionMenu,
   currentUserId,
   message,
+  pinnedMessages,
+  selectionMode,
+  selectedMessages,
   onDelete,
   onEdit,
   onReact,
   onReply,
   runAction,
+  onCopy,
+  onPin,
+  onUnpin,
+  onStartSelection,
+  onSelection,
+  onForward,
+  onTranslate,
   t,
 }) {
   const mine = message.senderId === currentUserId;
-  const reactions = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
+  const reactions = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
+  const isPinned = pinnedMessages.find(
+    (pinned) => pinned.messageId === message.id,
+  );
+  const isSelected = selectedMessages.find(({ id }) => id === message.id);
 
   return (
     <div
@@ -796,28 +1338,109 @@ function MessageActionsPopover({
     >
       <div className="message-reaction-actions">
         {reactions.map((emoji) => (
-          <button aria-label={emoji} key={emoji} onClick={() => runAction(() => onReact(message, emoji))} type="button">
+          <button
+            aria-label={emoji}
+            key={emoji}
+            onClick={() => runAction(() => onReact(message, emoji))}
+            type="button"
+            className="shrink-0"
+          >
             {emoji}
           </button>
         ))}
       </div>
       <div className="message-text-actions">
-        <button onClick={() => runAction(() => onReply(message))} type="button">
-          <ReplyIcon />
-          <span>{t('reply', 'Ответить')}</span>
-        </button>
-        {mine ? (
-          <button onClick={() => runAction(() => onEdit(message))} type="button">
+        {!selectionMode && (
+          <button
+            onClick={() => runAction(() => onReply(message))}
+            type="button"
+          >
+            <ReplyIcon />
+            <span>{t("reply", "Ответить")}</span>
+          </button>
+        )}
+        {!selectionMode && (
+          <button
+            onClick={() => runAction(() => onCopy(message))}
+            type="button"
+          >
+            <CopyIcon />
+            <span>{t("copy", "Скопировать")}</span>
+          </button>
+        )}
+        {!mine && !selectionMode && (
+          <button
+            type="button"
+            onClick={() => runAction(() => onTranslate(message))}
+          >
+            <LanguageIcon />
+            <span>{t("translate", "Перевести")}</span>
+          </button>
+        )}
+        {mine && !selectionMode && (
+          <button
+            onClick={() => runAction(() => onEdit(message))}
+            type="button"
+          >
             <EditIcon />
-            <span>{t('edit', 'Редактировать')}</span>
+            <span>{t("edit", "Изменить")}</span>
           </button>
-        ) : null}
-        {mine ? (
-          <button className="is-danger" onClick={() => runAction(() => onDelete(message))} type="button">
+        )}
+        {!isPinned && !selectionMode && (
+          <button onClick={() => runAction(() => onPin(message))} type="button">
+            <PinIcon />
+            <span>{t("pin", "Закрепить")}</span>
+          </button>
+        )}
+        {isPinned && !selectionMode && (
+          <button
+            onClick={() => runAction(() => onUnpin(message))}
+            type="button"
+          >
+            <PinIcon />
+            <span>{t("unpin", "Открепить")}</span>
+          </button>
+        )}
+        <button
+          onClick={() => runAction(() => onForward(message))}
+          type="button"
+        >
+          <ForwardIcon />
+          <span>{t("forward", "Переслать")}</span>
+        </button>
+        {mine && (
+          <button
+            className="is-danger"
+            onClick={() => runAction(() => onDelete(message))}
+            type="button"
+          >
             <TrashIcon />
-            <span>{t('delete', 'Удалить')}</span>
+            <span>{t("delete", "Удалить")}</span>
           </button>
-        ) : null}
+        )}
+        <button
+          onClick={() => {
+            if (selectionMode) {
+              runAction(() => {
+                onSelection(message);
+              });
+
+              return;
+            }
+
+            runAction(() => {
+              onStartSelection(message);
+            });
+          }}
+          type="button"
+        >
+          <CheckCircleIcon />
+          <span>
+            {isSelected
+              ? t("uncheckMessage", "Снять выбор")
+              : t("checkMessage", "Выбрать")}
+          </span>
+        </button>
       </div>
     </div>
   );
@@ -851,7 +1474,11 @@ function MessageMedia({ message, onOpenImage, t }) {
   if (message.mediaUnavailable) {
     return (
       <div className="message-media-unavailable">
-        {message.mediaUnavailableReason || t('mediaUnavailableUnencrypted', 'Медиа недоступно: файл не зашифрован')}
+        {message.mediaUnavailableReason ||
+          t(
+            "mediaUnavailableUnencrypted",
+            "Медиа недоступно: файл не зашифрован",
+          )}
       </div>
     );
   }
@@ -859,28 +1486,53 @@ function MessageMedia({ message, onOpenImage, t }) {
   if (!message.mediaUrl) return null;
 
   const type = message.mediaType || message.type;
-  if (type === 'image' || type === 'gif' || type === 'sticker') {
+  if (type === "image" || type === "gif" || type === "sticker") {
     return (
       <button
-        aria-label={t('openImage', 'Открыть изображение')}
+        aria-label={t("openImage", "Открыть изображение")}
         className="message-media-open"
         onClick={() => onOpenImage(message.mediaUrl)}
         type="button"
       >
-        <img alt="" className={`message-media message-media-${type}`} src={message.mediaUrl} />
+        <img
+          alt=""
+          className={`message-media message-media-${type}`}
+          src={message.mediaUrl}
+        />
       </button>
     );
   }
-  if (type === 'video') {
+  if (type === "video") {
     return <video className="message-media" controls src={message.mediaUrl} />;
   }
-  if (type === 'audio' || type === 'voice') {
+  if (type === "audio" || type === "voice") {
     return <audio className="message-media" controls src={message.mediaUrl} />;
   }
-  if (type === 'file') {
+  if (type === "file") {
     return (
       <a className="message-media-file" download href={message.mediaUrl}>
-        {t('downloadFile', 'Скачать файл')}
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+          <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+        </svg>
+        <div className="message-media-file__content">
+          <span className="message-media-file__title">
+            {message.mediaEncryption.fileName}
+          </span>
+          <span className="message-media-file__size">
+            {formatSize(message.mediaEncryption.sizeBytes)}
+          </span>
+        </div>
       </a>
     );
   }
@@ -892,7 +1544,16 @@ function hasMessageMedia(message) {
   return Boolean(message.mediaUrl || message.mediaUnavailable);
 }
 
-function UserProfileModal({ chat, error, isLoading, isOpen, messages, onClose, t, user }) {
+function UserProfileModal({
+  chat,
+  error,
+  isLoading,
+  isOpen,
+  messages,
+  onClose,
+  t,
+  user,
+}) {
   if (!isOpen) return null;
 
   return (
@@ -911,45 +1572,61 @@ function UserProfileModal({ chat, error, isLoading, isOpen, messages, onClose, t
   );
 }
 
-export function UserProfilePanel({ chat, error, isLoading, messages = [], onClose, stopPropagation = false, t, user }) {
+export function UserProfilePanel({
+  chat,
+  error,
+  isLoading,
+  messages = [],
+  onClose,
+  stopPropagation = false,
+  t,
+  user,
+}) {
   const [editableUser, setEditableUser] = useState(user);
   const [isEditing, setIsEditing] = useState(false);
-  const [editDraft, setEditDraft] = useState({ firstName: '', bio: '' });
-  const [editError, setEditError] = useState('');
+  const [editDraft, setEditDraft] = useState({ firstName: "", bio: "" });
+  const [editError, setEditError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const { initiateCall } = useCall();
   const currentUser = getCurrentUser();
   const profileUser = editableUser || user;
-  const isOwnProfile = Boolean(profileUser?.id && currentUser?.id && profileUser.id === currentUser.id);
-  const displayName = [profileUser?.firstName, profileUser?.lastName].filter(Boolean).join(' ')
-    || profileUser?.username
-    || chat?.name
-    || chat?.title
-    || t('user', 'Пользователь');
-  const username = profileUser?.username ? `@${profileUser.username}` : '';
+  const isOwnProfile = Boolean(
+    profileUser?.id && currentUser?.id && profileUser.id === currentUser.id,
+  );
+  const displayName =
+    [profileUser?.firstName, profileUser?.lastName].filter(Boolean).join(" ") ||
+    profileUser?.username ||
+    chat?.name ||
+    chat?.title ||
+    t("user", "Пользователь");
+  const username = profileUser?.username ? `@${profileUser.username}` : "";
   const status = profileUser?.isBot
-    ? t('bot', 'бот')
+    ? t("bot", "бот")
     : getChatSubtitle(chat, null, t);
-  const avatarUrl = profileUser?.avatarUrl || chat?.avatarUrl || '';
+  const avatarUrl = profileUser?.avatarUrl || chat?.avatarUrl || "";
   const canCall = Boolean(chat?.id);
-  const sharedMedia = messages.filter((message) => (
-    message.mediaUrl && ['image', 'gif', 'sticker', 'video'].includes(message.mediaType || message.type)
-  ));
+  const sharedMedia = messages.filter(
+    (message) =>
+      message.mediaUrl &&
+      ["image", "gif", "sticker", "video"].includes(
+        message.mediaType || message.type,
+      ),
+  );
 
   useEffect(() => {
     setEditableUser(user);
     setIsEditing(false);
-    setEditError('');
+    setEditError("");
   }, [user]);
 
   function startAudioCall() {
     if (!canCall) return;
-    initiateCall(chat.id, chat?.type, displayName, 'audio', chat?.peerId);
+    initiateCall(chat.id, chat?.type, displayName, "audio", chat?.peerId);
   }
 
   function startVideoCall() {
     if (!canCall) return;
-    initiateCall(chat.id, chat?.type, displayName, 'video', chat?.peerId);
+    initiateCall(chat.id, chat?.type, displayName, "video", chat?.peerId);
   }
 
   function copyText(value) {
@@ -960,16 +1637,16 @@ export function UserProfilePanel({ chat, error, isLoading, messages = [], onClos
   function startEdit() {
     setEditDraft({
       firstName: profileUser?.firstName || displayName,
-      bio: profileUser?.bio || '',
+      bio: profileUser?.bio || "",
     });
-    setEditError('');
+    setEditError("");
     setIsEditing(true);
   }
 
   async function saveProfileEdit(event) {
     event.preventDefault();
     setIsSaving(true);
-    setEditError('');
+    setEditError("");
     try {
       const updated = await services.userService.updateMe({
         firstName: editDraft.firstName.trim(),
@@ -978,7 +1655,9 @@ export function UserProfilePanel({ chat, error, isLoading, messages = [], onClos
       setEditableUser(updated);
       setIsEditing(false);
     } catch (err) {
-      setEditError(err.message || t('profileSaveError', 'Не удалось сохранить профиль'));
+      setEditError(
+        err.message || t("profileSaveError", "Не удалось сохранить профиль"),
+      );
     } finally {
       setIsSaving(false);
     }
@@ -986,92 +1665,138 @@ export function UserProfilePanel({ chat, error, isLoading, messages = [], onClos
 
   return (
     <section
-      aria-label={t('profile', 'Профиль')}
+      aria-label={t("profile", "Профиль")}
       className="user-profile-card"
       onClick={stopPropagation ? (event) => event.stopPropagation() : undefined}
     >
       <header className="user-profile-header">
         <button className="user-profile-back" onClick={onClose} type="button">
           <span aria-hidden="true">‹</span>
-          {t('back', 'Назад')}
+          {t("back", "Назад")}
         </button>
-        <strong>{t('information', 'Информация')}</strong>
+        <strong>{t("information", "Информация")}</strong>
         {isOwnProfile ? (
-          <button className="user-profile-edit" onClick={isEditing ? () => setIsEditing(false) : startEdit} type="button">
-            {isEditing ? t('cancel', 'Отмена') : t('editShort', 'Изм.')}
+          <button
+            className="user-profile-edit"
+            onClick={isEditing ? () => setIsEditing(false) : startEdit}
+            type="button"
+          >
+            {isEditing ? t("cancel", "Отмена") : t("editShort", "Изм.")}
           </button>
-        ) : <span />}
+        ) : (
+          <span />
+        )}
       </header>
 
       {isLoading ? (
-        <div className="user-profile-state">{t('loading', 'Загрузка...')}</div>
+        <div className="user-profile-state">{t("loading", "Загрузка...")}</div>
       ) : error ? (
         <div className="user-profile-state is-error">{error}</div>
       ) : (
         <div className="user-profile-scroll">
           <div className="user-profile-hero">
             <div className="user-profile-avatar">
-              {avatarUrl ? <img alt="" src={avatarUrl} /> : <Identicon userId={profileUser?.id || chat?.peerId || displayName} size={112} />}
+              {avatarUrl ? (
+                <img alt="" src={avatarUrl} />
+              ) : (
+                <Identicon
+                  userId={profileUser?.id || chat?.peerId || displayName}
+                  size={112}
+                />
+              )}
             </div>
             <h2>{displayName}</h2>
-            <p className={`user-profile-status ${chat?.peerIsOnline ? 'is-online' : ''}`}>{status}</p>
+            <p
+              className={`user-profile-status ${chat?.peerIsOnline ? "is-online" : ""}`}
+            >
+              {status}
+            </p>
           </div>
 
           <div className="user-profile-actions">
             <button onClick={onClose} type="button">
               <MessageCircleIcon />
-              {t('chat', 'Чат')}
+              {t("chat", "Чат")}
             </button>
             <button disabled={!canCall} onClick={startAudioCall} type="button">
               <PhoneIcon />
-              {t('call', 'Звонок')}
+              {t("call", "Звонок")}
             </button>
-            <button disabled={!canCall} onClick={startVideoCall} title={t('videoCall', 'Видеозвонок')} type="button">
+            <button
+              disabled={!canCall}
+              onClick={startVideoCall}
+              title={t("videoCall", "Видеозвонок")}
+              type="button"
+            >
               <VideoIcon />
-              {t('video', 'Видео')}
+              {t("video", "Видео")}
             </button>
           </div>
 
           {isEditing ? (
             <form className="user-profile-edit-form" onSubmit={saveProfileEdit}>
               <label>
-                <span>{t('name', 'Имя')}</span>
+                <span>{t("name", "Имя")}</span>
                 <input
-                  onChange={(event) => setEditDraft((draft) => ({ ...draft, firstName: event.target.value }))}
+                  onChange={(event) =>
+                    setEditDraft((draft) => ({
+                      ...draft,
+                      firstName: event.target.value,
+                    }))
+                  }
                   value={editDraft.firstName}
                 />
               </label>
               <label>
-                <span>{t('bio', 'О себе')}</span>
+                <span>{t("bio", "О себе")}</span>
                 <textarea
-                  onChange={(event) => setEditDraft((draft) => ({ ...draft, bio: event.target.value }))}
+                  onChange={(event) =>
+                    setEditDraft((draft) => ({
+                      ...draft,
+                      bio: event.target.value,
+                    }))
+                  }
                   rows={4}
                   value={editDraft.bio}
                 />
               </label>
               {editError ? <p>{editError}</p> : null}
-              <button disabled={isSaving || !editDraft.firstName.trim()} type="submit">
-                {isSaving ? t('saving', 'Сохранение...') : t('save', 'Сохранить')}
+              <button
+                disabled={isSaving || !editDraft.firstName.trim()}
+                type="submit"
+              >
+                {isSaving
+                  ? t("saving", "Сохранение...")
+                  : t("save", "Сохранить")}
               </button>
             </form>
           ) : (
             <div className="user-profile-info-card">
               {username ? (
-                <button className="user-profile-copy-row" onClick={() => copyText(username)} type="button">
-                  <span>{t('username', 'Имя пользователя')}</span>
+                <button
+                  className="user-profile-copy-row"
+                  onClick={() => copyText(username)}
+                  type="button"
+                >
+                  <span>{t("username", "Имя пользователя")}</span>
                   <strong>{username}</strong>
                   <CopyIcon />
                 </button>
               ) : null}
               <div className="user-profile-info-row">
-                <span>{t('bio', 'О себе')}</span>
-                <strong>{profileUser?.bio || t('profileBioEmpty', 'Информация не указана')}</strong>
+                <span>{t("bio", "О себе")}</span>
+                <strong>
+                  {profileUser?.bio ||
+                    t("profileBioEmpty", "Информация не указана")}
+                </strong>
               </div>
             </div>
           )}
 
           <div className="user-profile-tabs">
-            <button className="active" type="button">{t('media', 'Медиа')}</button>
+            <button className="active" type="button">
+              {t("media", "Медиа")}
+            </button>
           </div>
           {sharedMedia.length ? (
             <div className="user-profile-media-grid">
@@ -1079,25 +1804,27 @@ export function UserProfilePanel({ chat, error, isLoading, messages = [], onClos
                 const type = message.mediaType || message.type;
                 return (
                   <a
-                    aria-label={t('openMedia', 'Открыть медиа')}
+                    aria-label={t("openMedia", "Открыть медиа")}
                     href={message.mediaUrl}
                     key={message.id}
                     rel="noreferrer"
                     target="_blank"
                   >
-                    {type === 'video' ? (
+                    {type === "video" ? (
                       <video muted preload="metadata" src={message.mediaUrl} />
                     ) : (
                       <img alt="" loading="lazy" src={message.mediaUrl} />
                     )}
-                    {type === 'video' ? <span aria-hidden="true">▶</span> : null}
+                    {type === "video" ? (
+                      <span aria-hidden="true">▶</span>
+                    ) : null}
                   </a>
                 );
               })}
             </div>
           ) : (
             <div className="user-profile-empty-media">
-              {t('profileMediaEmpty', 'Медиа пока не загружены')}
+              {t("profileMediaEmpty", "Медиа пока не загружены")}
             </div>
           )}
         </div>
@@ -1162,9 +1889,15 @@ function CopyIcon() {
 function ThreadSkeleton() {
   return (
     <div className="thread-skeleton">
-      <div className="message-bubble"><div className="skeleton-line skeleton-message" /></div>
-      <div className="message-bubble is-mine"><div className="skeleton-line skeleton-message-short" /></div>
-      <div className="message-bubble"><div className="skeleton-line skeleton-message" /></div>
+      <div className="message-bubble">
+        <div className="skeleton-line skeleton-message" />
+      </div>
+      <div className="message-bubble is-mine">
+        <div className="skeleton-line skeleton-message-short" />
+      </div>
+      <div className="message-bubble">
+        <div className="skeleton-line skeleton-message" />
+      </div>
     </div>
   );
 }
@@ -1180,49 +1913,60 @@ function ThreadState({ message, title }) {
 
 function getCurrentUser() {
   try {
-    return JSON.parse(localStorage.getItem('craneapp_user_data') || 'null');
+    return JSON.parse(localStorage.getItem("craneapp_user_data") || "null");
   } catch (_error) {
     return null;
   }
 }
 
 function formatMessageTime(value) {
-  if (!value) return '';
+  if (!value) return "";
   const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
+  if (Number.isNaN(date.getTime())) return "";
 
   return new Intl.DateTimeFormat(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
+    hour: "2-digit",
+    minute: "2-digit",
   }).format(date);
 }
 
 function getMessagePreview(message) {
-  if (!message) return '';
-  return String(message.content || '').slice(0, 64);
+  if (!message) return "";
+  return String(message.content || "").slice(0, 64);
 }
 
 function getChatSubtitle(chat, typingUserId, t) {
-  if (typingUserId) return t('typing', 'печатает...');
-  if (chat?.type === 'group') return t('groupChat', 'Группа');
-  if (chat?.peerIsOnline) return t('online', 'онлайн');
+  if (typingUserId) return t("typing", "печатает...");
+  if (chat?.type === "group") return t("groupChat", "Группа");
+  if (chat?.peerIsOnline) return t("online", "онлайн");
   if (chat?.peerLastSeen) return formatLastSeen(chat.peerLastSeen, t);
-  return t('lastSeenRecently', 'был(а) недавно');
+  return t("lastSeenRecently", "был(а) недавно");
 }
 
 function formatLastSeen(value, t) {
-  if (value === 'recently') return t('lastSeenRecently', 'был(а) недавно');
+  if (value === "recently") return t("lastSeenRecently", "был(а) недавно");
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return t('lastSeenRecently', 'был(а) недавно');
+  if (Number.isNaN(date.getTime()))
+    return t("lastSeenRecently", "был(а) недавно");
 
   const today = new Date();
   const sameDay = date.toDateString() === today.toDateString();
-  const formatted = new Intl.DateTimeFormat(undefined, sameDay
-    ? { hour: '2-digit', minute: '2-digit' }
-    : { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }
+  const formatted = new Intl.DateTimeFormat(
+    undefined,
+    sameDay
+      ? { hour: "2-digit", minute: "2-digit" }
+      : {
+          day: "2-digit",
+          month: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        },
   ).format(date);
 
-  return t('lastSeenAt', 'был(а) {time}', { time: formatted }).replace('{time}', formatted);
+  return t("lastSeenAt", "был(а) {time}", { time: formatted }).replace(
+    "{time}",
+    formatted,
+  );
 }
 
 function fallbackTranslate(_key, fallback) {
