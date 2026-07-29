@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"path"
 	"strings"
+	"unicode/utf8"
 )
 
 var (
@@ -78,6 +80,66 @@ type Message struct {
 type Service struct {
 	db *sql.DB
 	ws *WSServer
+}
+
+const (
+	maxMediaFilenameBytes = 255
+	maxMediaSizeBytes     = 100 << 20
+)
+
+func sanitizeMediaFilename(filename string) string {
+	filename = path.Base(strings.ReplaceAll(strings.TrimSpace(filename), `\`, "/"))
+	if filename == "." || filename == "/" {
+		return ""
+	}
+	for len(filename) > maxMediaFilenameBytes {
+		_, size := utf8.DecodeLastRuneInString(filename)
+		filename = filename[:len(filename)-size]
+	}
+	return filename
+}
+
+// ValidateMediaMetadata canonicalises client metadata and verifies local,
+// unencrypted uploads against the media record before it is put in a message.
+func (s *Service) ValidateMediaMetadata(ctx context.Context, mediaURL, fileName string, sizeBytes int64, encrypted bool) (string, int64, error) {
+	if sizeBytes < 0 || sizeBytes > maxMediaSizeBytes {
+		return "", 0, ErrInvalidInput
+	}
+	fileName = sanitizeMediaFilename(fileName)
+	uploadID := strings.TrimPrefix(mediaURL, "/api/v2/media/")
+	if uploadID == mediaURL || uploadID == "" || strings.Contains(uploadID, "/") {
+		return fileName, sizeBytes, nil
+	}
+
+	var storedName string
+	var storedSize int64
+	var storedEncrypted bool
+	err := s.db.QueryRowContext(ctx, `
+		SELECT filename, size_bytes, is_encrypted
+		FROM media.uploads WHERE id = $1
+	`, uploadID).Scan(&storedName, &storedSize, &storedEncrypted)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", 0, ErrInvalidInput
+	}
+	if err != nil {
+		return "", 0, err
+	}
+	storedName = sanitizeMediaFilename(storedName)
+	if storedName != "" {
+		if fileName != "" && fileName != storedName {
+			return "", 0, ErrInvalidInput
+		}
+		fileName = storedName
+	}
+	if !storedEncrypted && !encrypted {
+		// A zero value keeps older clients working; the canonical stored size is
+		// still used. Any explicitly supplied non-zero value must match exactly.
+		if sizeBytes != 0 && sizeBytes != storedSize {
+			return "", 0, ErrInvalidInput
+		}
+		sizeBytes = storedSize
+	}
+	return fileName, sizeBytes, nil
 }
 
 func NewService(db *sql.DB, ws *WSServer) *Service {
@@ -992,6 +1054,11 @@ func (s *Service) ForwardMessage(ctx context.Context, userID, messageID, targetC
 	if err != nil {
 		return Message{}, err
 	}
+	if len(metadataBytes) > 0 {
+		if err := json.Unmarshal(metadataBytes, &src.Metadata); err != nil {
+			return Message{}, err
+		}
+	}
 
 	if ok, err := s.isMember(ctx, userID, src.ChatID); err != nil || !ok {
 		if err != nil {
@@ -1000,15 +1067,11 @@ func (s *Service) ForwardMessage(ctx context.Context, userID, messageID, targetC
 		return Message{}, ErrForbidden
 	}
 
-	forwardedFrom := src.ID
-	msg, err := s.SendMessage(ctx, userID, targetChatID, src.Content, src.Type, nil, src.Metadata)
-	if err != nil {
-		return Message{}, err
+	if src.Metadata == nil {
+		src.Metadata = make(map[string]any)
 	}
-	_, _ = s.db.ExecContext(ctx, `
-		UPDATE messages.messages SET metadata = jsonb_set(COALESCE(metadata,'{}'), '{forwardedFrom}', to_jsonb($1::text)) WHERE id = $2
-	`, forwardedFrom, msg.ID)
-	return msg, nil
+	src.Metadata["forwardedFrom"] = src.ID
+	return s.SendMessage(ctx, userID, targetChatID, src.Content, src.Type, nil, src.Metadata)
 }
 
 // Reaction types.
