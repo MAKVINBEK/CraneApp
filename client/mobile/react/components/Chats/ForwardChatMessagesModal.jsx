@@ -3,10 +3,10 @@ import { useChatsStore } from "../../store/chats";
 
 import { useDebounce } from "../../hooks/useDebounce";
 
-import { useState, useMemo, useRef } from "react";
-import { Identicon } from "../common/Identicon";
-import { useClickOutside } from "../../hooks/useClickOutside";
+import { useMemo, useRef, useState } from "react";
 import services from "../../../application/services/serviceContainer";
+import { useClickOutside } from "../../hooks/useClickOutside";
+import { Identicon } from "../common/Identicon";
 
 const XIcon = ({ className }) => {
   return (
@@ -52,6 +52,7 @@ export const ForwardChatMessagesModal = ({
   messages,
   onClose,
   setSelectedMessages,
+  setSelectionMode,
   t,
 }) => {
   const chats = useChatsStore((state) => state.chats);
@@ -77,7 +78,7 @@ export const ForwardChatMessagesModal = ({
 
   const handleForward = async (e) => {
     const target = e.target;
-    const button = target.closest("button")
+    const button = target.closest("button");
 
     if (!button) return;
 
@@ -87,13 +88,12 @@ export const ForwardChatMessagesModal = ({
 
     try {
       setForwarding(true);
-      console.log(chatId)
       for (const message of messages) {
-        console.log(message)
         await services.messageService.forwardMessage(message.id, chatId);
       }
 
       setSelectedMessages([]);
+      setSelectionMode(false);
       onClose();
       navigate(`/chats/${chatId}`);
     } finally {
@@ -180,11 +180,7 @@ export const ForwardChatMessagesModal = ({
         </div>
 
         <footer className="forward-modal__footer">
-          <button
-            type="button"
-            onClick={onClose}
-            className="button"
-          >
+          <button type="button" onClick={onClose} className="button">
             {t("cancel", "Отмена")}
           </button>
         </footer>

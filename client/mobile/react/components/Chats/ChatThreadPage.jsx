@@ -2,17 +2,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { services } from "../../../application/services/serviceContainer.js";
 import Message from "../../../domain/entities/Message.js";
-import { useRealtimeSocket } from "../../hooks/useRealtimeSocket.js";
-import { Identicon } from "../common/Identicon.jsx";
-import { useCall } from "../Calls/CallProvider.jsx";
-import { GroupInfoModal } from "./GroupInfoModal.jsx";
-import { useToasts } from "../../hooks/useToasts.js";
-import { ToastStack } from "../common/ToastStack.jsx";
-import { MessageCheckbox } from "../common/MessageCheckbox.jsx";
-import { ForwardChatMessagesModal } from "./ForwardChatMessagesModal.jsx";
-import { PinnedMessages } from "../common/PinnedMessages.jsx";
 import { formatSize } from "../../../utils/formatSize.js";
+import { sortMessagesChronologically } from "../../../utils/sortMessagesChronologically.js";
+import { useRealtimeSocket } from "../../hooks/useRealtimeSocket.js";
+import { useToasts } from "../../hooks/useToasts.js";
 import { translateText } from "../../services/translatorApi.js";
+import { useCall } from "../Calls/CallProvider.jsx";
+import { Identicon } from "../common/Identicon.jsx";
+import { MessageCheckbox } from "../common/MessageCheckbox.jsx";
+import { PinnedMessages } from "../common/PinnedMessages.jsx";
+import { ForwardChatMessagesModal } from "./ForwardChatMessagesModal.jsx";
+import { GroupInfoModal } from "./GroupInfoModal.jsx";
 
 export function ChatThreadPage({
   chatId,
@@ -161,6 +161,13 @@ export function ChatThreadPage({
             : message,
         ),
       );
+      setPinnedMessages((items) =>
+        updatePinnedMessage(items, event.messageId, {
+          content: event.content,
+          editedAt: event.editedAt,
+          isEdited: true,
+        }),
+      );
     });
 
     const unsubscribeDeleted = eventBus.on("message_deleted", (event) => {
@@ -188,6 +195,17 @@ export function ChatThreadPage({
     };
     const unsubscribeTyping = eventBus.on("typing", handleTyping);
     const unsubscribeUserTyping = eventBus.on("user_typing", handleTyping);
+    const unsubscribePinned = eventBus.on("message_pinned", async (event) => {
+      if (event.chatId && event.chatId !== chatId) return;
+      const pins = await services.messageService.listPins(chatId);
+      setPinnedMessages(pins);
+    });
+    const unsubscribeUnpinned = eventBus.on("message_unpinned", (event) => {
+      if (event.chatId && event.chatId !== chatId) return;
+      setPinnedMessages((items) =>
+        items.filter((item) => item.messageId !== event.messageId),
+      );
+    });
 
     return () => {
       unsubscribeNew();
@@ -195,6 +213,8 @@ export function ChatThreadPage({
       unsubscribeDeleted();
       unsubscribeTyping();
       unsubscribeUserTyping();
+      unsubscribePinned();
+      unsubscribeUnpinned();
       window.clearTimeout(typingTimeoutRef.current);
     };
   }, [chatId, currentUser?.id, eventBus]);
@@ -237,6 +257,13 @@ export function ChatThreadPage({
         );
         setMessages((items) =>
           updateMessage(items, editingMessage.id, {
+            content: result.content,
+            editedAt: result.editedAt,
+            isEdited: true,
+          }),
+        );
+        setPinnedMessages((items) =>
+          updatePinnedMessage(items, editingMessage.id, {
             content: result.content,
             editedAt: result.editedAt,
             isEdited: true,
@@ -350,6 +377,7 @@ export function ChatThreadPage({
           selectedMessages.map((selectedMessage) => {
             if (selectedMessage.senderId !== currentUser?.id) return;
 
+            handleUnpinMessage(selectedMessage);
             services.messageService.deleteMessage(selectedMessage.id);
           }),
         );
@@ -370,6 +398,7 @@ export function ChatThreadPage({
 
       if (!selectionMode) {
         if (message.senderId !== currentUser?.id) return;
+        await handleUnpinMessage(message);
         await services.messageService.deleteMessage(message.id);
         setMessages((items) => items.filter((item) => item.id !== message.id));
         if (editingMessage?.id === message.id) {
@@ -483,6 +512,16 @@ export function ChatThreadPage({
   }
 
   function handleCopyMessage(message) {
+    if (selectionMode) {
+      const sortedMessages = sortMessagesChronologically(selectedMessages);
+
+      const allContent = sortedMessages
+        .map((message) => message.content)
+        .join("\n");
+      navigator.clipboard.writeText(allContent);
+      return;
+    }
+
     navigator.clipboard.writeText(message.content);
   }
 
@@ -635,6 +674,7 @@ export function ChatThreadPage({
           messages={selectedMessages}
           onClose={handleCloseForwardModal}
           setSelectedMessages={setSelectedMessages}
+          setSelectionMode={setSelectionMode}
           t={t}
         />
       )}
@@ -961,6 +1001,19 @@ function appendUniqueMessage(items, nextMessage) {
 function updateMessage(items, messageId, patch) {
   return items.map((message) =>
     message.id === messageId ? { ...message, ...patch } : message,
+  );
+}
+function updatePinnedMessage(items, messageId, patch) {
+  return items.map((item) =>
+    item.message.id === messageId
+      ? {
+          ...item,
+          message: {
+            ...item.message,
+            ...patch,
+          },
+        }
+      : item,
   );
 }
 
@@ -1359,7 +1412,7 @@ function MessageActionsPopover({
             <span>{t("reply", "Ответить")}</span>
           </button>
         )}
-        {!selectionMode && (
+        {(message.type === "text" || message.content) && (
           <button
             onClick={() => runAction(() => onCopy(message))}
             type="button"
