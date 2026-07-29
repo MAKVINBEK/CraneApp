@@ -74,7 +74,7 @@ export const PinnedMessages = ({ messages, t }) => {
         >
           {messages.map((message, index) => (
             <span
-              key={message.id}
+              key={message.messageId}
               className={`pinned-messages__segment ${
                 index === currentPinnedMessageIndex
                   ? "pinned-messages__segment--active"
@@ -91,11 +91,12 @@ export const PinnedMessages = ({ messages, t }) => {
           {currentPinnedMessageIndex + 1}
         </span>
 
-        {(currentMessage.type === "text" || currentMessage.content) && currentMessage.type !== "image" && (
-          <p className="pinned-messages__text">{currentMessage.content}</p>
-        )}
+        {(currentMessage.type === "text" || currentMessage.content) &&
+          currentMessage.type !== "image" && (
+            <p className="pinned-messages__text">{currentMessage.content}</p>
+          )}
 
-        {(currentMessage.type === "image") && (
+        {currentMessage.type === "image" && (
           <p className="pinned-messages__text">{currentMessage.mediaUrl}</p>
         )}
 

@@ -712,7 +712,6 @@
   .thread-page {
     @apply relative max-w-[920px] mx-auto flex flex-col;
     min-height: 100dvh;
-    /* grid-template-rows: auto minmax(0,1fr) auto; */
     background: rgba(10,10,10,0.72);
     scrollbar-width: thin;
     scrollbar-color: var(--color-panel) transparent;
@@ -773,7 +772,7 @@
   .thread-call-button:focus-visible { outline: 2px solid rgba(42,171,238,0.72); outline-offset: 2px; }
   .thread-call-icon { @apply block w-6 h-6; }
   .thread-call-icon-video { width: 31px; height: 31px; opacity: 0.9; }
-  .thread-messages { @apply min-h-0 overflow-y-auto flex flex-col gap-[10px]; padding: 18px 12px; }
+  .thread-messages { @apply min-h-0 h-full overflow-y-auto flex flex-col gap-[10px]; padding: 18px 12px; }
 
   .pinned-messages {
     @apply w-full flex gap-2 py-1.5 md:py-3 px-2 cursor-pointer transition-colors border-b border-border bg-panel outline-0 hover:bg-[rgba(255,255,255,0.05)];
