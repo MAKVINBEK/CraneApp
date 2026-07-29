@@ -910,7 +910,6 @@ export function ChatThreadPage({
     ) : null}
   </div>
 </div>
-        </div>
       </header>
 
       <PinnedMessages messages={pinnedMessages} t={t} />
