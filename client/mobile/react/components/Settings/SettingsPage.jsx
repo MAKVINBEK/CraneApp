@@ -4,6 +4,7 @@ import { services } from '../../../application/services/serviceContainer.js';
 import { ToastStack } from '../common/ToastStack.jsx';
 import { useToasts } from '../../hooks/useToasts.js';
 import { disconnectRealtimeSocket } from '../../hooks/useRealtimeSocket.js';
+import '../../styles/SettingsPage.css';
 
 export function SettingsPage({ t = (k, f) => f }) {
   const navigate = useNavigate();
