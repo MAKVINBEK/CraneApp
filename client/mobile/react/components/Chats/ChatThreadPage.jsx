@@ -6,6 +6,7 @@ import { useRealtimeSocket } from '../../hooks/useRealtimeSocket.js';
 import { Identicon } from '../common/Identicon.jsx';
 import { useCall } from '../Calls/CallProvider.jsx';
 import { GroupInfoModal } from './GroupInfoModal.jsx';
+import { PhotoEditorModal } from '../media-editor/PhotoEditorModal.jsx';
 
 export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken = 0, profileMode = 'modal', t = fallbackTranslate }) {
   const [chat, setChat] = useState(null);
@@ -15,6 +16,7 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [pendingAttachment, setPendingAttachment] = useState(null);
+  const [photoEditorFile, setPhotoEditorFile] = useState(null);
   const [messages, setMessages] = useState([]);
   const [replyToMessage, setReplyToMessage] = useState(null);
   const [isGroupInfoOpen, setIsGroupInfoOpen] = useState(false);
@@ -216,9 +218,30 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
       event.target.value = '';
       return;
     }
+
+    if (file.type.startsWith('image/')) {
+      setPhotoEditorFile(file);
+      setEditingMessage(null);
+      setError('');
+      return;
+    }
+
     setPendingAttachment({ file, type: getMediaMessageType(file.type) });
     setEditingMessage(null);
     setError('');
+  }
+
+  function closePhotoEditor() {
+    setPhotoEditorFile(null);
+    if (attachmentInputRef.current) attachmentInputRef.current.value = '';
+  }
+
+  function handlePhotoEditorSave(file) {
+    setPendingAttachment({ file, type: 'image' });
+    setPhotoEditorFile(null);
+    setEditingMessage(null);
+    setError('');
+    if (attachmentInputRef.current) attachmentInputRef.current.value = '';
   }
 
   function removePendingAttachment() {
@@ -515,12 +538,11 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
           </div>
         ) : null}
         {pendingAttachment ? (
-          <div className="thread-attachment-preview">
-            <span aria-hidden="true">{getAttachmentIcon(pendingAttachment.type)}</span>
-            <span title={pendingAttachment.file.name}>{pendingAttachment.file.name}</span>
-            <small>{formatFileSize(pendingAttachment.file.size)}</small>
-            <button aria-label={t('removeAttachment', 'Убрать вложение')} onClick={removePendingAttachment} type="button">×</button>
-          </div>
+          <PendingAttachmentPreview
+            attachment={pendingAttachment}
+            onRemove={removePendingAttachment}
+            t={t}
+          />
         ) : null}
         <input
           accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar"
@@ -551,6 +573,15 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
         </button>
       </form>
 
+      {photoEditorFile ? (
+        <PhotoEditorModal
+          file={photoEditorFile}
+          onCancel={closePhotoEditor}
+          onSave={handlePhotoEditorSave}
+          t={t}
+        />
+      ) : null}
+
       {chat?.type === 'group' && (
         <GroupInfoModal
           chatId={chatId}
@@ -573,6 +604,31 @@ export function ChatThreadPage({ chatId, onProfileStateChange, profileCloseToken
         />
       ) : null}
     </main>
+  );
+}
+
+
+function PendingAttachmentPreview({ attachment, onRemove, t }) {
+  const previewUrl = useMemo(
+    () => (attachment.type === 'image' ? URL.createObjectURL(attachment.file) : ''),
+    [attachment.file, attachment.type],
+  );
+
+  useEffect(() => () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
+
+  return (
+    <div className={`thread-attachment-preview ${attachment.type === 'image' ? 'has-image' : ''}`}>
+      {previewUrl ? <img alt="" className="thread-attachment-preview-image" src={previewUrl} /> : (
+        <span aria-hidden="true">{getAttachmentIcon(attachment.type)}</span>
+      )}
+      <div className="thread-attachment-preview-copy">
+        <span title={attachment.file.name}>{attachment.file.name}</span>
+        <small>{formatFileSize(attachment.file.size)}</small>
+      </div>
+      <button aria-label={t('removeAttachment', 'Убрать вложение')} onClick={onRemove} type="button">×</button>
+    </div>
   );
 }
 
