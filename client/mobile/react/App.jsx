@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation, useNavigate } from 'react-router-dom';
 import { RegisterPage } from './components/Auth/RegisterPage.jsx';
 import { LoginPage } from './components/Auth/LoginPage.jsx';
-import { ChatThreadPage, UserProfilePanel } from './components/Chats/ChatThreadPage.jsx';
+import { ChatThreadPage } from './components/Chats/ChatThreadPage.jsx';
 import { ChatsPage } from './components/Chats/ChatsPage.jsx';
 import { RateLimitPage } from './components/RateLimit/RateLimitPage.jsx';
 import { SettingsPage } from './components/Settings/SettingsPage.jsx';
@@ -12,6 +12,7 @@ import { CallProvider } from './components/Calls/CallProvider.jsx';
 import { CallOverlay } from './components/Calls/CallOverlay.jsx';
 import { disconnectRealtimeSocket, useRealtimeSocket } from './hooks/useRealtimeSocket.js';
 import { services } from '../application/services/serviceContainer.js';
+import UserProfilePanel from "./components/components/ProfilePanel/UserProfilePanel";
 
 export function App({ basename = '', forceMobile = false }) {
   const homePath = withBasePath(basename, '/chats');
