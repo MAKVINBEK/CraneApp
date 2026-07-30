@@ -19,6 +19,7 @@ import (
 )
 
 func main() {
+	_ = config.Required("ALLOWED_ORIGINS")
 	pool, err := db.Open(config.Required("DATABASE_URL"))
 	if err != nil {
 		log.Fatal(err)
