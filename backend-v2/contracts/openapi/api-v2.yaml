@@ -832,16 +832,20 @@ components:
         isEncrypted: { type: boolean }
     Message:
       type: object
-      required: [id, chatId, senderId, content, type, isPinned, isEdited, createdAt, updatedAt]
+      required: [id, chatId, senderId, senderFirstName, content, type, isForwarded, isPinned, isEdited, createdAt, updatedAt]
       properties:
         id: { type: string, format: uuid }
         chatId: { type: string, format: uuid }
         senderId: { type: string, format: uuid }
         senderName: { type: string }
+        senderFirstName: { type: string }
         senderAvatar: { type: string }
         content: { type: string }
         type: { type: string }
         replyTo: { type: string, format: uuid }
+        replyToMessageId: { type: string, format: uuid }
+        replySenderName: { type: string }
+        replyToSenderName: { type: string, description: Compatibility alias used by the current frontend }
         metadata:
           type: object
           additionalProperties: true
@@ -850,6 +854,8 @@ components:
             mediaType: { type: string }
             fileName: { type: string, maxLength: 255 }
             sizeBytes: { type: integer, format: int64, minimum: 0, maximum: 104857600 }
+        isForwarded: { type: boolean }
+        forwardedSenderName: { type: string }
         isPinned: { type: boolean }
         isEdited: { type: boolean }
         createdAt: { type: string }
