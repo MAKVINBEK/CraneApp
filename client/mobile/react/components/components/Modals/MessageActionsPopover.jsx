@@ -1,4 +1,6 @@
-import {Icon} from "../Icon";
+import { Icon } from "../Icon";
+
+const REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 
 const MessageActionsPopover = ({
                                    actionMenu,
@@ -22,20 +24,29 @@ const MessageActionsPopover = ({
                                    t,
                                }) => {
     const mine = message.senderId === currentUserId;
-    const reactions = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
-    const isPinned = pinnedMessages.find(
-        (pinned) => pinned.messageId === message.id,
-    );
-    const isSelected = selectedMessages.find(({ id }) => id === message.id);
+    const isPinned = pinnedMessages.some((p) => p.messageId === message.id);
+    const isSelected = selectedMessages.some((m) => m.id === message.id);
+
+    // Декларативная конфигурация для динамического рендеринга кнопок
+    const buttons = [
+        { show: !selectionMode, icon: "reply", key: "reply", def: "Ответить", action: () => onReply(message) },
+        { show: !selectionMode, icon: "copy", key: "copy", def: "Скопировать", action: () => onCopy(message) },
+        { show: !mine && !selectionMode, icon: "language", key: "translate", def: "Перевести", action: () => onTranslate(message) },
+        { show: mine && !selectionMode, icon: "edit", key: "edit", def: "Изменить", action: () => onEdit(message) },
+        { show: !isPinned && !selectionMode, icon: "pin", key: "pin", def: "Закрепить", action: () => onPin(message) },
+        { show: isPinned && !selectionMode, icon: "pin", key: "unpin", def: "Открепить", action: () => onUnpin(message) },
+        { show: true, icon: "forward", key: "forward", def: "Переслать", action: () => onForward(message) },
+        { show: mine, icon: "trash", key: "delete", def: "Удалить", action: () => onDelete(message), className: "is-danger" },
+    ];
 
     return (
         <div
             className="message-actions-popover"
-            onClick={(event) => event.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
             style={{ left: actionMenu.x, top: actionMenu.y }}
         >
             <div className="message-reaction-actions">
-                {reactions.map((emoji) => (
+                {REACTIONS.map((emoji) => (
                     <button
                         aria-label={emoji}
                         key={emoji}
@@ -47,101 +58,27 @@ const MessageActionsPopover = ({
                     </button>
                 ))}
             </div>
+
             <div className="message-text-actions">
-                {!selectionMode && (
-                    <button
-                        onClick={() => runAction(() => onReply(message))}
-                        type="button"
-                    >
-                        <Icon name="reply" />
-                        <span>{t("reply", "Ответить")}</span>
+                {buttons.filter(b => b.show).map((b) => (
+                    <button key={b.key} className={b.className} onClick={() => runAction(b.action)} type="button">
+                        <Icon name={b.icon} />
+                        <span>{t(b.key, b.def)}</span>
                     </button>
-                )}
-                {!selectionMode && (
-                    <button
-                        onClick={() => runAction(() => onCopy(message))}
-                        type="button"
-                    >
-                        <Icon name="copy" />
-                        <span>{t("copy", "Скопировать")}</span>
-                    </button>
-                )}
-                {!mine && !selectionMode && (
-                    <button
-                        type="button"
-                        onClick={() => runAction(() => onTranslate(message))}
-                    >
-                        <Icon name="language" />
-                        <span>{t("translate", "Перевести")}</span>
-                    </button>
-                )}
-                {mine && !selectionMode && (
-                    <button
-                        onClick={() => runAction(() => onEdit(message))}
-                        type="button"
-                    >
-                        <Icon name='edit' />
-                        <span>{t("edit", "Изменить")}</span>
-                    </button>
-                )}
-                {!isPinned && !selectionMode && (
-                    <button onClick={() => runAction(() => onPin(message))} type="button">
-                        <Icon name="pin" />
-                        <span>{t("pin", "Закрепить")}</span>
-                    </button>
-                )}
-                {isPinned && !selectionMode && (
-                    <button
-                        onClick={() => runAction(() => onUnpin(message))}
-                        type="button"
-                    >
-                        <Icon name="pin" />
-                        <span>{t("unpin", "Открепить")}</span>
-                    </button>
-                )}
+                ))}
+
                 <button
-                    onClick={() => runAction(() => onForward(message))}
+                    onClick={() => runAction(() => selectionMode ? onSelection(message) : onStartSelection(message))}
                     type="button"
                 >
-                    <Icon name="forward" />
-                    <span>{t("forward", "Переслать")}</span>
-                </button>
-                {mine && (
-                    <button
-                        className="is-danger"
-                        onClick={() => runAction(() => onDelete(message))}
-                        type="button"
-                    >
-                        <Icon name="trash" />
-                        <span>{t("delete", "Удалить")}</span>
-                    </button>
-                )}
-                <button
-                    onClick={() => {
-                        if (selectionMode) {
-                            runAction(() => {
-                                onSelection(message);
-                            });
-
-                            return;
-                        }
-
-                        runAction(() => {
-                            onStartSelection(message);
-                        });
-                    }}
-                    type="button"
-                >
-                    <Icon name="check-circle" className={"fill-transparent"} />
+                    <Icon name="check-circle" className="fill-transparent" />
                     <span>
-            {isSelected
-                ? t("uncheckMessage", "Снять выбор")
-                : t("checkMessage", "Выбрать")}
-          </span>
+                        {isSelected ? t("uncheckMessage", "Снять выбор") : t("checkMessage", "Выбрать")}
+                    </span>
                 </button>
             </div>
         </div>
     );
-}
+};
 
 export default MessageActionsPopover;

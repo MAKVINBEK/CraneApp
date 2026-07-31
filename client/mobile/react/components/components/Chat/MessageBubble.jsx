@@ -3,9 +3,7 @@ import {MessageCheckbox} from "../../common/MessageCheckbox";
 import {formatSize} from "../../../../utils/formatSize";
 import {Icon} from "../Icon";
 
-function hasMessageMedia(message) {
-    return Boolean(message.mediaUrl || message.mediaUnavailable);
-}
+const hasMessageMedia = (msg) => !!(msg.mediaUrl || msg.mediaUnavailable);
 
 function parseCallContent(content) {
     if (!content || typeof content !== "string") return {};
@@ -20,21 +18,16 @@ function parseCallContent(content) {
 function formatCallDuration(seconds) {
     const total = Number(seconds) || 0;
     if (total <= 0) return "";
-    const minutes = Math.floor(total / 60);
-    const rest = total % 60;
-    if (!minutes) return `${rest} сек`;
-    return `${minutes}:${String(rest).padStart(2, "0")}`;
+    const mins = Math.floor(total / 60);
+    const rest = String(total % 60).padStart(2, "0");
+    return mins ? `${mins}:${rest}` : `${total % 60} сек`;
 }
 
 function CallMessageContent({ message, t }) {
-    const call = parseCallContent(message.content);
-    const duration = formatCallDuration(call.duration);
-
+    const duration = formatCallDuration(parseCallContent(message.content).duration);
     return (
         <div className="message-call-content">
-            <div className="message-call-icon" aria-hidden="true">
-                <Icon name="phone" />
-            </div>
+            <div className="message-call-icon" aria-hidden="true"><Icon name="phone" /></div>
             <div className="message-call-copy">
                 <strong>{t("callEnded", "Звонок завершен")}</strong>
                 {duration ? <span>{duration}</span> : null}
@@ -90,76 +83,46 @@ function renderMessageContent(content) {
 function formatMessageTime(value) {
     if (!value) return "";
     const date = value instanceof Date ? value : new Date(value);
-    if (Number.isNaN(date.getTime())) return "";
-
-    return new Intl.DateTimeFormat(undefined, {
-        hour: "2-digit",
-        minute: "2-digit",
-    }).format(date);
+    return Number.isNaN(date.getTime()) ? "" : new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(date);
 }
 
 function MessageMedia({ message, onOpenImage, t }) {
-    if (message.mediaUnavailable) {
+    const { mediaUnavailable, mediaUnavailableReason, mediaUrl, mediaType, type, mediaEncryption } = message;
+
+    if (mediaUnavailable) {
         return (
             <div className="message-media-unavailable">
-                {message.mediaUnavailableReason ||
-                    t(
-                        "mediaUnavailableUnencrypted",
-                        "Медиа недоступно: файл не зашифрован",
-                    )}
+                {mediaUnavailableReason ?? t("mediaUnavailableUnencrypted", "Медиа недоступно: файл не зашифрован")}
             </div>
         );
     }
 
-    if (!message.mediaUrl) return null;
+    if (!mediaUrl) return null;
 
-    const type = message.mediaType || message.type;
-    if (type === "image" || type === "gif" || type === "sticker") {
+    const actualType = mediaType || type;
+
+    if (["image", "gif", "sticker"].includes(actualType)) {
         return (
-            <button
-                aria-label={t("openImage", "Открыть изображение")}
-                className="message-media-open"
-                onClick={() => onOpenImage(message.mediaUrl)}
-                type="button"
-            >
-                <img
-                    alt=""
-                    className={`message-media message-media-${type}`}
-                    src={message.mediaUrl}
-                />
+            <button aria-label={t("openImage", "Открыть изображение")} className="message-media-open" onClick={() => onOpenImage(mediaUrl)} type="button">
+                <img alt="" className={`message-media message-media-${actualType}`} src={mediaUrl} />
             </button>
         );
     }
-    if (type === "video") {
-        return <video className="message-media" controls src={message.mediaUrl} />;
+
+    if (["video", "audio"].includes(actualType)) {
+        return React.createElement(actualType, { className: "message-media", controls: true, src: mediaUrl });
     }
-    if (type === "audio" || type === "voice") {
-        return <audio className="message-media" controls src={message.mediaUrl} />;
+    if (actualType === "voice") {
+        return <audio className="message-media" controls src={mediaUrl} />;
     }
-    if (type === "file") {
+
+    if (actualType === "file") {
         return (
-            <a className="message-media-file" download href={message.mediaUrl}>
-                <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="24"
-                    height="24"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                >
-                    <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
-                    <path d="M14 2v5a1 1 0 0 0 1 1h5" />
-                </svg>
+            <a className="message-media-file" download href={mediaUrl}>
+                <Icon name="media-file"/>
                 <div className="message-media-file__content">
-          <span className="message-media-file__title">
-            {message.mediaEncryption.fileName}
-          </span>
-                    <span className="message-media-file__size">
-            {formatSize(message.mediaEncryption.sizeBytes)}
-          </span>
+                    <span className="message-media-file__title">{mediaEncryption.fileName}</span>
+                    <span className="message-media-file__size">{formatSize(mediaEncryption.sizeBytes)}</span>
                 </div>
             </a>
         );
@@ -167,6 +130,7 @@ function MessageMedia({ message, onOpenImage, t }) {
 
     return null;
 }
+
 
 const MessageBubble = ({
                            currentUserId,
@@ -245,11 +209,9 @@ const MessageBubble = ({
         ? messages.find(({ id }) => id === message.replyTo)
         : null;
 
-    const replyText =
-        repliedMessage?.content?.trim() || message.replyToContent?.trim() || "";
+    const replyText = repliedMessage?.content?.trim() || message.replyToContent?.trim() || "";
 
-    const replyImage =
-        repliedMessage?.mediaUrl || message.replyToMediaUrl || null;
+    const replyImage = repliedMessage?.mediaUrl || message.replyToMediaUrl || null;
 
     return (
         <article

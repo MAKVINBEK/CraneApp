@@ -4,12 +4,7 @@ import React from 'react';
 // Список иконок, работающих через заливку
 const FILLED_ICONS = ['reply', 'edit', 'trash', 'phone', 'video', 'copy'];
 
-export const Icon = ({
-                                              name,
-                                              size = 24,
-                                              className = '',
-                                              ...props
-                                          }) => {
+export const Icon = ({ name, size = 24, className = '', ...props}) => {
     const isFilled = FILLED_ICONS.includes(name);
     return (
         <svg
