@@ -288,6 +288,16 @@
   -webkit-backdrop-filter: blur(8px);
 }
 
+.group-info-modal-content--glass-panel {
+  background: linear-gradient(
+    180deg,
+    rgba(22, 22, 22, 0.95) 0%,
+    rgba(35, 35, 35, 0.85) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.4);
+}
+
 .glass-panel {
   background: linear-gradient(
     180deg,

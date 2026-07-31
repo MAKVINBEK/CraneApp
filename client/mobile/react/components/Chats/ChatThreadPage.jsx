@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { services } from '../../../application/services/serviceContainer.js';
 import Message from '../../../domain/entities/Message.js';
 import { formatSize } from '../../../utils/formatSize.js';
@@ -7,13 +7,14 @@ import { sortMessagesChronologically } from '../../../utils/sortMessagesChronolo
 import { useRealtimeSocket } from '../../hooks/useRealtimeSocket.js';
 import { useToasts } from '../../hooks/useToasts.js';
 import { translateText } from '../../services/translatorApi.js';
+import { useChatStore } from '../../store/chat.js';
+import '../../styles/ChatThreadPage.css';
 import { useCall } from '../Calls/CallProvider.jsx';
 import { Identicon } from '../common/Identicon.jsx';
 import { MessageCheckbox } from '../common/MessageCheckbox.jsx';
 import { PinnedMessages } from '../common/PinnedMessages.jsx';
 import { ForwardChatMessagesModal } from './ForwardChatMessagesModal.jsx';
 import { GroupInfoModal } from './GroupInfoModal.jsx';
-import '../../styles/ChatThreadPage.css';
 
 export function ChatThreadPage({
   chatId,
@@ -22,7 +23,8 @@ export function ChatThreadPage({
   profileMode = 'modal',
   t = fallbackTranslate,
 }) {
-  const [chat, setChat] = useState(null);
+  const chat = useChatStore(state => state.chat)
+  const setChat = useChatStore(state => state.setChat)
   const [draft, setDraft] = useState("");
   const [editingMessage, setEditingMessage] = useState(null);
   const [error, setError] = useState("");
@@ -56,6 +58,7 @@ export function ChatThreadPage({
   const { eventBus, socket } = useRealtimeSocket(Boolean(chatId));
   const { initiateCall } = useCall();
   const { showToast } = useToasts();
+  const navigate = useNavigate();
 
   const [showCallMenu, setShowCallMenu] = useState(false);
   const timerRef = useRef(null);
@@ -143,6 +146,7 @@ export function ChatThreadPage({
       .catch((err) => {
         if (!isMounted) return;
         setError(err.message || t("chatLoadError", "Не удалось загрузить чат"));
+        navigate("/chats");
       })
       .finally(() => {
         if (isMounted) setIsLoading(false);
@@ -1193,7 +1197,6 @@ export function ChatThreadPage({
 
       {chat?.type === "group" && (
         <GroupInfoModal
-          chatId={chatId}
           isOpen={isGroupInfoOpen}
           onClose={() => setIsGroupInfoOpen(false)}
           t={t}

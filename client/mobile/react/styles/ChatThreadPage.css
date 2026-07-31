@@ -288,8 +288,8 @@
 	display: none;
 }
 
-/* На мобильных устройствах (до 768px) */
-@media (max-width: 768px) {
+/* На мобильных устройствах (до 920px) */
+@media (max-width: 920px) {
 	.thread-back {
 		display: inline-flex;
 		align-items: center;
