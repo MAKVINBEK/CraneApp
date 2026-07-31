@@ -11,11 +11,12 @@ import (
 )
 
 var (
-	ErrNotFound      = errors.New("chat not found")
-	ErrForbidden     = errors.New("access denied")
-	ErrInvalidInput  = errors.New("invalid input")
-	ErrUserNotFound  = errors.New("user not found")
-	ErrBlockedByUser = errors.New("blocked by user")
+	ErrNotFound        = errors.New("chat not found")
+	ErrForbidden       = errors.New("access denied")
+	ErrInvalidInput    = errors.New("invalid input")
+	ErrUserNotFound    = errors.New("user not found")
+	ErrBlockedByUser   = errors.New("blocked by user")
+	ErrInvalidChatType = errors.New("invalid chat type")
 )
 
 type Chat struct {
@@ -460,13 +461,23 @@ func (s *Service) CreateGroup(ctx context.Context, ownerID, title, description, 
 	return chatID, tx.Commit()
 }
 
-func (s *Service) UpdateChat(ctx context.Context, actorID, chatID, title, description, avatarURL string) (Chat, error) {
-	role, err := s.memberRole(ctx, actorID, chatID)
+func (s *Service) UpdateGroup(ctx context.Context, actorID, chatID, title, description, avatarURL string) (Chat, error) {
+	var chatType string
+	var role string
+
+	err := s.db.QueryRowContext(ctx, `
+		SELECT c.type, m.role
+		FROM chats.chats c
+		JOIN chats.members m ON m.chat_id = c.id
+		WHERE c.id = $1
+		AND m.user_id = $2
+	`, chatID, actorID).Scan(&chatType, &role)
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return Chat{}, ErrNotFound
+	}
 	if err != nil {
 		return Chat{}, err
-	}
-	if role != "owner" && role != "admin" {
-		return Chat{}, ErrForbidden
 	}
 
 	title = strings.TrimSpace(title)
@@ -474,10 +485,22 @@ func (s *Service) UpdateChat(ctx context.Context, actorID, chatID, title, descri
 		return Chat{}, ErrInvalidInput
 	}
 
+	if chatType != "group" {
+		return Chat{}, ErrInvalidChatType
+	}
+
+	if role != "owner" && role != "admin" {
+		return Chat{}, ErrForbidden
+	}
+
 	_, err = s.db.ExecContext(ctx, `
 		UPDATE chats.chats
-		SET title = $1, description = $2, avatar_url = $3, updated_at = NOW()
+		SET title = $1,
+			description = $2,
+			avatar_url = $3,
+			updated_at = NOW()
 		WHERE id = $4
+		AND type = 'group'
 	`, title, description, avatarURL, chatID)
 	if err != nil {
 		return Chat{}, err

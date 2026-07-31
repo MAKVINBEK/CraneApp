@@ -109,17 +109,6 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 	case suffix == "" && r.Method == http.MethodGet:
 		chat, err := h.service.Get(r.Context(), current.ID, chatID)
 		respondChat(w, r, chat, err)
-	case suffix == "" && r.Method == http.MethodPatch:
-		var input struct {
-			Title       string `json:"title"`
-			Description string `json:"description"`
-			AvatarURL   string `json:"avatarUrl"`
-		}
-		if !decode(w, r, &input) {
-			return
-		}
-		chat, err := h.service.UpdateChat(r.Context(), current.ID, chatID, input.Title, input.Description, input.AvatarURL)
-		respondChat(w, r, chat, err)
 	case suffix == "" && r.Method == http.MethodDelete:
 		err := h.service.DeleteChat(r.Context(), current.ID, chatID)
 		if errors.Is(err, ErrForbidden) {
