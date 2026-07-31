@@ -461,7 +461,7 @@ func (s *Service) CreateGroup(ctx context.Context, ownerID, title, description, 
 	return chatID, tx.Commit()
 }
 
-func (s *Service) UpdateGroup(ctx context.Context, actorID, chatID, title, description, avatarURL string) (Chat, error) {
+func (s *Service) UpdateGroup(ctx context.Context, actorID, chatID string, title, description, avatarURL *string) (Chat, error) {
 	var chatType string
 	var role string
 
@@ -480,9 +480,15 @@ func (s *Service) UpdateGroup(ctx context.Context, actorID, chatID, title, descr
 		return Chat{}, err
 	}
 
-	title = strings.TrimSpace(title)
-	if title == "" {
+	if title == nil && description == nil && avatarURL == nil {
 		return Chat{}, ErrInvalidInput
+	}
+	if title != nil {
+		trimmedTitle := strings.TrimSpace(*title)
+		if trimmedTitle == "" {
+			return Chat{}, ErrInvalidInput
+		}
+		title = &trimmedTitle
 	}
 
 	if chatType != "group" {
@@ -495,9 +501,9 @@ func (s *Service) UpdateGroup(ctx context.Context, actorID, chatID, title, descr
 
 	_, err = s.db.ExecContext(ctx, `
 		UPDATE chats.chats
-		SET title = $1,
-			description = $2,
-			avatar_url = $3,
+		SET title = COALESCE($1::text, title),
+			description = COALESCE($2::text, description),
+			avatar_url = COALESCE($3::text, avatar_url),
 			updated_at = NOW()
 		WHERE id = $4
 		AND type = 'group'
@@ -506,7 +512,21 @@ func (s *Service) UpdateGroup(ctx context.Context, actorID, chatID, title, descr
 		return Chat{}, err
 	}
 
-	return s.Get(ctx, actorID, chatID)
+	updatedChat, err := s.Get(ctx, actorID, chatID)
+	if err != nil {
+		return Chat{}, err
+	}
+
+	if s.ws != nil {
+		payload, _ := json.Marshal(map[string]any{
+			"type":   "chat_updated",
+			"chatId": chatID,
+			"chat":   updatedChat,
+		})
+		s.ws.BroadcastToChat(chatID, payload, "")
+	}
+
+	return updatedChat, nil
 }
 
 func (s *Service) DeleteChat(ctx context.Context, actorID, chatID string) error {
