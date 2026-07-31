@@ -1,7 +1,9 @@
 package chat
 
 import (
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 
@@ -10,9 +12,9 @@ import (
 )
 
 type UpdateGroupInput struct {
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	AvatarURL   string `json:"avatarUrl"`
+	Title       *string `json:"title"`
+	Description *string `json:"description"`
+	AvatarURL   *string `json:"avatarUrl"`
 }
 
 func (h *Handler) UpdateGroup(w http.ResponseWriter, r *http.Request) {
@@ -20,13 +22,18 @@ func (h *Handler) UpdateGroup(w http.ResponseWriter, r *http.Request) {
 	chatID := r.PathValue("chatID")
 
 	var input UpdateGroupInput
-	if !decode(w, r, &input) {
+	if !decodeUpdateGroup(w, r, &input) {
 		return
 	}
 
-	input.Title = strings.TrimSpace(input.Title)
-	input.Description = strings.TrimSpace(input.Description)
-	input.AvatarURL = strings.TrimSpace(input.AvatarURL)
+	if input.Title == nil && input.Description == nil && input.AvatarURL == nil {
+		httpx.ErrorJSON(w, r, http.StatusBadRequest, "validation_failed", "at least one field is required")
+		return
+	}
+
+	trimString(input.Title)
+	trimString(input.Description)
+	trimString(input.AvatarURL)
 
 	updatedChat, err := h.service.UpdateGroup(
 		r.Context(),
@@ -77,5 +84,28 @@ func (h *Handler) UpdateGroup(w http.ResponseWriter, r *http.Request) {
 		httpx.JSON(w, http.StatusOK, map[string]any{
 			"chat": updatedChat,
 		})
+	}
+}
+
+func decodeUpdateGroup(w http.ResponseWriter, r *http.Request, input *UpdateGroupInput) bool {
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<10))
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(input); err != nil {
+		httpx.ErrorJSON(w, r, http.StatusBadRequest, "invalid_json", "invalid JSON body")
+		return false
+	}
+
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		httpx.ErrorJSON(w, r, http.StatusBadRequest, "invalid_json", "invalid JSON body")
+		return false
+	}
+
+	return true
+}
+
+func trimString(value *string) {
+	if value != nil {
+		*value = strings.TrimSpace(*value)
 	}
 }
