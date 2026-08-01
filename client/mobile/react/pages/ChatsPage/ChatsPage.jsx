@@ -21,9 +21,7 @@ export function ChatsPage({ t = fallbackTranslate }) {
   const typingTimeoutsRef = useRef(new Map());
   const { eventBus } = useRealtimeSocket(true);
   const navigate = useNavigate();
-
-  // --- новое: то, что раньше жило в ChatLayout ---
-  const { chatId } = useParams(); // useParams мёрджит параметры всей ветки, включая дочерний :chatId
+  const { chatId } = useParams();
   const isMobile = useIsMobile();
   const [sidebarWidth, setSidebarWidth] = useState(360);
   const [profileWidth, setProfileWidth] = useState(null);

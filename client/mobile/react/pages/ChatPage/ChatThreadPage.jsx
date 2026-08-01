@@ -14,13 +14,15 @@ import { useToasts } from '../../hooks/useToasts.js';
 import { translateText } from '../../services/translatorApi.js';
 import '../../styles/ChatThreadPage.css';
 import services from '../../services/serviceContainer.js';
+import { useChatStore } from '../../store/chat.js';
 
 export function ChatThreadPage({
 t = fallbackTranslate,
 }) {
 const { chatId } = useParams();
 const { onProfileStateChange, profileCloseToken, profileMode } = useOutletContext()
-const [chat, setChat] = useState(null);
+const chat = useChatStore((state) => state.chat);
+const setChat = useChatStore((state) => state.setChat);
 const [draft, setDraft] = useState("");
 const [editingMessage, setEditingMessage] = useState(null);
 const [error, setError] = useState("");

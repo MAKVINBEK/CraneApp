@@ -89,13 +89,22 @@ export const router = createBrowserRouter([
                       ),
                   },
                   {
-                    path: ":chatId",
+                    path: REACT_ROUTES.CHAT_BY_ID,
                     lazy: () =>
                       import("../pages/ChatPage/ChatThreadPage.jsx").then(
                         (m) => ({ Component: m.ChatThreadPage }),
                       ),
                   },
                 ],
+              },
+              {
+                path: REACT_ROUTES.CONTACTS,
+                lazy: () =>
+                  import("../pages/ContactsPage/ContactsPage.jsx").then(
+                    (m) => ({
+                      Component: m.ContactsPage,
+                    }),
+                  ),
               },
               {
                 path: REACT_ROUTES.SETTINGS,

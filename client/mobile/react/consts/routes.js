@@ -4,6 +4,7 @@ export const REACT_ROUTES = {
   REGISTER: "register",
   CHATS: "/chats",
   CHAT_BY_ID: "/chats/:chatId",
+  CONTACTS: "/contacts",
   SETTINGS: "/settings",
   CREATE_GROUP: "/create-group",
 };
