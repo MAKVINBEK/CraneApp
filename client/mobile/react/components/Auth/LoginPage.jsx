@@ -2,17 +2,18 @@ import { useState } from 'react';
 import { ToastStack } from '../common/ToastStack.jsx';
 import { fetchUserSettings, loginUser, saveAuthSession } from '../../services/authApi.js';
 import { useToasts } from '../../hooks/useToasts.js';
+import {useTranslate} from "../../hooks/useTranslate";
 
 export function LoginPage({
   redirectPath = '/chats',
-  registerHref = './register.html',
-  t = fallbackTranslate,
+  registerHref = './register.html'
 }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { showToast, toasts } = useToasts();
+  const { t } = useTranslate()
 
   if (localStorage.getItem('craneapp_auth_token')) {
     window.location.href = redirectPath;
@@ -150,8 +151,4 @@ function EyeIcon({ visible }) {
       <circle cx="12" cy="12" r="3" />
     </svg>
   );
-}
-
-function fallbackTranslate(_key, fallback) {
-  return fallback;
 }

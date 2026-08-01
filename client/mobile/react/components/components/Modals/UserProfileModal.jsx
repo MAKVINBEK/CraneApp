@@ -1,28 +1,23 @@
 import UserProfilePanel from "../ProfilePanel/UserProfilePanel";
+import {useChat} from "../../../context/ChatContext";
 
 const UserProfileModal = ({
-                              chat,
-                              error,
-                              isLoading,
-                              isOpen,
-                              messages,
                               onClose,
-                              t,
-                              user,
+                              profileModal
                           }) => {
-    if (!isOpen) return null;
+    const { messages, chat } = useChat()
+    if (!profileModal.isOpen) return null;
 
     return (
         <div className="user-profile-modal" onClick={onClose} role="presentation">
             <UserProfilePanel
                 chat={chat}
-                error={error}
-                isLoading={isLoading}
+                error={profileModal.error}
+                isLoading={profileModal.isLoading}
                 messages={messages}
                 onClose={onClose}
                 stopPropagation
-                t={t}
-                user={user}
+                user={profileModal.user}
             />
         </div>
     );

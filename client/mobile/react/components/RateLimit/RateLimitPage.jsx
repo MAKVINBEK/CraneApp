@@ -1,10 +1,12 @@
 import { useCountdown } from '../../hooks/useCountdown.js';
+import { useTranslate } from "../../hooks/useTranslate";
 
 const RING_RADIUS = 44;
 const CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
-export function RateLimitPage({ retryAfter, onBack, t = fallbackTranslate }) {
+export function RateLimitPage({ retryAfter, onBack }) {
   const { initialSeconds, isComplete, remaining } = useCountdown(retryAfter);
+  const { t } = useTranslate()
   const progress = remaining / initialSeconds;
   const dashOffset = CIRCUMFERENCE * (1 - progress);
 
@@ -55,8 +57,4 @@ function BackIcon() {
       <polyline points="15 18 9 12 15 6" />
     </svg>
   );
-}
-
-function fallbackTranslate(_key, fallback) {
-  return fallback;
 }

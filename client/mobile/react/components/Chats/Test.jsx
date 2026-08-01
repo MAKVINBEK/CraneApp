@@ -11,7 +11,7 @@ import { ForwardChatMessagesModal } from "./ForwardChatMessagesModal.jsx";
 import { PinnedMessages } from "../common/PinnedMessages.jsx";
 import { translateText } from "../../services/translatorApi.js";
 import UserProfileModal from "../components/Modals/UserProfileModal";
-import MessageBubble from "../components/Chat/MessageBubble";
+import MessageBubble from "../components/MessageBubble/MessageBubble";
 import MessageActionsPopover from "../components/Modals/MessageActionsPopover";
 
 export function ChatThreadPage({

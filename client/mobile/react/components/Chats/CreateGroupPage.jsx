@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { services } from '../../../application/services/serviceContainer.js';
 import { ToastStack } from '../common/ToastStack.jsx';
 import { useToasts } from '../../hooks/useToasts.js';
+import {useTranslate} from "../../hooks/useTranslate";
 
-export function CreateGroupPage({ t = (k, f) => f }) {
+export function CreateGroupPage() {
   const navigate = useNavigate();
   const { toasts, showToast } = useToasts();
+    const { t } = useTranslate()
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');

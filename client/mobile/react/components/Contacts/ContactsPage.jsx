@@ -4,8 +4,10 @@ import { services } from '../../../application/services/serviceContainer.js';
 import { ToastStack } from '../common/ToastStack.jsx';
 import { useToasts } from '../../hooks/useToasts.js';
 import { Identicon } from '../common/Identicon.jsx';
+import {useTranslate} from "../../hooks/useTranslate";
 
-export function ContactsPage({ t = (k, f) => f }) {
+export function ContactsPage() {
+    const { t } = useTranslate()
   const navigate = useNavigate();
   const { toasts, showToast } = useToasts();
   const [query, setQuery] = useState('');

@@ -6,35 +6,40 @@ import { useRealtimeSocket } from "../../hooks/useRealtimeSocket.js";
 import { Identicon } from "../common/Identicon.jsx";
 import { useCall } from "../Calls/CallProvider.jsx";
 import { GroupInfoModal } from "./GroupInfoModal.jsx";
-import { useToasts } from "../../hooks/useToasts.js";
 import { ForwardChatMessagesModal } from "./ForwardChatMessagesModal.jsx";
 import { PinnedMessages } from "../common/PinnedMessages.jsx";
-import { translateText } from "../../services/translatorApi.js";
 import UserProfileModal from "../components/Modals/UserProfileModal";
-import MessageBubble from "../components/Chat/MessageBubble";
+import MessageBubble from "../components/MessageBubble/MessageBubble";
 import MessageActionsPopover from "../components/Modals/MessageActionsPopover";
 import {Icon} from "../components/Icon";
+import {useChat} from "../../context/ChatContext";
+import {useTranslate} from "../../hooks/useTranslate";
 
 export function ChatThreadPage({
   chatId,
   onProfileStateChange,
   profileCloseToken = 0,
   profileMode = "modal",
-  t = fallbackTranslate,
 }) {
-  const [chat, setChat] = useState(null);
-  const [draft, setDraft] = useState("");
-  const [editingMessage, setEditingMessage] = useState(null);
-  const [error, setError] = useState("");
+    const { t } = useTranslate()
+  const { chat, setChat,
+      messages, setMessages,
+      error, setError,
+      editingMessage, setEditingMessage,
+      draft, setDraft,
+      replyToMessage, setReplyToMessage,
+      selectedMessages, setSelectedMessages,
+      pinnedMessages, setPinnedMessages,
+      selectionMode, setSelectionMode,
+      actionMenu, setActionMenu,
+      translations
+  } = useChat();
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [pendingAttachment, setPendingAttachment] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [replyToMessage, setReplyToMessage] = useState(null);
   const [isGroupInfoOpen, setIsGroupInfoOpen] = useState(false);
   const [openedImage, setOpenedImage] = useState(null);
   const [typingUserId, setTypingUserId] = useState(null);
-  const [actionMenu, setActionMenu] = useState(null);
   const [profileModal, setProfileModal] = useState({
     isOpen: false,
     isLoading: false,
@@ -42,11 +47,6 @@ export function ChatThreadPage({
     user: null,
   });
   const [isForwardModalOpen, setIsForwardModalOpen] = useState(false);
-  const [pinnedMessages, setPinnedMessages] = useState([]);
-  const [selectionMode, setSelectionMode] = useState(false);
-  const [selectedMessages, setSelectedMessages] = useState([]);
-  const [translations, setTranslations] = useState({});
-  const [translatingIds, setTranslatingIds] = useState(new Set());
   const currentUser = useMemo(() => getCurrentUser(), []);
   const bottomRef = useRef(null);
   const attachmentInputRef = useRef(null);
@@ -55,7 +55,6 @@ export function ChatThreadPage({
   const draftRef = useRef(null);
   const { eventBus, socket } = useRealtimeSocket(Boolean(chatId));
   const { initiateCall } = useCall();
-  const { showToast } = useToasts();
 
   useEffect(() => {
     if (profileMode !== "panel" || typeof onProfileStateChange !== "function")
@@ -344,109 +343,10 @@ export function ChatThreadPage({
     }
   }
 
-  async function handleDelete(message) {
-    try {
-      if (selectionMode) {
-        await Promise.all(
-          selectedMessages.map((selectedMessage) => {
-            if (selectedMessage.senderId !== currentUser?.id) return;
-
-            services.messageService.deleteMessage(selectedMessage.id);
-          }),
-        );
-
-        const selectedIds = new Set(
-          selectedMessages.map((message) => {
-            if (message.senderId !== currentUser?.id) return;
-            return message.id;
-          }),
-        );
-
-        setMessages((messages) =>
-          messages.filter((message) => !selectedIds.has(message.id)),
-        );
-        setSelectedMessages([]);
-        setSelectionMode(false);
-      }
-
-      if (!selectionMode) {
-        if (message.senderId !== currentUser?.id) return;
-        await services.messageService.deleteMessage(message.id);
-        setMessages((items) => items.filter((item) => item.id !== message.id));
-        if (editingMessage?.id === message.id) {
-          setEditingMessage(null);
-          setDraft("");
-        }
-        if (replyToMessage?.id === message.id) {
-          setReplyToMessage(null);
-        }
-      }
-      setError("");
-    } catch (err) {
-      setError(
-        err.message ||
-          t("messageDeleteError", "Не удалось удалить сообщение(я)"),
-      );
-    }
-  }
-
-  async function handleReact(message, emoji) {
-    try {
-      const result = await services.messageService.reactToMessage(
-        message.id,
-        emoji,
-      );
-      setMessages((items) =>
-        updateMessage(items, message.id, { reactions: result.reactions || [] }),
-      );
-      setError("");
-    } catch (err) {
-      setError(
-        err.message || t("reactionError", "Не удалось обновить реакцию"),
-      );
-    }
-  }
-
-  function openMessageActions(message, rect, clientX, clientY) {
-    const menuWidth = 232;
-    const menuHeight = 350;
-    const gap = 12;
-    const padding = 8;
-
-    const viewportWidth = window.innerWidth || menuWidth;
-    const viewportHeight = window.innerHeight || menuHeight;
-
-    const x = Math.min(
-      Math.max(clientX + gap, padding),
-      viewportWidth - menuWidth - padding,
-    );
-
-    const y = Math.min(
-      Math.max(clientY + gap, padding),
-      viewportHeight - menuHeight - padding,
-    );
-    setActionMenu({ messageId: message.id, x, y });
-  }
-
-  function closeMessageActions() {
-    setActionMenu(null);
-  }
-
-  function runMessageAction(action) {
-    action();
-    closeMessageActions();
-  }
-
   function startEdit(message) {
     setEditingMessage(message);
     setReplyToMessage(null);
     setDraft(message.content || "");
-    draftRef.current.focus();
-  }
-
-  function startReply(message) {
-    setReplyToMessage(message);
-    setEditingMessage(null);
     draftRef.current.focus();
   }
 
@@ -483,66 +383,6 @@ export function ChatThreadPage({
     }
   }
 
-  function handleCopyMessage(message) {
-    navigator.clipboard.writeText(message.content);
-  }
-
-  async function handlePinMessage(message) {
-    try {
-      await services.messageService.pinMessage(chatId, message.id);
-      setPinnedMessages((prev) => {
-        const alreadyPinned = prev.some(
-          (pinnedMessage) => pinnedMessage.messageId === message.id,
-        );
-
-        if (alreadyPinned) {
-          showToast(
-            "error",
-            t("messageAlreadyPinned", "Это сообщение уже закреплено"),
-            "❌",
-          );
-          return prev;
-        }
-
-        return [...prev, { message, messageId: message.id }];
-      });
-    } catch (err) {
-      setError(
-        err.message || t("messagePinError", "Не удалось закрепить сообщение"),
-      );
-    }
-  }
-
-  async function handleUnpinMessage(message) {
-    try {
-      await services.messageService.unpinMessage(chatId, message.id);
-      setPinnedMessages((messages) => {
-        const pinnedMessage = messages.find(
-          (pinned) => pinned.messageId === message.id,
-        );
-        if (!pinnedMessage) {
-          showToast(
-            "error",
-            t("messageAlreadyUnpinned", "Это сообщение уже откреплено"),
-            "❌",
-          );
-        }
-
-        return messages.filter((pinned) => pinned.messageId !== message.id);
-      });
-    } catch (err) {
-      setError(
-        err.message || t("messagePinError", "Не удалось открепить сообщение"),
-      );
-    }
-  }
-
-  function startSelection(message) {
-    setSelectionMode(true);
-    setSelectedMessages([message]);
-    setActionMenu(null);
-  }
-
   function toggleMessageSelection(message) {
     setSelectedMessages((messages) => {
       const isMessageSelected = messages.find(({ id }) => id === message.id);
@@ -561,16 +401,6 @@ export function ChatThreadPage({
     });
   }
 
-  function handleForward(message) {
-    if (selectionMode) {
-      setIsForwardModalOpen(true);
-      return;
-    }
-
-    setSelectedMessages([message]);
-    setIsForwardModalOpen(true);
-  }
-
   const handleCloseForwardModal = () => {
     if (selectionMode) {
       setIsForwardModalOpen(false);
@@ -580,46 +410,6 @@ export function ChatThreadPage({
     setSelectedMessages([]);
     setIsForwardModalOpen(false);
   };
-
-  async function handleTranslateMessage(message) {
-    if (translations[message.id]) {
-      setTranslations((prev) => {
-        const next = { ...prev };
-        delete next[message.id];
-        return next;
-      });
-      return;
-    }
-
-    setTranslatingIds((prev) => new Set(prev).add(message.id));
-    try {
-      const { translatedText, targetLanguage, detectedSourceLang } =
-        await translateText(message.content);
-
-      if (detectedSourceLang && detectedSourceLang === targetLanguage) {
-        showToast(
-          "success",
-          t("alreadySameLanguage", "Сообщение уже на вашем языке"),
-          "ℹ️",
-        );
-        return;
-      }
-
-      setTranslations((prev) => ({ ...prev, [message.id]: translatedText }));
-    } catch (err) {
-      showToast(
-        "error",
-        t("translateError", "Не удалось перевести сообщение"),
-        "❌",
-      );
-    } finally {
-      setTranslatingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(message.id);
-        return next;
-      });
-    }
-  }
 
   const title = chat?.name || chat?.title || t("chat", "Чат");
   const subtitle = getChatSubtitle(chat, typingUserId, t);
@@ -636,7 +426,6 @@ export function ChatThreadPage({
           messages={selectedMessages}
           onClose={handleCloseForwardModal}
           setSelectedMessages={setSelectedMessages}
-          t={t}
         />
       )}
       <header className="thread-header">
@@ -754,17 +543,11 @@ export function ChatThreadPage({
         {messages.map((message) => (
           <MessageBubble
             currentUserId={currentUser?.id}
-            isActionTarget={actionMenu?.messageId === message.id}
-            selectionMode={selectionMode}
             key={message.id}
             message={message}
-            messages={messages}
-            selectedMessages={selectedMessages}
             translations={translations}
-            onOpenActions={openMessageActions}
             onOpenImage={(url) => setOpenedImage(url)}
             onSelection={toggleMessageSelection}
-            t={t}
           />
         ))}
         <div ref={bottomRef} />
@@ -774,25 +557,14 @@ export function ChatThreadPage({
         <>
           <div aria-hidden="true" className="message-actions-backdrop" />
           <MessageActionsPopover
-            actionMenu={actionMenu}
             currentUserId={currentUser?.id}
             message={selectedActionMessage}
-            pinnedMessages={pinnedMessages}
-            selectionMode={selectionMode}
-            selectedMessages={selectedMessages}
-            onDelete={handleDelete}
-            onEdit={startEdit}
-            onReact={handleReact}
-            onReply={startReply}
-            runAction={runMessageAction}
-            onCopy={handleCopyMessage}
-            onPin={handlePinMessage}
-            onUnpin={handleUnpinMessage}
-            onStartSelection={startSelection}
             onSelection={toggleMessageSelection}
-            onForward={handleForward}
-            onTranslate={handleTranslateMessage}
-            t={t}
+            currentUser={currentUser}
+            draftRef={draftRef}
+            chatId={chatId}
+            updateMessage={updateMessage}
+            setIsForwardModalOpen={setIsForwardModalOpen}
           />
         </>
       )}
@@ -897,16 +669,11 @@ export function ChatThreadPage({
           chatId={chatId}
           isOpen={isGroupInfoOpen}
           onClose={() => setIsGroupInfoOpen(false)}
-          t={t}
         />
       )}
 
       {profileMode === "modal" ? (
         <UserProfileModal
-          chat={chat}
-          error={profileModal.error}
-          isLoading={profileModal.isLoading}
-          isOpen={profileModal.isOpen}
           messages={messages}
           onClose={() =>
             setProfileModal({
@@ -916,8 +683,7 @@ export function ChatThreadPage({
               user: null,
             })
           }
-          t={t}
-          user={profileModal.user}
+          profileModal={profileModal}
         />
       ) : null}
     </main>
@@ -990,7 +756,8 @@ function getMessagePreview(message) {
   return String(message.content || "").slice(0, 64);
 }
 
-function getChatSubtitle(chat, typingUserId, t) {
+function getChatSubtitle(chat, typingUserId) {
+    const { t } = useTranslate()
   if (typingUserId) return t("typing", "печатает...");
   if (chat?.type === "group") return t("groupChat", "Группа");
   if (chat?.peerIsOnline) return t("online", "онлайн");
@@ -998,7 +765,8 @@ function getChatSubtitle(chat, typingUserId, t) {
   return t("lastSeenRecently", "был(а) недавно");
 }
 
-function formatLastSeen(value, t) {
+function formatLastSeen(value) {
+    const { t } = useTranslate()
   if (value === "recently") return t("lastSeenRecently", "был(а) недавно");
   const date = new Date(value);
   if (Number.isNaN(date.getTime()))
@@ -1024,6 +792,3 @@ function formatLastSeen(value, t) {
   );
 }
 
-function fallbackTranslate(_key, fallback) {
-  return fallback;
-}

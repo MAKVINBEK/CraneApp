@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { services } from '../../../application/services/serviceContainer.js';
 import { useToasts } from '../../hooks/useToasts.js';
 import { Identicon } from '../common/Identicon.jsx';
+import {useTranslate} from "../../hooks/useTranslate";
 
-export function GroupInfoModal({ chatId, isOpen, onClose, t = (k, f) => f }) {
+export function GroupInfoModal({ chatId, isOpen, onClose}) {
   const { showToast } = useToasts();
   const [members, setMembers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);

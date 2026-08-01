@@ -1,90 +1,47 @@
-import {useEffect, useState} from "react";
+import React, {useMemo} from "react";
 import {useCall} from "../../Calls/CallProvider";
 import {Identicon} from "../../common/Identicon";
 import {Icon} from "../Icon";
-import { services } from "../../../../application/services/serviceContainer.js";
+import {useTranslate} from "../../../hooks/useTranslate";
+import {getCurrentUser, getChatSubtitle} from "../../../utils/utils";
+import { useProfileEdit } from "../../../hooks/useProfileEdit";
 
-const getCurrentUser = () => {
-    try { return JSON.parse(localStorage.getItem("craneapp_user_data") || "null"); }
-    catch { return null; }
-};
-
-const formatLastSeen = (value, t) => {
-    if (value === "recently") return t("lastSeenRecently", "был(а) недавно");
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return t("lastSeenRecently", "был(а) недавно");
-
-    const sameDay = date.toDateString() === new Date().toDateString();
-    const formatted = new Intl.DateTimeFormat(undefined, sameDay
-        ? { hour: "2-digit", minute: "2-digit" }
-        : { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }
-    ).format(date);
-
-    return t("lastSeenAt", "был(а) {time}", { time: formatted }).replace("{time}", formatted);
-};
-
-const getChatSubtitle = (chat, typingUserId, t) => {
-    if (typingUserId) return t("typing", "печатает...");
-    if (chat?.type === "group") return t("groupChat", "Группа");
-    if (chat?.peerIsOnline) return t("online", "онлайн");
-    return chat?.peerLastSeen ? formatLastSeen(chat.peerLastSeen, t) : t("lastSeenRecently", "был(а) недавно");
-};
-
-
-const UserProfilePanel = ({ chat, error, isLoading, messages = [], onClose, stopPropagation = false, t, user,}) => {
-    const [editableUser, setEditableUser] = useState(user);
-    const [isEditing, setIsEditing] = useState(false);
-    const [editDraft, setEditDraft] = useState({ firstName: "", bio: "" });
-    const [editError, setEditError] = useState("");
-    const [isSaving, setIsSaving] = useState(false);
+const UserProfilePanel = ({ profileState, onClose, stopPropagation = false}) => {
+    const { t } = useTranslate();
     const { initiateCall } = useCall();
 
-    const profileUser = editableUser || user;
-    const isOwnProfile = !!(profileUser?.id && getCurrentUser()?.id && profileUser.id === getCurrentUser().id);
+    const baseUser = profileState.user;
+
+    const displayName = useMemo(() => {
+        return [baseUser?.firstName, baseUser?.lastName].filter(Boolean).join(" ") ||
+            baseUser?.username || profileState.chat?.name || profileState.chat?.title || t("user", "Пользователь");
+    }, [baseUser, profileState.chat, t]);
+
+    const edit = useProfileEdit(baseUser, displayName, t);
+    const profileUser = edit.editableUser || baseUser;
+
+    const isOwnProfile = useMemo(() => {
+        const currentUserId = getCurrentUser()?.id;
+        return !!(profileUser?.id && currentUserId && profileUser.id === currentUserId);
+    }, [profileUser?.id]);
+
+    const sharedMedia = useMemo(() => {
+        return profileState.messages.filter(m =>
+            m.mediaUrl && ["image", "gif", "sticker", "video"].includes(m.mediaType || m.type)
+        );
+    }, [profileState.messages]);
+
     const username = profileUser?.username ? `@${profileUser.username}` : "";
-    const status = profileUser?.isBot ? t("bot", "бот") : getChatSubtitle(chat, null, t);
-    const avatarUrl = profileUser?.avatarUrl || chat?.avatarUrl || "";
-    const canCall = !!chat?.id;
-
-    const displayName = [profileUser?.firstName, profileUser?.lastName].filter(Boolean).join(" ") ||
-        profileUser?.username || chat?.name || chat?.title || t("user", "Пользователь");
-
-    const sharedMedia = messages.filter(m =>
-        m.mediaUrl && ["image", "gif", "sticker", "video"].includes(m.mediaType || m.type)
-    );
-
-    useEffect(() => {
-        setEditableUser(user);
-        setIsEditing(false);
-        setEditError("");
-    }, [user]);
+    const status = profileUser?.isBot ? t("bot", "бот") : getChatSubtitle(profileState.chat, null, t);
+    const avatarUrl = profileUser?.avatarUrl || profileState.chat?.avatarUrl || "";
+    const canCall = !!profileState.chat?.id;
 
     const copyText = (val) => val && navigator?.clipboard?.writeText(val).catch(() => {});
 
-    const startEdit = () => {
-        setEditDraft({ firstName: profileUser?.firstName || displayName, bio: profileUser?.bio || "" });
-        setEditError("");
-        setIsEditing(true);
-    };
-
-
-    const saveProfileEdit = async (e) => {
-        e.preventDefault();
-        setIsSaving(true);
-        setEditError("");
-        try {
-            const updated = await services.userService.updateMe({ firstName: editDraft.firstName.trim(), bio: editDraft.bio });
-            setEditableUser(updated);
-            setIsEditing(false);
-        } catch (err) {
-            setEditError(err.message || t("profileSaveError", "Не удалось сохранить профиль"));
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
     const startCall = (type) => () => {
-        if (canCall) initiateCall(chat.id, chat?.type, displayName, type, chat?.peerId);
+        if (canCall && profileState.chat) {
+            initiateCall(profileState.chat.id, profileState.chat.type, displayName, type, profileState.chat.peerId);
+        }
     };
 
     const actionButtons = [
@@ -105,60 +62,65 @@ const UserProfilePanel = ({ chat, error, isLoading, messages = [], onClose, stop
                 </button>
                 <strong>{t("information", "Информация")}</strong>
                 {isOwnProfile ? (
-                    <button className="user-profile-edit" onClick={isEditing ? () => setIsEditing(false) : startEdit} type="button">
-                        {isEditing ? t("cancel", "Отмена") : t("editShort", "Изм.")}
+                    // ИСПРАВЛЕНО: Прямой вызов функций из хука edit
+                    <button className="user-profile-edit" onClick={edit.isEditing ? () => edit.setIsEditing(false) : edit.startEdit} type="button">
+                        {edit.isEditing ? t("cancel", "Отмена") : t("editShort", "Изм.")}
                     </button>
                 ) : <span />}
             </header>
 
-            {isLoading ? (
+            {profileState.isLoading ? (
                 <div className="user-profile-state">{t("loading", "Загрузка...")}</div>
-            ) : error ? (
-                <div className="user-profile-state is-error">{error}</div>
+            ) : profileState.error ? (
+                <div className="user-profile-state is-error">{profileState.error}</div>
             ) : (
                 <div className="user-profile-scroll">
                     <div className="user-profile-hero">
                         <div className="user-profile-avatar">
                             {avatarUrl ? <img alt="" src={avatarUrl} /> : (
-                                <Identicon userId={profileUser?.id || chat?.peerId || displayName} size={112} />
+                                <Identicon userId={profileUser?.id || profileState.chat?.peerId || displayName} size={112} />
                             )}
                         </div>
                         <h2>{displayName}</h2>
-                        <p className={`user-profile-status ${chat?.peerIsOnline ? "is-online" : ""}`}>{status}</p>
+                        <p className={`user-profile-status ${profileState.chat?.peerIsOnline ? "is-online" : ""}`}>{status}</p>
                     </div>
 
                     <div className="user-profile-actions">
                         {actionButtons.map((button) =>
-                            <button
-                                disabled={button.disabled}
-                                onClick={button.handleClick}
-                                type="button"
-                            >
+                            <button key={button.name} disabled={button.disabled} onClick={button.handleClick} type="button">
                                 <Icon name={button.name} />
                                 {button.title}
                             </button>
                         )}
                     </div>
 
-                    {isEditing ? (
-                        <form className="user-profile-edit-form" onSubmit={saveProfileEdit}>
+                    {edit.isEditing ? (
+                        // ИСПРАВЛЕНО: Вызов edit.saveProfileEdit вместо saveProfileEdit
+                        <form className="user-profile-edit-form" onSubmit={edit.saveProfileEdit}>
                             {["firstName", "bio"].map((field) => {
                                 const isBio = field === "bio";
-                                const Tag = isBio ? "textarea" : "input";
                                 return (
                                     <label key={field}>
                                         <span>{t(isBio ? "bio" : "name", isBio ? "О себе" : "Имя")}</span>
-                                        <Tag
-                                            onChange={(e) => setEditDraft((draft) => ({ ...draft, [field]: e.target.value }))}
-                                            rows={isBio ? 4 : undefined}
-                                            value={editDraft[field]}
-                                        />
+                                        {isBio ? (
+                                            <textarea
+                                                onChange={(e) => edit.setEditDraft((draft) => ({ ...draft, [field]: e.target.value }))}
+                                                rows={4}
+                                                value={edit.editDraft[field]}
+                                            />
+                                        ) : (
+                                            <input
+                                                onChange={(e) => edit.setEditDraft((draft) => ({ ...draft, [field]: e.target.value }))}
+                                                type="text"
+                                                value={edit.editDraft[field]}
+                                            />
+                                        )}
                                     </label>
                                 );
                             })}
-                            {editError && <p>{editError}</p>}
-                            <button disabled={isSaving || !editDraft.firstName.trim()} type="submit">
-                                {isSaving ? t("saving", "Сохранение...") : t("save", "Сохранить")}
+                            {edit.editError && <p className="error-message">{edit.editError}</p>}
+                            <button disabled={edit.isSaving || !edit.editDraft.firstName.trim()} type="submit">
+                                {edit.isSaving ? t("saving", "Сохранение...") : t("save", "Сохранить")}
                             </button>
                         </form>
                     ) : (
@@ -181,6 +143,7 @@ const UserProfilePanel = ({ chat, error, isLoading, messages = [], onClose, stop
                         <button className="active" type="button">{t("media", "Медиа")}</button>
                     </div>
 
+                    {/* ИСПРАВЛЕНО: Полностью восстановлена закрывающая логика медиа-блока и тегов */}
                     {sharedMedia.length ? (
                         <div className="user-profile-media-grid">
                             {sharedMedia.map(({ mediaType, type, mediaUrl, id }) => {
@@ -194,13 +157,14 @@ const UserProfilePanel = ({ chat, error, isLoading, messages = [], onClose, stop
                             })}
                         </div>
                     ) : (
-                        <div className="user-profile-empty-media">{t("profileMediaEmpty", "Медиа пока не загружены")}</div>
+                        <div className="user-profile-empty-media">
+                            {t("profileMediaEmpty", "Медиафайлы отсутствуют")}
+                        </div>
                     )}
                 </div>
             )}
         </section>
     );
+};
 
-}
-
-export default UserProfilePanel
+export default React.memo(UserProfilePanel);

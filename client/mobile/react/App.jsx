@@ -13,6 +13,7 @@ import { CallOverlay } from './components/Calls/CallOverlay.jsx';
 import { disconnectRealtimeSocket, useRealtimeSocket } from './hooks/useRealtimeSocket.js';
 import { services } from '../application/services/serviceContainer.js';
 import UserProfilePanel from "./components/components/ProfilePanel/UserProfilePanel";
+import ChatProvider from "./context/ChatContext";
 
 export function App({ basename = '', forceMobile = false }) {
   const homePath = withBasePath(basename, '/chats');
@@ -32,7 +33,6 @@ export function App({ basename = '', forceMobile = false }) {
               <LoginPage
                 redirectPath={homePath}
                 registerHref={registerPath}
-                t={translate}
               />
             }
           />
@@ -42,7 +42,6 @@ export function App({ basename = '', forceMobile = false }) {
               <RegisterPage
                 redirectPath={homePath}
                 loginHref={loginPath}
-                t={translate}
               />
             }
           />
@@ -68,7 +67,6 @@ export function App({ basename = '', forceMobile = false }) {
               <RateLimitPage
                 retryAfter={60}
                 onBack={() => window.history.back()}
-                t={translate}
               />
             }
           />
@@ -76,7 +74,7 @@ export function App({ basename = '', forceMobile = false }) {
             path="/settings"
             element={
               <ProtectedRoute>
-                <AppLayout forceMobile={forceMobile}><SettingsPage t={translate} /></AppLayout>
+                <AppLayout forceMobile={forceMobile}><SettingsPage /></AppLayout>
               </ProtectedRoute>
             }
           />
@@ -84,7 +82,7 @@ export function App({ basename = '', forceMobile = false }) {
             path="/contacts"
             element={
               <ProtectedRoute>
-                <AppLayout forceMobile={forceMobile}><ContactsPage t={translate} /></AppLayout>
+                <AppLayout forceMobile={forceMobile}><ContactsPage /></AppLayout>
               </ProtectedRoute>
             }
           />
@@ -92,7 +90,7 @@ export function App({ basename = '', forceMobile = false }) {
             path="/create-group"
             element={
               <ProtectedRoute>
-                <AppLayout forceMobile={forceMobile}><CreateGroupPage t={translate} /></AppLayout>
+                <AppLayout forceMobile={forceMobile}><CreateGroupPage /></AppLayout>
               </ProtectedRoute>
             }
           />
@@ -274,9 +272,9 @@ function ChatLayout({ forceMobile = false }) {
 
   if (isMobile) {
     if (chatId) {
-      return <ChatThreadPage chatId={chatId} t={translate} />;
+      return <ChatThreadPage chatId={chatId} />;
     } else {
-      return <ChatsPage t={translate} />;
+      return <ChatsPage />;
     }
   }
 
@@ -306,61 +304,58 @@ function ChatLayout({ forceMobile = false }) {
   }
 
   return (
-    <div className={`chat-workspace ${profileState.isOpen ? 'has-profile' : ''}`}>
-      <div className="app-sidebar-pane" style={{ flexBasis: sidebarWidth }}>
-        <ChatsPage t={translate} />
-      </div>
-      <div
-        aria-label="Изменить ширину списка чатов"
-        className="app-pane-resizer app-pane-resizer-sidebar"
-        onPointerDown={(event) => startResize('sidebar', event)}
-        role="separator"
-      />
-      <div className="app-chat-pane">
-        {chatId ? (
-          <ChatThreadPage
-            chatId={chatId}
-            onProfileStateChange={setProfileState}
-            profileCloseToken={profileCloseToken}
-            profileMode="panel"
-            t={translate}
-          />
-        ) : (
-          <div className="empty-chat-placeholder">
-            <div className="empty-chat-icon">💬</div>
-            <h3>Выберите чат</h3>
-            <p>Выберите контакт или чат из списка слева, чтобы начать общение.</p>
+      <ChatProvider>
+        <div className={`chat-workspace ${profileState.isOpen ? 'has-profile' : ''}`}>
+          <div className="app-sidebar-pane" style={{ flexBasis: sidebarWidth }}>
+            <ChatsPage />
           </div>
-        )}
-      </div>
-      {profileState.isOpen ? (
-        <>
           <div
-            aria-label="Изменить ширину профиля"
-            className="app-pane-resizer app-pane-resizer-profile"
-            onPointerDown={(event) => startResize('profile', event)}
+            aria-label="Изменить ширину списка чатов"
+            className="app-pane-resizer app-pane-resizer-sidebar"
+            onPointerDown={(event) => startResize('sidebar', event)}
             role="separator"
           />
-          <div
-            className="app-profile-pane"
-            style={profileWidth ? { flexBasis: profileWidth } : undefined}
-          >
-            <UserProfilePanel
-              chat={profileState.chat}
-              error={profileState.error}
-              isLoading={profileState.isLoading}
-              messages={profileState.messages}
-              onClose={() => {
-                setProfileState({ isOpen: false, isLoading: false, error: '', user: null, chat: null });
-                setProfileCloseToken((value) => value + 1);
-              }}
-              t={translate}
-              user={profileState.user}
-            />
+          <div className="app-chat-pane">
+            {chatId ? (
+              <ChatThreadPage
+                chatId={chatId}
+                onProfileStateChange={setProfileState}
+                profileCloseToken={profileCloseToken}
+                profileMode="panel"
+              />
+            ) : (
+              <div className="empty-chat-placeholder">
+                <div className="empty-chat-icon">💬</div>
+                <h3>Выберите чат</h3>
+                <p>Выберите контакт или чат из списка слева, чтобы начать общение.</p>
+              </div>
+            )}
           </div>
-        </>
-      ) : null}
-    </div>
+          {profileState.isOpen ? (
+            <>
+              <div
+                aria-label="Изменить ширину профиля"
+                className="app-pane-resizer app-pane-resizer-profile"
+                onPointerDown={(event) => startResize('profile', event)}
+                role="separator"
+              />
+              <div
+                className="app-profile-pane"
+                style={profileWidth ? { flexBasis: profileWidth } : undefined}
+              >
+                <UserProfilePanel
+                  onClose={() => {
+                    setProfileState({ isOpen: false, isLoading: false, error: '', user: null, chat: null });
+                    setProfileCloseToken((value) => value + 1);
+                  }}
+                  user={profileState.user}
+                  profileState={profileState}
+                />
+              </div>
+            </>
+          ) : null}
+        </div>
+      </ChatProvider>
   );
 }
 
@@ -403,11 +398,6 @@ function clearAuthSession() {
   localStorage.removeItem('craneapp_auth_token');
   localStorage.removeItem('craneapp_user_data');
   localStorage.removeItem('craneapp_settings');
-}
-
-function translate(key, fallback, vars) {
-  const val = window.i18n?.t(key, vars);
-  return (val && val !== key) ? val : fallback;
 }
 
 function withBasePath(basePath, path) {

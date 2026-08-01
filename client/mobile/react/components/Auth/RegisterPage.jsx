@@ -2,13 +2,13 @@ import { useMemo, useRef, useState } from 'react';
 import { ToastStack } from '../common/ToastStack.jsx';
 import { registerUser, saveAuthSession, uploadAvatar } from '../../services/authApi.js';
 import { useToasts } from '../../hooks/useToasts.js';
+import {useTranslate} from "../../hooks/useTranslate";
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]+$/;
 
 export function RegisterPage({
   loginHref = './login.html',
   redirectPath = '/chats',
-  t = fallbackTranslate,
 }) {
   const [step, setStep] = useState(1);
   const [avatar, setAvatar] = useState('');
@@ -22,6 +22,7 @@ export function RegisterPage({
   const { showToast, toasts } = useToasts();
   const avatarInputRef = useRef(null);
   const passwordScore = useMemo(() => getPasswordScore(password), [password]);
+  const { t } = useTranslate()
 
   if (localStorage.getItem('craneapp_auth_token')) {
     window.location.href = redirectPath;
@@ -274,8 +275,4 @@ function getStrengthStyle(score) {
     background: score > 0 ? colors[score - 1] : 'transparent',
     width: score > 0 ? widths[score - 1] : '0%',
   };
-}
-
-function fallbackTranslate(_key, fallback) {
-  return fallback;
 }

@@ -4,8 +4,10 @@ import { services } from '../../../application/services/serviceContainer.js';
 import { useRealtimeSocket } from '../../hooks/useRealtimeSocket.js';
 import { Identicon } from '../common/Identicon.jsx';
 import { useChatsStore } from '../../store/chats.js';
+import {useTranslate} from "../../hooks/useTranslate";
 
-export function ChatsPage({ t = fallbackTranslate }) {
+export function ChatsPage() {
+    const { t } = useTranslate()
   const chats = useChatsStore(state => state.chats);
   const setChats = useChatsStore(state => state.setChats);
   const [error, setError] = useState('');
@@ -285,8 +287,4 @@ function formatChatTime(value) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(date);
-}
-
-function fallbackTranslate(_key, fallback) {
-  return fallback;
 }

@@ -4,8 +4,10 @@ import { services } from '../../../application/services/serviceContainer.js';
 import { ToastStack } from '../common/ToastStack.jsx';
 import { useToasts } from '../../hooks/useToasts.js';
 import { disconnectRealtimeSocket } from '../../hooks/useRealtimeSocket.js';
+import {useTranslate} from "../../hooks/useTranslate";
 
-export function SettingsPage({ t = (k, f) => f }) {
+export function SettingsPage() {
+    const { t } = useTranslate()
   const navigate = useNavigate();
   const { toasts, showToast } = useToasts();
   const [user, setUser] = useState({});
