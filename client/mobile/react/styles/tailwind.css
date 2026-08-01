@@ -1478,16 +1478,24 @@
     @apply w-full flex gap-x-2 cursor-pointer transition-colors hover:bg-panel px-6 py-3;
   }
 
+  .forward-modal__content {
+    @apply flex flex-col gap-y-1 w-full;
+  }
+
+  .forward-chat__content {
+    @apply flex flex-col gap-y-1 w-full;
+  }
+
   .forward-chat__title {
-    @apply text-left;
+    @apply text-left w-full;
+  }
+
+  .forward-chat__avatar {
+    @apply shrink-0;
   }
 
   .forward-chat__preview {
-    @apply line-clamp-1 truncate min-w-0 overflow-hidden;
-  }
-
-  .forward-modal__content {
-    @apply flex flex-col gap-y-1 w-full;
+    @apply line-clamp-1 truncate min-w-0 max-w-8/10 text-left;
   }
 
   .forward-modal__empty {

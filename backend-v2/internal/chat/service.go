@@ -12,11 +12,12 @@ import (
 )
 
 var (
-	ErrNotFound      = errors.New("chat not found")
-	ErrForbidden     = errors.New("access denied")
-	ErrInvalidInput  = errors.New("invalid input")
-	ErrUserNotFound  = errors.New("user not found")
-	ErrBlockedByUser = errors.New("blocked by user")
+	ErrNotFound        = errors.New("chat not found")
+	ErrForbidden       = errors.New("access denied")
+	ErrInvalidInput    = errors.New("invalid input")
+	ErrUserNotFound    = errors.New("user not found")
+	ErrBlockedByUser   = errors.New("blocked by user")
+	ErrInvalidChatType = errors.New("invalid chat type")
 )
 
 type Chat struct {
@@ -62,20 +63,26 @@ type Member struct {
 }
 
 type Message struct {
-	ID           string         `json:"id"`
-	ChatID       string         `json:"chatId"`
-	SenderID     string         `json:"senderId"`
-	SenderName   string         `json:"senderName,omitempty"`
-	SenderAvatar string         `json:"senderAvatar,omitempty"`
-	Content      string         `json:"content"`
-	Type         string         `json:"type"`
-	ReplyTo      *string        `json:"replyTo,omitempty"`
-	Metadata     map[string]any `json:"metadata,omitempty"`
-	IsPinned     bool           `json:"isPinned"`
-	IsEdited     bool           `json:"isEdited"`
-	CreatedAt    string         `json:"createdAt"`
-	UpdatedAt    string         `json:"updatedAt"`
-	DeletedAt    *string        `json:"deletedAt,omitempty"`
+	ID                  string         `json:"id"`
+	ChatID              string         `json:"chatId"`
+	SenderID            string         `json:"senderId"`
+	SenderName          string         `json:"senderName,omitempty"`
+	SenderFirstName     string         `json:"senderFirstName"`
+	SenderAvatar        string         `json:"senderAvatar,omitempty"`
+	Content             string         `json:"content"`
+	Type                string         `json:"type"`
+	ReplyTo             *string        `json:"replyTo,omitempty"`
+	ReplyToMessageID    *string        `json:"replyToMessageId,omitempty"`
+	ReplySenderName     string         `json:"replySenderName,omitempty"`
+	ReplyToSenderName   string         `json:"replyToSenderName,omitempty"`
+	Metadata            map[string]any `json:"metadata,omitempty"`
+	IsForwarded         bool           `json:"isForwarded"`
+	ForwardedSenderName string         `json:"forwardedSenderName,omitempty"`
+	IsPinned            bool           `json:"isPinned"`
+	IsEdited            bool           `json:"isEdited"`
+	CreatedAt           string         `json:"createdAt"`
+	UpdatedAt           string         `json:"updatedAt"`
+	DeletedAt           *string        `json:"deletedAt,omitempty"`
 }
 
 type Service struct {
@@ -145,6 +152,53 @@ func (s *Service) ValidateMediaMetadata(ctx context.Context, mediaURL, fileName 
 
 func NewService(db *sql.DB, ws *WSServer) *Service {
 	return &Service{db: db, ws: ws}
+}
+
+func (s *Service) hydrateMessageFields(ctx context.Context, msg *Message) error {
+	msg.SenderFirstName = msg.SenderName
+	if msg.ReplyTo != nil {
+		msg.ReplyToMessageID = msg.ReplyTo
+		var name string
+		err := s.db.QueryRowContext(ctx, `
+			SELECT COALESCE(up.first_name, au.first_name, au.username, '')
+			FROM messages.messages m
+			LEFT JOIN auth.users au ON au.id = m.sender_id
+			LEFT JOIN users.profiles up ON up.user_id = m.sender_id
+			WHERE m.id = $1
+		`, *msg.ReplyTo).Scan(&name)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		msg.ReplySenderName = name
+		msg.ReplyToSenderName = name
+	}
+	if msg.Metadata != nil {
+		if forwardedFrom, ok := msg.Metadata["forwardedFrom"].(string); ok && forwardedFrom != "" {
+			msg.IsForwarded = true
+			if name, ok := msg.Metadata["forwardedSenderName"].(string); ok {
+				msg.ForwardedSenderName = name
+			}
+			if msg.ForwardedSenderName == "" {
+				_ = s.db.QueryRowContext(ctx, `
+					SELECT COALESCE(up.first_name, au.first_name, au.username, '')
+					FROM messages.messages m
+					LEFT JOIN auth.users au ON au.id = m.sender_id
+					LEFT JOIN users.profiles up ON up.user_id = m.sender_id
+					WHERE m.id::text = $1
+				`, forwardedFrom).Scan(&msg.ForwardedSenderName)
+			}
+		}
+	}
+	return nil
+}
+
+func (s *Service) hydrateMessagesFields(ctx context.Context, messages []Message) error {
+	for i := range messages {
+		if err := s.hydrateMessageFields(ctx, &messages[i]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Service) CallRooms() *CallRoomManager {
@@ -424,30 +478,72 @@ func (s *Service) CreateGroup(ctx context.Context, ownerID, title, description, 
 	return chatID, tx.Commit()
 }
 
-func (s *Service) UpdateChat(ctx context.Context, actorID, chatID, title, description, avatarURL string) (Chat, error) {
-	role, err := s.memberRole(ctx, actorID, chatID)
+func (s *Service) UpdateGroup(ctx context.Context, actorID, chatID string, title, description, avatarURL *string) (Chat, error) {
+	var chatType string
+	var role string
+
+	err := s.db.QueryRowContext(ctx, `
+		SELECT c.type, m.role
+		FROM chats.chats c
+		JOIN chats.members m ON m.chat_id = c.id
+		WHERE c.id = $1
+		AND m.user_id = $2
+	`, chatID, actorID).Scan(&chatType, &role)
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return Chat{}, ErrNotFound
+	}
 	if err != nil {
 		return Chat{}, err
 	}
+
+	if title == nil && description == nil && avatarURL == nil {
+		return Chat{}, ErrInvalidInput
+	}
+	if title != nil {
+		trimmedTitle := strings.TrimSpace(*title)
+		if trimmedTitle == "" {
+			return Chat{}, ErrInvalidInput
+		}
+		title = &trimmedTitle
+	}
+
+	if chatType != "group" {
+		return Chat{}, ErrInvalidChatType
+	}
+
 	if role != "owner" && role != "admin" {
 		return Chat{}, ErrForbidden
 	}
 
-	title = strings.TrimSpace(title)
-	if title == "" {
-		return Chat{}, ErrInvalidInput
-	}
-
 	_, err = s.db.ExecContext(ctx, `
 		UPDATE chats.chats
-		SET title = $1, description = $2, avatar_url = $3, updated_at = NOW()
+		SET title = COALESCE($1::text, title),
+			description = COALESCE($2::text, description),
+			avatar_url = COALESCE($3::text, avatar_url),
+			updated_at = NOW()
 		WHERE id = $4
+		AND type = 'group'
 	`, title, description, avatarURL, chatID)
 	if err != nil {
 		return Chat{}, err
 	}
 
-	return s.Get(ctx, actorID, chatID)
+	updatedChat, err := s.Get(ctx, actorID, chatID)
+	if err != nil {
+		return Chat{}, err
+	}
+
+	if s.ws != nil {
+		payload, _ := json.Marshal(map[string]any{
+			"type":   "chat_updated",
+			"chatId": chatID,
+			"chat":   updatedChat,
+		})
+		s.ws.BroadcastToChat(chatID, payload, "")
+	}
+
+	return updatedChat, nil
 }
 
 func (s *Service) DeleteChat(ctx context.Context, actorID, chatID string) error {
@@ -838,7 +934,14 @@ func (s *Service) ListMessages(ctx context.Context, userID, chatID string, limit
 		return nil, err
 	}
 	defer rows.Close()
-	return scanMessages(rows)
+	messages, err := scanMessages(rows)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.hydrateMessagesFields(ctx, messages); err != nil {
+		return nil, err
+	}
+	return messages, nil
 }
 
 func scanMessages(rows *sql.Rows) ([]Message, error) {
@@ -942,6 +1045,9 @@ func (s *Service) SendMessage(ctx context.Context, userID, chatID, content, msgT
 	if metadataBytes != nil {
 		json.Unmarshal(metadataBytes, &msg.Metadata)
 	}
+	if err := s.hydrateMessageFields(ctx, &msg); err != nil {
+		return Message{}, err
+	}
 
 	// Broadcast
 	if s.ws != nil {
@@ -1001,6 +1107,12 @@ func (s *Service) EditMessage(ctx context.Context, userID, messageID, content st
 	}
 	if deletedAt.Valid {
 		msg.DeletedAt = &deletedAt.String
+	}
+	if metadataBytes != nil {
+		json.Unmarshal(metadataBytes, &msg.Metadata)
+	}
+	if err := s.hydrateMessageFields(ctx, &msg); err != nil {
+		return Message{}, err
 	}
 
 	if s.ws != nil {
@@ -1075,9 +1187,14 @@ func (s *Service) ForwardMessage(ctx context.Context, userID, messageID, targetC
 	var deletedAt sql.NullString
 	var metadataBytes []byte
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id::text, chat_id::text, sender_id::text, content, type, reply_to::text, metadata, created_at::text, updated_at::text, deleted_at::text
-		FROM messages.messages WHERE id = $1 AND deleted_at IS NULL
-	`, messageID).Scan(&src.ID, &src.ChatID, &src.SenderID, &src.Content, &src.Type, &replyTo, &metadataBytes, &src.CreatedAt, &src.UpdatedAt, &deletedAt)
+		SELECT m.id::text, m.chat_id::text, m.sender_id::text,
+		       COALESCE(up.first_name, au.first_name, au.username, ''),
+		       m.content, m.type, m.reply_to::text, m.metadata, m.created_at::text, m.updated_at::text, m.deleted_at::text
+		FROM messages.messages m
+		LEFT JOIN auth.users au ON au.id = m.sender_id
+		LEFT JOIN users.profiles up ON up.user_id = m.sender_id
+		WHERE m.id = $1 AND m.deleted_at IS NULL
+	`, messageID).Scan(&src.ID, &src.ChatID, &src.SenderID, &src.SenderName, &src.Content, &src.Type, &replyTo, &metadataBytes, &src.CreatedAt, &src.UpdatedAt, &deletedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Message{}, ErrNotFound
 	}
@@ -1101,6 +1218,7 @@ func (s *Service) ForwardMessage(ctx context.Context, userID, messageID, targetC
 		src.Metadata = make(map[string]any)
 	}
 	src.Metadata["forwardedFrom"] = src.ID
+	src.Metadata["forwardedSenderName"] = src.SenderName
 	return s.SendMessage(ctx, userID, targetChatID, src.Content, src.Type, nil, src.Metadata)
 }
 
@@ -1304,6 +1422,11 @@ func (s *Service) ListPins(
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	for i := range pins {
+		if err := s.hydrateMessageFields(ctx, &pins[i].Message); err != nil {
+			return nil, err
+		}
+	}
 
 	return pins, nil
 }
@@ -1443,7 +1566,14 @@ func (s *Service) SearchMessages(ctx context.Context, userID, query string, limi
 		return nil, err
 	}
 	defer rows.Close()
-	return scanMessages(rows)
+	messages, err := scanMessages(rows)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.hydrateMessagesFields(ctx, messages); err != nil {
+		return nil, err
+	}
+	return messages, nil
 }
 
 func (s *Service) ToggleFavorite(ctx context.Context, userID, messageID string) (bool, error) {
@@ -1482,7 +1612,14 @@ func (s *Service) ListFavorites(ctx context.Context, userID string, limit, offse
 		return nil, err
 	}
 	defer rows.Close()
-	return scanMessages(rows)
+	messages, err := scanMessages(rows)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.hydrateMessagesFields(ctx, messages); err != nil {
+		return nil, err
+	}
+	return messages, nil
 }
 
 func (s *Service) CreateCallRoom(ctx context.Context, userID, chatID, callType, callKind, title string) (string, error) {

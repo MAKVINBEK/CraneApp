@@ -1,5 +1,5 @@
+import { config } from '../../configs/app.js';
 import { useCall } from './CallProvider.jsx';
-import { config } from '../../../app/config.js';
 
 export function CallOverlay() {
   const {
