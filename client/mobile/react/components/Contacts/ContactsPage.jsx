@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { services } from '../../../application/services/serviceContainer.js';
 import { ToastStack } from '../common/ToastStack.jsx';
 import { useToasts } from '../../hooks/useToasts.js';
 import { Identicon } from '../common/Identicon.jsx';
+import services from '../../services/serviceContainer.js';
 
 export function ContactsPage({ t = (k, f) => f }) {
   const navigate = useNavigate();

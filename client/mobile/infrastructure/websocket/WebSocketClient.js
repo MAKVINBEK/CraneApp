@@ -1,4 +1,4 @@
-import { eventBus } from '../../core/EventBus.js';
+import { eventBus } from '../../react/core/EventBus.js';
 
 class WebSocketClient {
   constructor(url, options = {}) {
