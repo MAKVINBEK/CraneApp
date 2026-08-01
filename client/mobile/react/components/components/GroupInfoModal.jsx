@@ -1,7 +1,12 @@
-import { useEffect, useState } from 'react';
-import { useToasts } from '../../hooks/useToasts.js';
-import { Identicon } from '../ui/Identicon.jsx';
-import services from '../../services/serviceContainer.js';
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { STORAGE_KEYS } from "../../consts/storageKeys.js";
+import { useToasts } from "../../hooks/useToasts.js";
+import { useLocalStorage } from "../../hooks/useLocalStorage.js";
+import services from "../../services/serviceContainer.js";
+import { useChatStore } from "../../store/chat.js";
+import { useChatsStore } from "../../store/chats.js";
+import { Identicon } from "../ui/Identicon.jsx";
 
 export function GroupInfoModal({ isOpen, onClose, t = (k, f) => f }) {
   const { showToast } = useToasts();
@@ -15,15 +20,17 @@ export function GroupInfoModal({ isOpen, onClose, t = (k, f) => f }) {
   const updateChat = useChatStore((state) => state.updateChat);
   const setChat = useChatStore((state) => state.setChat);
   const navigate = useNavigate();
-  const [currentUserData] = useLocalStorage("craneapp_user_data", {});
+  const [currentUserData] = useLocalStorage(STORAGE_KEYS.USER, {});
 
   useEffect(() => {
     fetchMembers();
-  }, []);
+  }, [chat]);
 
   useEffect(() => {
-    setChatName(chat.name);
-  }, []);
+    if (chat) {
+      setChatName(chat.name);
+    }
+  }, [chat]);
 
   async function fetchMembers() {
     setIsLoading(true);
@@ -113,17 +120,17 @@ export function GroupInfoModal({ isOpen, onClose, t = (k, f) => f }) {
           <div className="flex w-full items-center gap-x-2">
             <div className="group-info-header__wrapper">
               <div className="group-info-header__avatar cursor-default">
-                {chat.avatarUrl ? (
+                {chat?.avatarUrl ? (
                   <img alt="" src={chat.avatarUrl} />
                 ) : chat?.type === "private" && chat?.peerId ? (
                   <Identicon size={98} userId={chat.peerId} />
                 ) : (
-                  chat.name.slice(0, 1).toUpperCase()
+                  chat?.name.slice(0, 1).toUpperCase()
                 )}
               </div>
               <div className="group-info-header__text-wrapper">
                 {!isEditMode ? (
-                  <h2>{chat.name}</h2>
+                  <h2>{chat?.name}</h2>
                 ) : (
                   <label className="group-info-header__field">
                     <span className="group-info-header__field-text">

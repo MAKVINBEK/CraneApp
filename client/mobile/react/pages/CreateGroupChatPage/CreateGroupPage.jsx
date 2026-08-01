@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import services from '../../services/serviceContainer.js';
-import { ToastStack } from '../common/ToastStack.jsx';
 import { useToasts } from '../../hooks/useToasts.js';
 import { ROUTES } from '../../consts/routes.js';
+import { ToastStack } from '../../components/ui/ToastStack.jsx';
 
 export function CreateGroupPage({ t = (k, f) => f }) {
   const navigate = useNavigate();
