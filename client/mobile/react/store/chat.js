@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import services from "../../application/services/serviceContainer";
+import services from "../services/serviceContainer";
 
 export const useChatStore = create((set, get) => ({
   chat: null,
