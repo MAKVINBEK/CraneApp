@@ -3,12 +3,10 @@ package main
 import (
 	"context"
 	"log"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"os"
 	"os/signal"
 	"strings"
 	"sync"
@@ -111,9 +109,7 @@ func rateLimitMiddleware(authLimiter, globalLimiter *tokenBucket, next http.Hand
 }
 
 func main() {
-	if os.Getenv("ALLOWED_ORIGINS") == "" {
-		slog.Warn("ALLOWED_ORIGINS not set — defaulting to localhost; set it in production")
-	}
+	_ = config.Required("ALLOWED_ORIGINS")
 
 	authURL, err := url.Parse(config.Value("AUTH_URL", "http://127.0.0.1:8081"))
 	if err != nil {
@@ -232,8 +228,9 @@ func main() {
 	// Auth: 5 req/s burst 10 per IP. Global: 50 req/s burst 100 per IP.
 	authLimiter := newTokenBucket(5, 10)
 	globalLimiter := newTokenBucket(50, 100)
+	limitedMux := rateLimitMiddleware(authLimiter, globalLimiter, mux)
 
-	handler := httpx.Middleware(rateLimitMiddleware(authLimiter, globalLimiter, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := httpx.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if origin := r.Header.Get("Origin"); origin != "" && allowedOrigin(origin) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
@@ -245,8 +242,8 @@ func main() {
 				return
 			}
 		}
-		mux.ServeHTTP(w, r)
-	})))
+		limitedMux.ServeHTTP(w, r)
+	}))
 
 	server := &http.Server{Addr: config.Value("EDGE_ADDR", ":8080"), Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 5 * time.Minute, WriteTimeout: 5 * time.Minute, IdleTimeout: 120 * time.Second}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -272,7 +269,7 @@ func frontendFallback(frontendDir, requestPath string) string {
 }
 
 func allowedOrigin(origin string) bool {
-	for _, allowed := range strings.Split(config.Value("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173"), ",") {
+	for _, allowed := range strings.Split(config.Required("ALLOWED_ORIGINS"), ",") {
 		if strings.TrimSpace(allowed) == origin || allowed == "*" {
 			return true
 		}
