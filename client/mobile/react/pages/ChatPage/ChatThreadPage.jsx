@@ -15,6 +15,7 @@ import { translateText } from '../../services/translatorApi.js';
 import '../../styles/ChatThreadPage.css';
 import services from '../../services/serviceContainer.js';
 import { useChatStore } from '../../store/chat.js';
+import { PhotoEditorModal } from '../../components/media-editor/PhotoEditorModal.jsx';
 
 export function ChatThreadPage({
 t = fallbackTranslate,
@@ -29,6 +30,7 @@ const [error, setError] = useState("");
 const [isLoading, setIsLoading] = useState(true);
 const [isSending, setIsSending] = useState(false);
 const [pendingAttachment, setPendingAttachment] = useState(null);
+const [photoEditorFile, setPhotoEditorFile] = useState(null);
 const [messages, setMessages] = useState([]);
 const [replyToMessage, setReplyToMessage] = useState(null);
 const [isGroupInfoOpen, setIsGroupInfoOpen] = useState(false);
@@ -332,19 +334,54 @@ async function handleSubmit(event) {
 function handleAttachmentChange(event) {
   const file = event.target.files?.[0];
   if (!file) return;
+
   if (file.size > 100 * 1024 * 1024) {
     setError(
       t(
-        "attachmentTooLarge",
-        "Файл слишком большой. Максимальный размер — 100 МБ.",
+        'attachmentTooLarge',
+        'Файл слишком большой. Максимальный размер — 100 МБ.',
       ),
     );
-    event.target.value = "";
+    event.target.value = '';
     return;
   }
-  setPendingAttachment({ file, type: getMediaMessageType(file.type) });
+
+  if (file.type.startsWith('image/')) {
+    setPhotoEditorFile(file);
+    setEditingMessage(null);
+    setError('');
+    return;
+  }
+
+  setPendingAttachment({
+    file,
+    type: getMediaMessageType(file.type),
+  });
   setEditingMessage(null);
-  setError("");
+  setError('');
+}
+
+function closePhotoEditor() {
+  setPhotoEditorFile(null);
+
+  if (attachmentInputRef.current) {
+    attachmentInputRef.current.value = '';
+  }
+}
+
+function handlePhotoEditorSave(file) {
+  setPendingAttachment({
+    file,
+    type: 'image',
+  });
+
+  setPhotoEditorFile(null);
+  setEditingMessage(null);
+  setError('');
+
+  if (attachmentInputRef.current) {
+    attachmentInputRef.current.value = '';
+  }
 }
 
 function removePendingAttachment() {
@@ -1219,6 +1256,15 @@ style={{
         user={profileModal.user}
       />
     ) : null}
+
+{photoEditorFile ? (
+  <PhotoEditorModal
+    file={photoEditorFile}
+    onCancel={closePhotoEditor}
+    onSave={handlePhotoEditorSave}
+    t={t}
+  />
+) : null}
   </main>
 );
 }
