@@ -11,6 +11,7 @@ import { ROUTES } from "../../consts/routes.js";
 import { cn } from "../../utils/cn.js";
 import { STORAGE_KEYS } from "../../consts/storageKeys.js";
 import { useLocalStorage } from "../../hooks/useLocalStorage.js";
+import { EmptyChatListPlaceholder } from "../../components/components/EmptyChatsListPlaceholder.jsx";
 
 export function ChatsPage({ t = fallbackTranslate }) {
   const chats = useChatsStore((state) => state.chats);
