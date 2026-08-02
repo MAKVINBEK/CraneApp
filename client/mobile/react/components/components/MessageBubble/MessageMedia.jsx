@@ -1,62 +1,97 @@
-import {Icon} from "../Icon";
 import React from "react";
-import {formatSize} from "../../../../utils/formatSize";
-import { parseCallContent, formatCallDuration } from "../../../utils/utils";
+import { formatCallDuration, parseCallContent } from "../../../utils/call";
+import { formatFileSize } from "../../../utils/formatFileSize";
+import { Icon } from "../../ui/Icon";
+import { useTranslate } from "../../../hooks/useTranslate";
 
-export const CallMessageContent = ({ message, t }) => {
-    const duration = formatCallDuration(parseCallContent(message.content).duration);
+export const CallMessageContent = ({ message }) => {
+  const { t } = useTranslate();
+  const duration = formatCallDuration(
+    parseCallContent(message.content).duration,
+  );
+  return (
+    <div className="message-call-content">
+      <div className="message-call-icon" aria-hidden="true">
+        <Icon name="phone" />
+      </div>
+      <div className="message-call-copy">
+        <strong>{t("callEnded", "Звонок завершен")}</strong>
+        {duration ? <span>{duration}</span> : null}
+      </div>
+    </div>
+  );
+};
+
+export const MessageMedia = ({ message, onOpenImage }) => {
+  const { t } = useTranslate();
+  const {
+    mediaUnavailable,
+    mediaUnavailableReason,
+    mediaUrl,
+    mediaType,
+    type,
+    mediaEncryption,
+  } = message;
+
+  if (mediaUnavailable) {
     return (
-        <div className="message-call-content">
-            <div className="message-call-icon" aria-hidden="true"><Icon name="phone" /></div>
-            <div className="message-call-copy">
-                <strong>{t("callEnded", "Звонок завершен")}</strong>
-                {duration ? <span>{duration}</span> : null}
-            </div>
-        </div>
+      <div className="message-media-unavailable">
+        {mediaUnavailableReason ??
+          t(
+            "mediaUnavailableUnencrypted",
+            "Медиа недоступно: файл не зашифрован",
+          )}
+      </div>
     );
-}
+  }
 
-export const MessageMedia = ({ message, onOpenImage, t }) => {
-    const { mediaUnavailable, mediaUnavailableReason, mediaUrl, mediaType, type, mediaEncryption } = message;
+  if (!mediaUrl) return null;
 
-    if (mediaUnavailable) {
-        return (
-            <div className="message-media-unavailable">
-                {mediaUnavailableReason ?? t("mediaUnavailableUnencrypted", "Медиа недоступно: файл не зашифрован")}
-            </div>
-        );
-    }
+  const actualType = mediaType || type;
 
-    if (!mediaUrl) return null;
+  if (["image", "gif", "sticker"].includes(actualType)) {
+    return (
+      <button
+        aria-label={t("openImage", "Открыть изображение")}
+        className="message-media-open"
+        onClick={() => onOpenImage(mediaUrl)}
+        type="button"
+      >
+        <img
+          alt=""
+          className={`message-media message-media-${actualType}`}
+          src={mediaUrl}
+        />
+      </button>
+    );
+  }
 
-    const actualType = mediaType || type;
+  if (["video", "audio"].includes(actualType)) {
+    return React.createElement(actualType, {
+      className: "message-media",
+      controls: true,
+      src: mediaUrl,
+    });
+  }
+  if (actualType === "voice") {
+    return <audio className="message-media" controls src={mediaUrl} />;
+  }
 
-    if (["image", "gif", "sticker"].includes(actualType)) {
-        return (
-            <button aria-label={t("openImage", "Открыть изображение")} className="message-media-open" onClick={() => onOpenImage(mediaUrl)} type="button">
-                <img alt="" className={`message-media message-media-${actualType}`} src={mediaUrl} />
-            </button>
-        );
-    }
+  if (actualType === "file") {
+    return (
+      <a className="message-media-file" download href={mediaUrl}>
+        <Icon name="media-file" />
+        <div className="message-media-file__content">
+          <span className="message-media-file__title">
+            {mediaEncryption.fileName}
+          </span>
+          <span className="message-media-file__size">
+            {formatFileSize(mediaEncryption.sizeBytes)}
+          </span>
+        </div>
+      </a>
+    );
+  }
 
-    if (["video", "audio"].includes(actualType)) {
-        return React.createElement(actualType, { className: "message-media", controls: true, src: mediaUrl });
-    }
-    if (actualType === "voice") {
-        return <audio className="message-media" controls src={mediaUrl} />;
-    }
-
-    if (actualType === "file") {
-        return (
-            <a className="message-media-file" download href={mediaUrl}>
-                <Icon name="media-file"/>
-                <div className="message-media-file__content">
-                    <span className="message-media-file__title">{mediaEncryption.fileName}</span>
-                    <span className="message-media-file__size">{formatSize(mediaEncryption.sizeBytes)}</span>
-                </div>
-            </a>
-        );
-    }
-
-    return null;
-}
+  return null;
+};

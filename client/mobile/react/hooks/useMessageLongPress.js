@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback } from "react";
-import { calculateMenuPosition } from "../utils/utils";
+import { calculateMenuPosition } from "../utils/calculateMenuPosition";
 
 export const useMessageLongPress = (messageId, selectionMode, onSelection, setActionMenu, message) => {
     const longPressTimerRef = useRef(null);

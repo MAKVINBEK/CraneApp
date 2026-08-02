@@ -109,17 +109,6 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 	case suffix == "" && r.Method == http.MethodGet:
 		chat, err := h.service.Get(r.Context(), current.ID, chatID)
 		respondChat(w, r, chat, err)
-	case suffix == "" && r.Method == http.MethodPatch:
-		var input struct {
-			Title       string `json:"title"`
-			Description string `json:"description"`
-			AvatarURL   string `json:"avatarUrl"`
-		}
-		if !decode(w, r, &input) {
-			return
-		}
-		chat, err := h.service.UpdateChat(r.Context(), current.ID, chatID, input.Title, input.Description, input.AvatarURL)
-		respondChat(w, r, chat, err)
 	case suffix == "" && r.Method == http.MethodDelete:
 		err := h.service.DeleteChat(r.Context(), current.ID, chatID)
 		if errors.Is(err, ErrForbidden) {
@@ -506,6 +495,8 @@ func (h *Handler) Messages(w http.ResponseWriter, r *http.Request) {
 			ReplyTo         *string        `json:"replyTo"`
 			MediaURL        string         `json:"mediaUrl"`
 			MediaType       string         `json:"mediaType"`
+			FileName        string         `json:"fileName"`
+			SizeBytes       int64          `json:"sizeBytes"`
 			MediaEncrypted  bool           `json:"mediaEncrypted"`
 			MediaEncryption map[string]any `json:"mediaEncryption"`
 			IsEncrypted     bool           `json:"isEncrypted"`
@@ -518,9 +509,20 @@ func (h *Handler) Messages(w http.ResponseWriter, r *http.Request) {
 		}
 		var metadata map[string]any
 		if input.MediaURL != "" {
+			fileName, sizeBytes, err := h.service.ValidateMediaMetadata(r.Context(), input.MediaURL, input.FileName, input.SizeBytes, input.MediaEncrypted)
+			if errors.Is(err, ErrInvalidInput) {
+				httpx.ErrorJSON(w, r, http.StatusBadRequest, "invalid_media_metadata", "fileName or sizeBytes does not match the uploaded file")
+				return
+			}
+			if err != nil {
+				httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", "failed to validate media metadata")
+				return
+			}
 			metadata = map[string]any{
 				"mediaUrl":        input.MediaURL,
 				"mediaType":       input.MediaType,
+				"fileName":        fileName,
+				"sizeBytes":       sizeBytes,
 				"mediaEncrypted":  input.MediaEncrypted,
 				"mediaEncryption": input.MediaEncryption,
 				"isEncrypted":     input.IsEncrypted,
