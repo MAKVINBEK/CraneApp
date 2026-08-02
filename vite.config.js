@@ -6,6 +6,18 @@ import { resolve } from 'node:path';
 export default defineConfig({
   plugins: [tailwindcss(), react()],
   publicDir: 'public',
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
+      '/ws': {
+        target: 'ws://localhost:8080',
+        ws: true,
+      },
+    },
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,
