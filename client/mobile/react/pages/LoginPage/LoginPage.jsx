@@ -1,21 +1,23 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { ToastStack } from "../../components/ui/ToastStack.jsx";
+import { ROUTES } from "../../consts/routes.js";
+import { STORAGE_KEYS } from "../../consts/storageKeys.js";
 import { useToasts } from "../../hooks/useToasts.js";
 import {
   fetchUserSettings,
   loginUser,
   saveAuthSession,
 } from "../../services/authApi.js";
-import { STORAGE_KEYS } from "../../consts/storageKeys.js";
-import { ROUTES } from "../../consts/routes.js";
-import { Link } from "react-router-dom";
+import { useTranslate } from "../../hooks/useTranslate.js";
 
-export function LoginPage({ t = fallbackTranslate }) {
+export function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { showToast, toasts } = useToasts();
+  const { t } = useTranslate();
 
   if (localStorage.getItem(STORAGE_KEYS.TOKEN)) {
     window.location.href = ROUTES.CHATS;
@@ -195,8 +197,4 @@ function EyeIcon({ visible }) {
       <circle cx="12" cy="12" r="3" />
     </svg>
   );
-}
-
-function fallbackTranslate(_key, fallback) {
-  return fallback;
 }

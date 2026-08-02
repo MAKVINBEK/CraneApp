@@ -1,11 +1,11 @@
 import { createBrowserRouter, redirect } from "react-router-dom";
 import { AuthGuard } from "../components/guards/AuthGuard";
 import { AppLayout } from "../components/layouts/AppLayout.jsx";
+import { RouteLoadingFallback } from "../components/ui/RouteLoadingFallback.jsx";
 import { REACT_ROUTES } from "../consts/routes";
 import { STORAGE_KEYS } from "../consts/storageKeys.js";
-import { clearAuthSession } from "../utils/clearAuthSession.js";
-import { RouteLoadingFallback } from "../components/ui/RouteLoadingFallback.jsx";
 import services from "../services/serviceContainer.js";
+import { clearAuthSession } from "../utils/clearAuthSession.js";
 
 async function requireSession({ request }) {
   const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
@@ -38,6 +38,26 @@ function redirectHome() {
       : REACT_ROUTES.LOGIN,
   );
 }
+
+const chatLoader = async ({ params }) => {
+  const { chatId } = params;
+  try {
+    const [chat, messages, pinnedMessages] = await Promise.all([
+      services.chatService.getChat(chatId),
+      services.messageService.getMessages(chatId),
+      services.messageService.listPins(chatId),
+    ]);
+    return {
+      loadedChat: chat,
+      loadedMessages: messages,
+      loadedPinnedMessages: pinnedMessages,
+    };
+  } catch (error) {
+    throw new Response(error.message || "Не удалось загрузить чат", {
+      status: 500,
+    });
+  }
+};
 
 export const router = createBrowserRouter([
   {
@@ -90,6 +110,9 @@ export const router = createBrowserRouter([
                   },
                   {
                     path: REACT_ROUTES.CHAT_BY_ID,
+                    loader: chatLoader,
+                    shouldRevalidate: ({ currentParams, nextParams }) =>
+                      currentParams.chatId !== nextParams.chatId,
                     lazy: () =>
                       import("../pages/ChatPage/ChatThreadPage.jsx").then(
                         (m) => ({ Component: m.ChatThreadPage }),

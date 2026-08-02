@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import services from '../../services/serviceContainer.js';
 import { ToastStack } from '../../components/ui/ToastStack.jsx';
 import { disconnectRealtimeSocket } from '../../hooks/useRealtimeSocket.js';
+import {useTranslate} from "../../hooks/useTranslate";
 import { useToasts } from '../../hooks/useToasts.js';
 import '../../styles/SettingsPage.css';
 
-export function SettingsPage({ t = (k, f) => f }) {
+export function SettingsPage() {
+    const { t } = useTranslate()
   const navigate = useNavigate();
   const { toasts, showToast } = useToasts();
   const [user, setUser] = useState({});
@@ -189,19 +191,19 @@ export function SettingsPage({ t = (k, f) => f }) {
               showToast('error', 'Не удалось обновить профиль', '⚠️');
             }
           }}
-          t={t}
         />
       )}
     </main>
   );
 }
 
-function EditProfileModal({ user, onClose, onSave, t }) {
+function EditProfileModal({ user, onClose, onSave }) {
   const [firstName, setFirstName] = useState(user.firstName || '');
   const [lastName, setLastName] = useState(user.lastName || '');
   const [bio, setBio] = useState(user.bio || '');
   const [statusEmoji, setStatusEmoji] = useState(user.statusEmoji || '');
   const [isSaving, setIsSaving] = useState(false);
+  const { t } = useTranslate();
 
   const emojiOptions = ['', '😀', '😎', '💼', '🚀', '🔥', '🎉', '✈️', '🎮', '🎧', '😴', '🐱', '🍕', '☕'];
 

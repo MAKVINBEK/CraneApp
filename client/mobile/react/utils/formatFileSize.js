@@ -2,7 +2,7 @@
  * File size formatting utilities
  */
 
-export function formatSize(bytes, decimals = 2) {
+export function formatFileSize(bytes, decimals = 2) {
   if (bytes === 0) return '0 Bytes';
 
   const k = 1024;
@@ -14,7 +14,7 @@ export function formatSize(bytes, decimals = 2) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
 
-export function parseSize(sizeString) {
+export function parseFileSize(sizeString) {
   const units = {
     'B': 1,
     'KB': 1024,

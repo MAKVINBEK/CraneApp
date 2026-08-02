@@ -1,19 +1,20 @@
 import { useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { ToastStack } from "../../components/ui/ToastStack.jsx";
+import { ROUTES } from "../../consts/routes.js";
+import { STORAGE_KEYS } from "../../consts/storageKeys.js";
 import { useToasts } from "../../hooks/useToasts.js";
+import { useTranslate } from "../../hooks/useTranslate.js";
 import {
   registerUser,
   saveAuthSession,
   uploadAvatar,
 } from "../../services/authApi.js";
-import { STORAGE_KEYS } from "../../consts/storageKeys.js";
-import { ROUTES } from "../../consts/routes.js";
-import { Link } from "react-router-dom";
 import { cn } from "../../utils/cn.js";
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]+$/;
 
-export function RegisterPage({ t = fallbackTranslate }) {
+export function RegisterPage() {
   const [step, setStep] = useState(1);
   const [avatar, setAvatar] = useState("");
   const [firstName, setFirstName] = useState("");
@@ -26,6 +27,7 @@ export function RegisterPage({ t = fallbackTranslate }) {
   const { showToast, toasts } = useToasts();
   const avatarInputRef = useRef(null);
   const passwordScore = useMemo(() => getPasswordScore(password), [password]);
+  const { t } = useTranslate();
 
   if (localStorage.getItem(STORAGE_KEYS.TOKEN)) {
     window.location.href = ROUTES.CHATS;
@@ -115,11 +117,7 @@ export function RegisterPage({ t = fallbackTranslate }) {
     <div className="register-page">
       <div className="register-container">
         <ToastStack toasts={toasts} />
-        <WelcomeStep
-          active={step === 1}
-          onNext={() => goTo(2)}
-          t={t}
-        />
+        <WelcomeStep active={step === 1} onNext={() => goTo(2)} />
         <NameStep
           active={step === 2}
           avatar={avatar}
@@ -129,7 +127,6 @@ export function RegisterPage({ t = fallbackTranslate }) {
           onBack={() => goTo(1)}
           onFirstNameChange={setFirstName}
           onNext={continueFromName}
-          t={t}
         />
         <CredentialsStep
           active={step === 3}
@@ -149,7 +146,6 @@ export function RegisterPage({ t = fallbackTranslate }) {
           passwordScore={passwordScore}
           showPassword={showPassword}
           showPasswordRepeat={showPasswordRepeat}
-          t={t}
           username={username}
         />
       </div>
@@ -157,12 +153,10 @@ export function RegisterPage({ t = fallbackTranslate }) {
   );
 }
 
-function WelcomeStep({ active, onNext, t }) {
+function WelcomeStep({ active, onNext }) {
+  const { t } = useTranslate();
   return (
-    <section
-      className={cn("screen", { active })}
-      aria-hidden={!active}
-    >
+    <section className={cn("screen", { active })} aria-hidden={!active}>
       <div className="welcome-logo">
         <img
           src="https://i.ibb.co/1Y4Pg7BF/94-20260317155000.png"
@@ -223,13 +217,10 @@ function NameStep({
   onBack,
   onFirstNameChange,
   onNext,
-  t,
 }) {
+  const { t } = useTranslate();
   return (
-    <section
-      className={cn("screen", { active })}
-      aria-hidden={!active}
-    >
+    <section className={cn("screen", { active })} aria-hidden={!active}>
       <BackButton onClick={onBack} />
       <ProgressDots activeIndex={0} />
       <div className="step-title">{t("whatIsYourName", "Как вас зовут?")}</div>
@@ -290,6 +281,7 @@ function NameStep({
 
 function CredentialsStep(props) {
   const strength = getStrengthStyle(props.passwordScore);
+  const { t } = useTranslate();
   return (
     <section
       className={cn("screen", { active: props.active })}

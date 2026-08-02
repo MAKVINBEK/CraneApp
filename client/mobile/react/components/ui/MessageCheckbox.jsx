@@ -1,3 +1,5 @@
+import { useTranslate } from "../../hooks/useTranslate";
+
 const Check = ({ className }) => {
   return (
     <svg
@@ -17,7 +19,9 @@ const Check = ({ className }) => {
   );
 };
 
-export function MessageCheckbox({ isChecked, onChange, t, className }) {
+export function MessageCheckbox({ isChecked, onChange, className }) {
+  const { t } = useTranslate();
+
   return (
     <button
       type="button"

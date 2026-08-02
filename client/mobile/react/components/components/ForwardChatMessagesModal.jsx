@@ -5,8 +5,9 @@ import { useDebounce } from "../../hooks/useDebounce";
 
 import { useMemo, useRef, useState } from "react";
 import { useClickOutside } from "../../hooks/useClickOutside";
-import { Identicon } from "../ui/Identicon";
+import { useTranslate } from "../../hooks/useTranslate";
 import services from "../../services/serviceContainer";
+import { Identicon } from "../ui/Identicon";
 
 const XIcon = ({ className }) => {
   return (
@@ -53,8 +54,8 @@ export const ForwardChatMessagesModal = ({
   onClose,
   setSelectedMessages,
   setSelectionMode,
-  t,
 }) => {
+  const { t } = useTranslate();
   const chats = useChatsStore((state) => state.chats);
 
   const navigate = useNavigate();

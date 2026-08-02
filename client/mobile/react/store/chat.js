@@ -1,14 +1,44 @@
 import { create } from "zustand";
 import services from "../services/serviceContainer";
 
-export const useChatStore = create((set, get) => ({
+const initialChatState = {
   chat: null,
-  setChat: (chat) => set({ chat }),
-  updateChat: async (data) => {
-    const chat = get().chat;
+  messages: [],
+  error: "",
+  editingMessage: null,
+  draft: "",
+  replyToMessage: null,
+  selectedMessages: [],
+  pinnedMessages: [],
+  selectionMode: false,
+  translations: {},
+  actionMenu: null,
+};
 
-    await services.chatService.updateChat(chat.id, data);
+export const useChatStore = create((set, get) => {
+  const withUpdater = (key) => (updater) =>
+    set((state) => ({
+      [key]: typeof updater === "function" ? updater(state[key]) : updater,
+    }));
 
-    set({ ...chat, ...data });
-  },
-}));
+  return {
+    ...initialChatState,
+    setChat: (chat) => set({ chat }),
+    setMessages: withUpdater("messages"),
+    setError: (error) => set({ error }),
+    setEditingMessage: (editingMessage) => set({ editingMessage }),
+    setDraft: (draft) => set({ draft }),
+    setReplyToMessage: (replyToMessage) => set({ replyToMessage }),
+    setSelectedMessages: withUpdater("selectedMessages"),
+    setPinnedMessages: withUpdater("pinnedMessages"),
+    setSelectionMode: (selectionMode) => set({ selectionMode }),
+    setTranslations: withUpdater("translations"),
+    setActionMenu: (actionMenu) => set({ actionMenu }),
+    resetChatState: () => set(initialChatState),
+    updateChat: async (data) => {
+      const chat = get().chat;
+      await services.chatService.updateChat(chat.id, data);
+      set((state) => ({ chat: { ...state.chat, ...data } }));
+    },
+  };
+});
