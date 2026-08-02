@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './PhotoEditorModal.css';
+import { useTranslate } from '../../hooks/useTranslate';
 
 const DEFAULT_FILTERS = { brightness: 100, contrast: 100, saturate: 100, sepia: 0, blur: 0 };
 const DEFAULT_CROP = { x: 0, y: 0, width: 1, height: 1 };
@@ -40,7 +41,7 @@ function cloneState(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-export function PhotoEditorModal({ file, onCancel, onSave, t = (_key, fallback) => fallback }) {
+export function PhotoEditorModal({ file, onCancel, onSave }) {
   const canvasRef = useRef(null);
   const stageRef = useRef(null);
   const imageRef = useRef(null);
@@ -70,6 +71,8 @@ export function PhotoEditorModal({ file, onCancel, onSave, t = (_key, fallback) 
   const [historyVersion, setHistoryVersion] = useState(0);
   const [editingTextId, setEditingTextId] = useState(null);
   const [canvasDisplayWidth, setCanvasDisplayWidth] = useState(1000);
+
+  const { t } = useTranslate();
 
   const currentState = useMemo(() => ({ filters, rotation, flipX, flipY, crop, cropRatio, objects }), [crop, cropRatio, filters, flipX, flipY, objects, rotation]);
   stateRef.current = currentState;

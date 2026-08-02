@@ -1,24 +1,26 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import services from '../../services/serviceContainer.js';
-import { useToasts } from '../../hooks/useToasts.js';
-import { ROUTES } from '../../consts/routes.js';
-import { ToastStack } from '../../components/ui/ToastStack.jsx';
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { ToastStack } from "../../components/ui/ToastStack.jsx";
+import { ROUTES } from "../../consts/routes.js";
+import { useToasts } from "../../hooks/useToasts.js";
+import services from "../../services/serviceContainer.js";
+import { useTranslate } from "../../hooks/useTranslate.js";
 
-export function CreateGroupPage({ t = (k, f) => f }) {
+export function CreateGroupPage() {
   const navigate = useNavigate();
   const { toasts, showToast } = useToasts();
 
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [selectedMembers, setSelectedMembers] = useState([]);
   const [isCreating, setIsCreating] = useState(false);
+  const { t } = useTranslate();
 
   async function handleSearch(val) {
     setSearchQuery(val);
-    const cleanVal = val.trim().replace('@', '');
+    const cleanVal = val.trim().replace("@", "");
     if (cleanVal.length < 2) {
       setSearchResults([]);
       return;
@@ -33,8 +35,8 @@ export function CreateGroupPage({ t = (k, f) => f }) {
   }
 
   function toggleMember(user) {
-    if (selectedMembers.some(m => m.id === user.id)) {
-      setSelectedMembers(selectedMembers.filter(m => m.id !== user.id));
+    if (selectedMembers.some((m) => m.id === user.id)) {
+      setSelectedMembers(selectedMembers.filter((m) => m.id !== user.id));
     } else {
       setSelectedMembers([...selectedMembers, user]);
     }
@@ -42,28 +44,32 @@ export function CreateGroupPage({ t = (k, f) => f }) {
 
   async function handleCreateGroup() {
     if (!title.trim()) {
-      showToast('error', 'Введите название группы', '⚠️');
+      showToast("error", "Введите название группы", "⚠️");
       return;
     }
     if (selectedMembers.length === 0) {
-      showToast('error', 'Выберите хотя бы одного участника', '⚠️');
+      showToast("error", "Выберите хотя бы одного участника", "⚠️");
       return;
     }
 
     setIsCreating(true);
     try {
-      const members = selectedMembers.map(m => m.id);
-      const data = await services.chatService.createGroup({ title, description, members });
+      const members = selectedMembers.map((m) => m.id);
+      const data = await services.chatService.createGroup({
+        title,
+        description,
+        members,
+      });
       if (data.chatId) {
-        showToast('success', 'Группа успешно создана!', '🎉');
+        showToast("success", "Группа успешно создана!", "🎉");
         setTimeout(() => {
           navigate(`/chats/${encodeURIComponent(data.chatId)}`);
         }, 800);
       } else {
-        throw new Error(data.error || 'Не удалось создать группу');
+        throw new Error(data.error || "Не удалось создать группу");
       }
     } catch (err) {
-      showToast('error', err.message, '❌');
+      showToast("error", err.message, "❌");
       setIsCreating(false);
     }
   }
@@ -75,14 +81,14 @@ export function CreateGroupPage({ t = (k, f) => f }) {
         <Link className="back-arrow-btn" to={ROUTES.CHATS}>
           ‹
         </Link>
-        <h1>{t('newGroup', 'Новая группа')}</h1>
+        <h1>{t("newGroup", "Новая группа")}</h1>
       </header>
 
       <section>
         <input
           type="text"
           className="group-name-input"
-          placeholder={t('groupTitlePlaceholder', 'Название группы')}
+          placeholder={t("groupTitlePlaceholder", "Название группы")}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           maxLength={50}
@@ -91,7 +97,7 @@ export function CreateGroupPage({ t = (k, f) => f }) {
         <input
           type="text"
           className="group-desc-input"
-          placeholder={t('groupDescPlaceholder', 'Описание (необязательно)')}
+          placeholder={t("groupDescPlaceholder", "Описание (необязательно)")}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           maxLength={255}
@@ -99,22 +105,28 @@ export function CreateGroupPage({ t = (k, f) => f }) {
       </section>
 
       <section style={{ marginBottom: 20 }}>
-        <h3>{t('addMembers', 'Добавить участников')}</h3>
+        <h3>{t("addMembers", "Добавить участников")}</h3>
         <input
           type="search"
           className="contacts-search-input"
-          placeholder={t('searchUsers', 'Поиск по юзернейму...')}
+          placeholder={t("searchUsers", "Поиск по юзернейму...")}
           value={searchQuery}
           onChange={(e) => handleSearch(e.target.value)}
         />
 
         <div className="contacts-select-list">
           {searchResults.map((user) => {
-            const isChecked = selectedMembers.some(m => m.id === user.id);
-            const initials = (user.firstName || user.username || '?').charAt(0).toUpperCase();
+            const isChecked = selectedMembers.some((m) => m.id === user.id);
+            const initials = (user.firstName || user.username || "?")
+              .charAt(0)
+              .toUpperCase();
 
             return (
-              <div key={user.id} className="contact-item-row" onClick={() => toggleMember(user)}>
+              <div
+                key={user.id}
+                className="contact-item-row"
+                onClick={() => toggleMember(user)}
+              >
                 <div className="contact-left">
                   <div className="contact-avatar-circle">
                     {user.avatarUrl ? (
@@ -124,8 +136,12 @@ export function CreateGroupPage({ t = (k, f) => f }) {
                     )}
                   </div>
                   <div className="contact-details">
-                    <span className="contact-name-title">{user.firstName || 'Пользователь'}</span>
-                    <span className="contact-username-sub">@{user.username}</span>
+                    <span className="contact-name-title">
+                      {user.firstName || "Пользователь"}
+                    </span>
+                    <span className="contact-username-sub">
+                      @{user.username}
+                    </span>
                   </div>
                 </div>
                 <input
@@ -144,7 +160,7 @@ export function CreateGroupPage({ t = (k, f) => f }) {
         <section className="selected-members-section">
           <h4>Выбрано ({selectedMembers.length}):</h4>
           <div className="selected-members-list">
-            {selectedMembers.map(m => (
+            {selectedMembers.map((m) => (
               <div
                 key={m.id}
                 onClick={() => toggleMember(m)}
@@ -163,7 +179,9 @@ export function CreateGroupPage({ t = (k, f) => f }) {
         disabled={isCreating || !title.trim() || selectedMembers.length === 0}
         onClick={handleCreateGroup}
       >
-        {isCreating ? t('creating', 'Создание...') : t('createGroupAction', 'Создать группу')}
+        {isCreating
+          ? t("creating", "Создание...")
+          : t("createGroupAction", "Создать группу")}
       </button>
     </main>
   );

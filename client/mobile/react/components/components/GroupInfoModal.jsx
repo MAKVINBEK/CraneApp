@@ -7,8 +7,9 @@ import services from "../../services/serviceContainer.js";
 import { useChatStore } from "../../store/chat.js";
 import { useChatsStore } from "../../store/chats.js";
 import { Identicon } from "../ui/Identicon.jsx";
+import { useTranslate } from "../../hooks/useTranslate.js";
 
-export function GroupInfoModal({ isOpen, onClose, t = (k, f) => f }) {
+export function GroupInfoModal({ isOpen, onClose }) {
   const { showToast } = useToasts();
   const [members, setMembers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -21,6 +22,7 @@ export function GroupInfoModal({ isOpen, onClose, t = (k, f) => f }) {
   const setChat = useChatStore((state) => state.setChat);
   const navigate = useNavigate();
   const [currentUserData] = useLocalStorage(STORAGE_KEYS.USER, {});
+  const { t } = useTranslate();
 
   useEffect(() => {
     fetchMembers();

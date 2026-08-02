@@ -1,30 +1,31 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useToasts } from '../../hooks/useToasts.js';
-import services from '../../services/serviceContainer.js';
-import { ToastStack } from '../../components/ui/ToastStack.jsx';
-import { Identicon } from '../../components/ui/Identicon.jsx';
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useToasts } from "../../hooks/useToasts.js";
+import services from "../../services/serviceContainer.js";
+import { ToastStack } from "../../components/ui/ToastStack.jsx";
+import { Identicon } from "../../components/ui/Identicon.jsx";
 
-export function ContactsPage({ t = (k, f) => f }) {
+export function ContactsPage() {
+  const { t } = useTranslate();
   const navigate = useNavigate();
   const { toasts, showToast } = useToasts();
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
   const [users, setUsers] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [statusText, setStatusText] = useState('');
+  const [statusText, setStatusText] = useState("");
 
   async function handleSearch(val) {
     setQuery(val);
-    const cleanQuery = val.trim().replace('@', '');
+    const cleanQuery = val.trim().replace("@", "");
 
     if (cleanQuery.length < 2) {
       setUsers([]);
-      setStatusText('');
+      setStatusText("");
       return;
     }
 
     setIsLoading(true);
-    setStatusText('Поиск...');
+    setStatusText("Поиск...");
     try {
       const foundUsers = await services.chatService.searchUsers(cleanQuery);
       if (foundUsers.length > 0) {
@@ -32,7 +33,7 @@ export function ContactsPage({ t = (k, f) => f }) {
         setStatusText(`Найдено: ${foundUsers.length}`);
       } else {
         setUsers([]);
-        setStatusText('Ничего не найдено');
+        setStatusText("Ничего не найдено");
       }
     } catch (err) {
       setUsers([]);
@@ -44,17 +45,17 @@ export function ContactsPage({ t = (k, f) => f }) {
 
   async function startChat(userId) {
     try {
-      const data = await services.chatService.createChat('private', [userId]);
+      const data = await services.chatService.createChat("private", [userId]);
       if (data.chatId) {
-        showToast('success', 'Чат создан!', '✓');
+        showToast("success", "Чат создан!", "✓");
         setTimeout(() => {
           navigate(`/chats/${encodeURIComponent(data.chatId)}`);
         }, 800);
       } else {
-        throw new Error(data.error || 'Не удалось создать чат');
+        throw new Error(data.error || "Не удалось создать чат");
       }
     } catch (err) {
-      showToast('error', err.message, '❌');
+      showToast("error", err.message, "❌");
     }
   }
 
@@ -62,33 +63,55 @@ export function ContactsPage({ t = (k, f) => f }) {
     <main className="contacts-page">
       <ToastStack toasts={toasts} />
       <header className="contacts-header">
-        <button className="back-arrow-btn" onClick={() => navigate('/chats')}>
+        <button className="back-arrow-btn" onClick={() => navigate("/chats")}>
           ‹
         </button>
-        <h1>{t('contactsAndSearch', 'Контакты и Поиск')}</h1>
+        <h1>{t("contactsAndSearch", "Контакты и Поиск")}</h1>
       </header>
 
       <input
         type="search"
         className="contacts-search-input"
-        placeholder={t('searchPlaceholder', 'Введите имя пользователя...')}
+        placeholder={t("searchPlaceholder", "Введите имя пользователя...")}
         value={query}
         onChange={(e) => handleSearch(e.target.value)}
       />
 
-      {statusText && <p style={{ fontSize: 13, color: 'var(--react-muted)', marginBottom: 12 }}>{statusText}</p>}
+      {statusText && (
+        <p
+          style={{
+            fontSize: 13,
+            color: "var(--react-muted)",
+            marginBottom: 12,
+          }}
+        >
+          {statusText}
+        </p>
+      )}
 
       <section className="contacts-list">
         {users.length === 0 && !isLoading && (
-          <div style={{ textAlign: 'center', marginTop: 40, color: 'var(--react-muted)' }}>
-            <span style={{ fontSize: 48, display: 'block', marginBottom: 10 }}>🔍</span>
+          <div
+            style={{
+              textAlign: "center",
+              marginTop: 40,
+              color: "var(--react-muted)",
+            }}
+          >
+            <span style={{ fontSize: 48, display: "block", marginBottom: 10 }}>
+              🔍
+            </span>
             <p>Введите юзернейм для начала диалога</p>
           </div>
         )}
 
         {users.map((user) => {
           return (
-            <div key={user.id} className="contact-item-row" onClick={() => startChat(user.id)}>
+            <div
+              key={user.id}
+              className="contact-item-row"
+              onClick={() => startChat(user.id)}
+            >
               <div className="contact-left">
                 <div className="contact-avatar-circle">
                   {user.avatarUrl ? (
@@ -98,11 +121,21 @@ export function ContactsPage({ t = (k, f) => f }) {
                   )}
                 </div>
                 <div className="contact-details">
-                  <span className="contact-name-title">{user.firstName || 'Пользователь'}</span>
+                  <span className="contact-name-title">
+                    {user.firstName || "Пользователь"}
+                  </span>
                   <span className="contact-username-sub">@{user.username}</span>
                 </div>
               </div>
-              <button className="create-group-btn" style={{ width: 'auto', margin: 0, padding: '6px 12px', fontSize: 13 }}>
+              <button
+                className="create-group-btn"
+                style={{
+                  width: "auto",
+                  margin: 0,
+                  padding: "6px 12px",
+                  fontSize: 13,
+                }}
+              >
                 Написать
               </button>
             </div>
