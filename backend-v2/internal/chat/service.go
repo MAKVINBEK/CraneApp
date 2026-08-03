@@ -8,7 +8,8 @@ import (
 	"path"
 	"strings"
 	"unicode/utf8"
-	"uuid"
+
+	"github.com/google/uuid"
 )
 
 var (
