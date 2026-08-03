@@ -1,13 +1,15 @@
-import { translateText } from "../services/translatorApi";
 import { useState } from "react";
-import { useToasts } from "./useToasts";
-import { useTranslate } from "./useTranslate";
-import { useChatStore } from "../store/chat.js";
 import services from "../services/serviceContainer.js";
+import { translateText } from "../services/translatorApi";
+import { useChatStore } from "../store/chat.js";
+import { useToasts } from "../hooks/useToasts.js";
+import { useTranslate } from "./useTranslate";
 
 export const useMessageActions = ({
   currentUser,
   chatId,
+  chatType,
+  chatRole,
   updateMessage,
   setIsForwardModalOpen,
   draftRef,
@@ -139,23 +141,29 @@ export const useMessageActions = ({
   const handleUnpinMessage = async (message) => {
     try {
       await services.messageService.unpinMessage(chatId, message.id);
-      setPinnedMessages((messages) => {
-        const pinnedMessage = messages.find(
-          (pinned) => pinned.messageId === message.id,
-        );
-        if (!pinnedMessage) {
-          showToast(
-            "error",
-            t("messageAlreadyUnpinned", "Это сообщение уже откреплено"),
-            "❌",
-          );
-        }
-
-        return messages.filter((pinned) => pinned.messageId !== message.id);
-      });
     } catch (err) {
       setError(
-        err.message || t("messagePinError", "Не удалось открепить сообщение"),
+        err.message || t("messageUnpinError", "Не удалось открепить сообщение"),
+      );
+      if (
+        chatType === "group" &&
+        (chatRole !== "admin" || chatRole !== "owner")
+      ) {
+        showToast(
+          "error",
+          t(
+            "messageUnpinMemberError",
+            "Не удалось открепить сообщение. У вас нет прав администратора.",
+          ),
+          "❌",
+        );
+        return;
+      }
+
+      showToast(
+        "error",
+        t("messageUnpinError", "Не удалось открепить сообщение"),
+        "❌",
       );
     }
   };
@@ -163,25 +171,29 @@ export const useMessageActions = ({
   const handlePinMessage = async (message) => {
     try {
       await services.messageService.pinMessage(chatId, message.id);
-      setPinnedMessages((prev) => {
-        const alreadyPinned = prev.some(
-          (pinnedMessage) => pinnedMessage.messageId === message.id,
-        );
-
-        if (alreadyPinned) {
-          showToast(
-            "error",
-            t("messageAlreadyPinned", "Это сообщение уже закреплено"),
-            "❌",
-          );
-          return prev;
-        }
-
-        return [...prev, { message, messageId: message.id }];
-      });
     } catch (err) {
       setError(
         err.message || t("messagePinError", "Не удалось закрепить сообщение"),
+      );
+      if (
+        chatType === "group" &&
+        (chatRole !== "admin" || chatRole !== "owner")
+      ) {
+        showToast(
+          "error",
+          t(
+            "messagePinMemberError",
+            "Не удалось закрепить сообщение. У вас нет прав администратора.",
+          ),
+          "❌",
+        );
+        return;
+      }
+
+      showToast(
+        "error",
+        t("messagePinError", "Не удалось закрепить сообщение"),
+        "❌",
       );
     }
   };

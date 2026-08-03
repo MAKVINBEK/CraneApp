@@ -6,6 +6,7 @@ import { REACT_ROUTES } from "../consts/routes";
 import { STORAGE_KEYS } from "../consts/storageKeys.js";
 import services from "../services/serviceContainer.js";
 import { clearAuthSession } from "../utils/clearAuthSession.js";
+import { RootLayout } from "../components/layouts/RootLayout.jsx";
 
 async function requireSession({ request }) {
   const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
@@ -61,6 +62,7 @@ const chatLoader = async ({ params }) => {
 
 export const router = createBrowserRouter([
   {
+    Component: RootLayout,
     children: [
       {
         index: true,

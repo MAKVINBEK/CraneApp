@@ -67,7 +67,6 @@ export function ChatsPage() {
 
   useEffect(() => {
     const updatePreview = async (payload) => {
-      console.log("update", "edit")
       const incomingMessage = payload?.message ?? payload;
       const chatId = payload?.chatId ?? incomingMessage?.chatId;
       if (!chatId || !incomingMessage) return;

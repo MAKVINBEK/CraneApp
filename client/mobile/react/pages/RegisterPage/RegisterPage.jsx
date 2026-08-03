@@ -1,14 +1,13 @@
 import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ToastStack } from "../../components/ui/ToastStack.jsx";
 import { ROUTES } from "../../consts/routes.js";
 import { STORAGE_KEYS } from "../../consts/storageKeys.js";
 import { useToasts } from "../../hooks/useToasts.js";
 import { useTranslate } from "../../hooks/useTranslate.js";
 import {
-  registerUser,
-  saveAuthSession,
-  uploadAvatar,
+    registerUser,
+    saveAuthSession,
+    uploadAvatar,
 } from "../../services/authApi.js";
 import { cn } from "../../utils/cn.js";
 
@@ -24,7 +23,7 @@ export function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showPasswordRepeat, setShowPasswordRepeat] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { showToast, toasts } = useToasts();
+  const { showToast } = useToasts();
   const avatarInputRef = useRef(null);
   const passwordScore = useMemo(() => getPasswordScore(password), [password]);
   const { t } = useTranslate();
@@ -116,7 +115,6 @@ export function RegisterPage() {
   return (
     <div className="register-page">
       <div className="register-container">
-        <ToastStack toasts={toasts} />
         <WelcomeStep active={step === 1} onNext={() => goTo(2)} />
         <NameStep
           active={step === 2}
