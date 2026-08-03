@@ -18,5 +18,5 @@ export const useChatsStore = create((set, get) => ({
     }
 
     return result;
-  },
+  }
 }));
