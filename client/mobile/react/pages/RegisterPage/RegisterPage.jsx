@@ -1,19 +1,20 @@
 import { useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { ToastStack } from "../../components/ui/ToastStack.jsx";
+import { ROUTES } from "../../consts/routes.js";
+import { STORAGE_KEYS } from "../../consts/storageKeys.js";
 import { useToasts } from "../../hooks/useToasts.js";
+import { useTranslate } from "../../hooks/useTranslate.js";
 import {
   registerUser,
   saveAuthSession,
   uploadAvatar,
 } from "../../services/authApi.js";
-import { STORAGE_KEYS } from "../../consts/storageKeys.js";
-import { ROUTES } from "../../consts/routes.js";
-import { Link } from "react-router-dom";
 import { cn } from "../../utils/cn.js";
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]+$/;
 
-export function RegisterPage({ t = fallbackTranslate }) {
+export function RegisterPage() {
   const [step, setStep] = useState(1);
   const [avatar, setAvatar] = useState("");
   const [firstName, setFirstName] = useState("");
@@ -26,6 +27,7 @@ export function RegisterPage({ t = fallbackTranslate }) {
   const { showToast, toasts } = useToasts();
   const avatarInputRef = useRef(null);
   const passwordScore = useMemo(() => getPasswordScore(password), [password]);
+  const { t } = useTranslate();
 
   if (localStorage.getItem(STORAGE_KEYS.TOKEN)) {
     window.location.href = ROUTES.CHATS;
@@ -115,11 +117,7 @@ export function RegisterPage({ t = fallbackTranslate }) {
     <div className="register-page">
       <div className="register-container">
         <ToastStack toasts={toasts} />
-        <WelcomeStep
-          active={step === 1}
-          onNext={() => goTo(2)}
-          t={t}
-        />
+        <WelcomeStep active={step === 1} onNext={() => goTo(2)} />
         <NameStep
           active={step === 2}
           avatar={avatar}
@@ -129,7 +127,6 @@ export function RegisterPage({ t = fallbackTranslate }) {
           onBack={() => goTo(1)}
           onFirstNameChange={setFirstName}
           onNext={continueFromName}
-          t={t}
         />
         <CredentialsStep
           active={step === 3}
@@ -149,7 +146,6 @@ export function RegisterPage({ t = fallbackTranslate }) {
           passwordScore={passwordScore}
           showPassword={showPassword}
           showPasswordRepeat={showPasswordRepeat}
-          t={t}
           username={username}
         />
       </div>
@@ -157,12 +153,10 @@ export function RegisterPage({ t = fallbackTranslate }) {
   );
 }
 
-function WelcomeStep({ active, onNext, t }) {
+function WelcomeStep({ active, onNext }) {
+  const { t } = useTranslate();
   return (
-    <section
-      className={cn("screen", { active })}
-      aria-hidden={!active}
-    >
+    <section className={cn("screen", { active })} aria-hidden={!active}>
       <div className="welcome-logo">
         <img
           src="https://i.ibb.co/1Y4Pg7BF/94-20260317155000.png"
@@ -223,13 +217,10 @@ function NameStep({
   onBack,
   onFirstNameChange,
   onNext,
-  t,
 }) {
+  const { t } = useTranslate();
   return (
-    <section
-      className={cn("screen", { active })}
-      aria-hidden={!active}
-    >
+    <section className={cn("screen", { active })} aria-hidden={!active}>
       <BackButton onClick={onBack} />
       <ProgressDots activeIndex={0} />
       <div className="step-title">{t("whatIsYourName", "Как вас зовут?")}</div>
@@ -290,6 +281,7 @@ function NameStep({
 
 function CredentialsStep(props) {
   const strength = getStrengthStyle(props.passwordScore);
+  const { t } = useTranslate();
   return (
     <section
       className={cn("screen", { active: props.active })}
@@ -301,14 +293,14 @@ function CredentialsStep(props) {
         🔐
       </div>
       <div className="step-title">
-        {props.t("chooseLoginTitle", "Придумайте логин")}
+        {t("chooseLoginTitle", "Придумайте логин")}
       </div>
       <div className="step-sub">
-        {props.t("chooseLoginSub", "Юзернейм и пароль для входа")}
+        {t("chooseLoginSub", "Юзернейм и пароль для входа")}
       </div>
 
       <div className="field">
-        <label htmlFor="username">{props.t("username", "Юзернейм")}</label>
+        <label htmlFor="username">{t("username", "Юзернейм")}</label>
         <input
           id="username"
           type="text"
@@ -326,10 +318,10 @@ function CredentialsStep(props) {
       </div>
       <PasswordField
         id="password"
-        label={props.t("password", "Пароль")}
+        label={t("password", "Пароль")}
         onChange={props.onPasswordChange}
         onToggle={props.onTogglePassword}
-        placeholder={props.t("passwordMin", "Минимум 6 символов")}
+        placeholder={t("passwordMin", "Минимум 6 символов")}
         show={props.showPassword}
         value={props.password}
       />
@@ -338,10 +330,10 @@ function CredentialsStep(props) {
       </div>
       <PasswordField
         id="password2"
-        label={props.t("repeatPassword", "Повторите пароль")}
+        label={t("repeatPassword", "Повторите пароль")}
         onChange={props.onPasswordRepeatChange}
         onToggle={props.onTogglePasswordRepeat}
-        placeholder={props.t("repeatPassword", "Повторите пароль")}
+        placeholder={t("repeatPassword", "Повторите пароль")}
         show={props.showPasswordRepeat}
         value={props.passwordRepeat}
       />
@@ -353,12 +345,12 @@ function CredentialsStep(props) {
         disabled={props.isSubmitting}
       >
         {props.isSubmitting
-          ? props.t("creatingAccount", "Создание аккаунта...")
-          : props.t("createAccount", "Создать аккаунт")}
+          ? t("creatingAccount", "Создание аккаунта...")
+          : t("createAccount", "Создать аккаунт")}
       </button>
       <div className="footer-link">
-        {props.t("alreadyHaveAccount", "Уже есть аккаунт?")}{" "}
-        <a href={props.loginHref}>{props.t("login", "Войти")}</a>
+        {t("alreadyHaveAccount", "Уже есть аккаунт?")}{" "}
+        <a href={props.loginHref}>{t("login", "Войти")}</a>
       </div>
     </section>
   );

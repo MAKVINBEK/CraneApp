@@ -1,18 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, Outlet, useNavigate, useParams } from "react-router-dom";
-import services from "../../services/serviceContainer.js";
+import { EmptyChatListPlaceholder } from "../../components/components/EmptyChatsListPlaceholder.jsx";
+import { UserProfilePanel } from "../../components/components/ProfilePanel/UserProfilePanel.jsx";
 import { Identicon } from "../../components/ui/Identicon.jsx";
-import { useRealtimeSocket } from "../../hooks/useRealtimeSocket.js";
-import { useIsMobile } from "../../hooks/useIsMobile.js";
-import { useChatsStore } from "../../store/chats.js";
 import { ChatsSkeleton } from "../../components/ui/Skeletons/ChatSkeleton.jsx";
-import { UserProfilePanel } from "../ChatPage/ChatThreadPage.jsx";
 import { ROUTES } from "../../consts/routes.js";
-import { cn } from "../../utils/cn.js";
 import { STORAGE_KEYS } from "../../consts/storageKeys.js";
+import { useIsMobile } from "../../hooks/useIsMobile.js";
 import { useLocalStorage } from "../../hooks/useLocalStorage.js";
+import { useRealtimeSocket } from "../../hooks/useRealtimeSocket.js";
+import { useTranslate } from "../../hooks/useTranslate.js";
+import services from "../../services/serviceContainer.js";
+import { useChatsStore } from "../../store/chats.js";
+import { cn } from "../../utils/cn.js";
 
-export function ChatsPage({ t = fallbackTranslate }) {
+export function ChatsPage() {
   const chats = useChatsStore((state) => state.chats);
   const setChats = useChatsStore((state) => state.setChats);
   const [error, setError] = useState("");
@@ -21,9 +23,7 @@ export function ChatsPage({ t = fallbackTranslate }) {
   const typingTimeoutsRef = useRef(new Map());
   const { eventBus } = useRealtimeSocket(true);
   const navigate = useNavigate();
-
-  // --- новое: то, что раньше жило в ChatLayout ---
-  const { chatId } = useParams(); // useParams мёрджит параметры всей ветки, включая дочерний :chatId
+  const { chatId } = useParams();
   const isMobile = useIsMobile();
   const [sidebarWidth, setSidebarWidth] = useState(360);
   const [profileWidth, setProfileWidth] = useState(null);
@@ -35,6 +35,7 @@ export function ChatsPage({ t = fallbackTranslate }) {
     chat: null,
   });
   const [profileCloseToken, setProfileCloseToken] = useState(0);
+  const { t } = useTranslate();
 
   useEffect(() => {
     let isMounted = true;
@@ -66,6 +67,7 @@ export function ChatsPage({ t = fallbackTranslate }) {
 
   useEffect(() => {
     const updatePreview = async (payload) => {
+      console.log("update", "edit")
       const incomingMessage = payload?.message ?? payload;
       const chatId = payload?.chatId ?? incomingMessage?.chatId;
       if (!chatId || !incomingMessage) return;
@@ -135,6 +137,7 @@ export function ChatsPage({ t = fallbackTranslate }) {
     };
 
     const unsubscribeNew = eventBus.on("new_message", updatePreview);
+    const unsubscribeEdited = eventBus.on("message:edited", updatePreview);
     const unsubscribeSent = eventBus.on("message:sent", updatePreview);
     const unsubscribeTyping = eventBus.on("typing", handleTyping);
     const unsubscribeUserTyping = eventBus.on("user_typing", handleTyping);
@@ -148,6 +151,7 @@ export function ChatsPage({ t = fallbackTranslate }) {
 
     return () => {
       unsubscribeNew();
+      unsubscribeEdited();
       unsubscribeSent();
       unsubscribeTyping();
       unsubscribeUserTyping();
@@ -212,15 +216,14 @@ export function ChatsPage({ t = fallbackTranslate }) {
           <ErrorChatListPlaceholder
             message={error}
             onRetry={() => window.location.reload()}
-            t={t}
           />
         )}
         {!isLoading && !error && chats.length === 0 && (
-          <EmptyChatListPlaceholder t={t} />
+          <EmptyChatListPlaceholder />
         )}
         {!isLoading &&
           !error &&
-          chats.map((chat) => <ChatListItem chat={chat} key={chat.id} t={t} />)}
+          chats.map((chat) => <ChatListItem chat={chat} key={chat.id} />)}
       </section>
     </>
   );
@@ -283,10 +286,6 @@ export function ChatsPage({ t = fallbackTranslate }) {
             style={profileWidth ? { flexBasis: profileWidth } : undefined}
           >
             <UserProfilePanel
-              chat={profileState.chat}
-              error={profileState.error}
-              isLoading={profileState.isLoading}
-              messages={profileState.messages}
               onClose={() => {
                 setProfileState({
                   isOpen: false,
@@ -297,8 +296,7 @@ export function ChatsPage({ t = fallbackTranslate }) {
                 });
                 setProfileCloseToken((value) => value + 1);
               }}
-              t={t}
-              user={profileState.user}
+              profileState={profileState}
             />
           </div>
         </>
@@ -307,7 +305,8 @@ export function ChatsPage({ t = fallbackTranslate }) {
   );
 }
 
-function ChatListItem({ chat, t }) {
+function ChatListItem({ chat }) {
+  const { t } = useTranslate();
   const title = chat.name || t("untitledChat", "Без названия");
   const lastMessage = chat.typingUserId
     ? t("typing", "печатает...")

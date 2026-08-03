@@ -288,7 +288,7 @@
   }
   .app-sidebar-pane {
     @media (min-width: 768px) {
-      @apply w-[360px] min-w-[320px] border-r border-border flex flex-col overflow-hidden h-full;
+      @apply w-full max-w-[360px] min-w-[320px] border-r border-border flex flex-col overflow-hidden h-full;
       background: var(--color-surface);
       backdrop-filter: saturate(180%) blur(20px);
       -webkit-backdrop-filter: saturate(180%) blur(20px);
@@ -338,6 +338,18 @@
   @media (min-width: 768px) and (max-width: 920px) {
     .chat-workspace:not(.has-profile) .app-sidebar-pane,
     .chat-workspace:not(.has-profile) .app-pane-resizer-sidebar {
+      display: flex;
+    }
+  }
+  @media (min-width: 768px) and (max-width: 920px) {
+    .chat-workspace:not(.has-profile) .app-sidebar-pane {
+      display: flex;
+      width: 100%;
+    }
+  }
+  @media (min-width: 768px) and (max-width: 920px) {
+    .chat-workspace:has(.thread-page) .app-sidebar-pane,
+    .chat-workspace:has(.thread-page) .app-pane-resizer-sidebar {
       display: none;
     }
   }
@@ -436,6 +448,7 @@
   }
   .empty-chat-placeholder {
     @media (min-width: 768px) { @apply flex-1 flex flex-col items-center justify-center text-center p-10; color: rgba(255,255,255,0.4); }
+    /* @media (max-width: 920px) { @apply hidden;} */
   }
   .empty-chat-icon { @media (min-width: 768px) { @apply text-[56px] mb-3 opacity-50; } }
   .empty-chat-placeholder h3 { @media (min-width: 768px) { @apply m-0 mb-2 text-white text-lg font-semibold; } }
@@ -588,21 +601,48 @@
 
   /* Group info modal */
   .group-info-modal-overlay {
-    @apply fixed inset-0 z-[1000] flex justify-center items-end;
+    @apply fixed inset-0 z-[1000] flex justify-center items-center;
     background: rgba(0,0,0,0.4); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
     animation: fadeIn 0.2s ease-out;
   }
   .group-info-modal-content {
-    @apply w-full flex flex-col overflow-hidden;
-    max-width: 500px; max-height: 85vh;
-    border-top-left-radius: 24px; border-top-right-radius: 24px;
+    @apply w-full flex flex-col overflow-hidden md:max-h-[85vh] h-full max-h-screen md:rounded-3xl;
+    max-width: 500px;
     background: rgba(20,20,22,0.85); border: 1px solid rgba(255,255,255,0.1); border-bottom: none;
     animation: slideUp 0.3s cubic-bezier(0.2,0.8,0.2,1); box-shadow: 0 -10px 40px rgba(0,0,0,0.5);
   }
   .group-info-header {
-    @apply flex justify-between items-center;
+    @apply flex flex-col gap-y-5;
     padding: 20px 24px; border-bottom: 1px solid rgba(255,255,255,0.05);
     & h2 { @apply text-[1.2rem] font-semibold m-0; background: linear-gradient(135deg,#fff 0%,#aaa 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  }
+  .group-info-header__wrapper {
+    @apply flex gap-x-4 items-center w-full;
+  }
+  .group-info-header__avatar {
+    @apply relative size-16 rounded-full flex items-center justify-center bg-[#2b77e7] text-white font-bold text-2xl shrink-0;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    & img, & svg { width: 100%; height: 100%; display: block; border-radius: inherit; }
+  }
+  .group-info-header__text-wrapper {
+    @apply flex flex-col  w-full;
+  }
+  .group-info-header__field {
+    @apply flex flex-col border-b border-border w-full focus-within:border-b-[#2b77e7] transition-colors;
+  }
+  .group-info-header__field-input {
+    @apply pb-1 outline-none border-0 w-full;
+  }
+  .group-info-header__actions-button-wrapper {
+    @apply flex justify-between items-center gap-x-4;
+    & .action-btn {
+      @apply text-[#ddd] rounded-lg text-[0.8rem] cursor-pointer transition-all duration-200 font-medium;
+      background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.05); padding: 6px 12px;
+      &:hover { @apply text-white; background: rgba(255,255,255,0.2); }
+      &.danger { color: #ff4444; background: rgba(255,50,50,0.1); border-color: rgba(255,50,50,0.2); &:hover { color: #ff6666; background: rgba(255,50,50,0.2); } }
+    }
   }
   .close-btn {
     @apply w-8 h-8 rounded-full text-white text-base cursor-pointer flex items-center justify-center transition-colors duration-200 border-none;

@@ -13,8 +13,11 @@ import (
 	"syscall"
 	"time"
 
+	openapi "craneapp/backend-v2/contracts/openapi"
 	"craneapp/backend-v2/internal/platform/config"
 	"craneapp/backend-v2/internal/platform/httpx"
+
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 // tokenBucket is a simple per-IP rate limiter.
@@ -169,6 +172,14 @@ func main() {
 	mux.HandleFunc("/health/live", func(w http.ResponseWriter, _ *http.Request) {
 		httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok", "v": "csp-v3"})
 	})
+
+	// API documentation. The OpenAPI contract is embedded in the edge binary.
+	mux.HandleFunc("/docs/openapi.yaml", openapi.ServeSpec)
+	mux.Handle("/docs/paths/", openapi.Files())
+	mux.Handle("/docs/components/", openapi.Files())
+	mux.Handle("/docs/", httpSwagger.Handler(
+		httpSwagger.URL("/docs/openapi.yaml"),
+	))
 
 	// Auth service
 	mux.Handle("/api/v2/auth/2fa/", authProxy)

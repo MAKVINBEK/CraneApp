@@ -1,4 +1,7 @@
-export function EmptyChatListPlaceholder({ t }) {
+import { useTranslate } from "../../hooks/useTranslate";
+
+export function EmptyChatListPlaceholder() {
+  const { t } = useTranslate();
   return (
     <div className="chats-state">
       <div className="chats-state-icon">✉</div>
