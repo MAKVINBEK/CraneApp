@@ -296,17 +296,8 @@ class MessageService {
         content: content.trim(),
       },
     );
-    const message = {
-      messageId,
-      content: response.data?.content ?? content.trim(),
-      editedAt: response.data?.editedAt ?? new Date(),
-      success: response.data?.success ?? true,
-    };
-    this.updateMessageInCache(messageId, {
-      content: message.content,
-      editedAt: message.editedAt,
-      isEdited: true,
-    });
+    const message = response.data;
+    this.updateMessageInCache(messageId, message);
     eventBus.emit("message:edited", message);
 
     return message;

@@ -293,14 +293,14 @@ function CredentialsStep(props) {
         🔐
       </div>
       <div className="step-title">
-        {props.t("chooseLoginTitle", "Придумайте логин")}
+        {t("chooseLoginTitle", "Придумайте логин")}
       </div>
       <div className="step-sub">
-        {props.t("chooseLoginSub", "Юзернейм и пароль для входа")}
+        {t("chooseLoginSub", "Юзернейм и пароль для входа")}
       </div>
 
       <div className="field">
-        <label htmlFor="username">{props.t("username", "Юзернейм")}</label>
+        <label htmlFor="username">{t("username", "Юзернейм")}</label>
         <input
           id="username"
           type="text"
@@ -318,10 +318,10 @@ function CredentialsStep(props) {
       </div>
       <PasswordField
         id="password"
-        label={props.t("password", "Пароль")}
+        label={t("password", "Пароль")}
         onChange={props.onPasswordChange}
         onToggle={props.onTogglePassword}
-        placeholder={props.t("passwordMin", "Минимум 6 символов")}
+        placeholder={t("passwordMin", "Минимум 6 символов")}
         show={props.showPassword}
         value={props.password}
       />
@@ -330,10 +330,10 @@ function CredentialsStep(props) {
       </div>
       <PasswordField
         id="password2"
-        label={props.t("repeatPassword", "Повторите пароль")}
+        label={t("repeatPassword", "Повторите пароль")}
         onChange={props.onPasswordRepeatChange}
         onToggle={props.onTogglePasswordRepeat}
-        placeholder={props.t("repeatPassword", "Повторите пароль")}
+        placeholder={t("repeatPassword", "Повторите пароль")}
         show={props.showPasswordRepeat}
         value={props.passwordRepeat}
       />
@@ -345,12 +345,12 @@ function CredentialsStep(props) {
         disabled={props.isSubmitting}
       >
         {props.isSubmitting
-          ? props.t("creatingAccount", "Создание аккаунта...")
-          : props.t("createAccount", "Создать аккаунт")}
+          ? t("creatingAccount", "Создание аккаунта...")
+          : t("createAccount", "Создать аккаунт")}
       </button>
       <div className="footer-link">
-        {props.t("alreadyHaveAccount", "Уже есть аккаунт?")}{" "}
-        <a href={props.loginHref}>{props.t("login", "Войти")}</a>
+        {t("alreadyHaveAccount", "Уже есть аккаунт?")}{" "}
+        <a href={props.loginHref}>{t("login", "Войти")}</a>
       </div>
     </section>
   );
