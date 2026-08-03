@@ -1,15 +1,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useToasts } from "../../hooks/useToasts.js";
-import services from "../../services/serviceContainer.js";
-import { ToastStack } from "../../components/ui/ToastStack.jsx";
 import { Identicon } from "../../components/ui/Identicon.jsx";
+import { useToasts } from "../../hooks/useToasts.js";
 import { useTranslate } from "../../hooks/useTranslate.js";
+import services from "../../services/serviceContainer.js";
 
 export function ContactsPage() {
   const { t } = useTranslate();
   const navigate = useNavigate();
-  const { toasts, showToast } = useToasts();
+  const { showToast } = useToasts();
   const [query, setQuery] = useState("");
   const [users, setUsers] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -62,7 +61,6 @@ export function ContactsPage() {
 
   return (
     <main className="contacts-page">
-      <ToastStack toasts={toasts} />
       <header className="contacts-header">
         <button className="back-arrow-btn" onClick={() => navigate("/chats")}>
           ‹

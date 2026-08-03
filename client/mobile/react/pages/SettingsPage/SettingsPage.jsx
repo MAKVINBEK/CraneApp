@@ -1,16 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import services from '../../services/serviceContainer.js';
-import { ToastStack } from '../../components/ui/ToastStack.jsx';
 import { disconnectRealtimeSocket } from '../../hooks/useRealtimeSocket.js';
-import {useTranslate} from "../../hooks/useTranslate";
-import { useToasts } from '../../hooks/useToasts.js';
+import { useTranslate } from "../../hooks/useTranslate";
+import services from '../../services/serviceContainer.js';
 import '../../styles/SettingsPage.css';
+import { useToasts } from '../../hooks/useToasts.js';
 
 export function SettingsPage() {
     const { t } = useTranslate()
   const navigate = useNavigate();
-  const { toasts, showToast } = useToasts();
+  const { showToast } = useToasts();
   const [user, setUser] = useState({});
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [settings, setSettings] = useState({
@@ -80,7 +79,6 @@ export function SettingsPage() {
 
   return (
     <main className="settings-page">
-      <ToastStack toasts={toasts} />
       <header className="settings-header">
         <button className="back-arrow-btn" onClick={() => navigate('/chats')}>
           ‹

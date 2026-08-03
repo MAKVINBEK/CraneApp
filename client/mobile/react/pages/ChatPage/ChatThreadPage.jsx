@@ -6,7 +6,6 @@ import {
   useParams,
 } from "react-router-dom";
 import Message from "../../../domain/entities/Message.js";
-import { sortMessagesChronologically } from "../../../utils/sortMessagesChronologically.js";
 import { useCall } from "../../components/Calls/CallProvider.jsx";
 import { ForwardChatMessagesModal } from "../../components/components/ForwardChatMessagesModal.jsx";
 import { GroupInfoModal } from "../../components/components/GroupInfoModal.jsx";
@@ -17,9 +16,7 @@ import { PhotoEditorModal } from "../../components/media-editor/PhotoEditorModal
 import { Identicon } from "../../components/ui/Identicon.jsx";
 import { ThreadSkeleton } from "../../components/ui/Skeletons/ThreadSkeleton.jsx";
 import { useRealtimeSocket } from "../../hooks/useRealtimeSocket.js";
-import { useToasts } from "../../hooks/useToasts.js";
 import services from "../../services/serviceContainer.js";
-import { translateText } from "../../services/translatorApi.js";
 import { useChatStore } from "../../store/chat.js";
 import "../../styles/ChatThreadPage.css";
 
@@ -28,6 +25,8 @@ import { ThreadState } from "../../components/ui/ThreadState.jsx";
 import { STORAGE_KEYS } from "../../consts/storageKeys.js";
 import { useLocalStorage } from "../../hooks/useLocalStorage.js";
 import { useTranslate } from "../../hooks/useTranslate.js";
+import { formatFileSize } from "../../utils/formatFileSize.js";
+import { getAttachmentIcon } from "../../utils/getAttachmentIcon.js";
 import { getChatSubtitle } from "../../utils/getChatSubtitle.js";
 import {
   appendUniqueMessage,
@@ -36,8 +35,6 @@ import {
   updateMessage,
   updatePinnedMessage,
 } from "../../utils/message.js";
-import { formatFileSize } from "../../utils/formatFileSize.js";
-import { getAttachmentIcon } from "../../utils/getAttachmentIcon.js";
 
 export function ChatThreadPage() {
   const { chatId } = useParams();
@@ -91,7 +88,6 @@ export function ChatThreadPage() {
   const draftRef = useRef(null);
   const { eventBus, socket } = useRealtimeSocket(Boolean(chatId));
   const { initiateCall } = useCall();
-  const { showToast } = useToasts();
   const { loadedChat, loadedMessages, loadedPinnedMessages } = useLoaderData();
 
   const [showCallMenu, setShowCallMenu] = useState(false);
@@ -781,15 +777,13 @@ export function ChatThreadPage() {
             currentUser={currentUser}
             draftRef={draftRef}
             chatId={chatId}
+            chatType={chat?.type}
+            chatRole={chat?.role}
             updateMessage={updateMessage}
             setIsForwardModalOpen={setIsForwardModalOpen}
           />
         </>
       )}
-
-      {error && messages.length > 0 ? (
-        <div className="thread-inline-error">{error}</div>
-      ) : null}
 
       {openedImage ? (
         <div

@@ -1,14 +1,13 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ToastStack } from "../../components/ui/ToastStack.jsx";
 import { ROUTES } from "../../consts/routes.js";
 import { useToasts } from "../../hooks/useToasts.js";
-import services from "../../services/serviceContainer.js";
 import { useTranslate } from "../../hooks/useTranslate.js";
+import services from "../../services/serviceContainer.js";
 
 export function CreateGroupPage() {
   const navigate = useNavigate();
-  const { toasts, showToast } = useToasts();
+  const { showToast } = useToasts();
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -76,7 +75,6 @@ export function CreateGroupPage() {
 
   return (
     <main className="create-group-page">
-      <ToastStack toasts={toasts} />
       <header className="create-group-header">
         <Link className="back-arrow-btn" to={ROUTES.CHATS}>
           ‹
