@@ -137,6 +137,7 @@ export function ChatsPage() {
 
     const unsubscribeNew = eventBus.on("new_message", updatePreview);
     const unsubscribeEdited = eventBus.on("message:edited", updatePreview);
+    const unsubscribeMessageEdited = eventBus.on("message_edited", updatePreview);
     const unsubscribeSent = eventBus.on("message:sent", updatePreview);
     const unsubscribeTyping = eventBus.on("typing", handleTyping);
     const unsubscribeUserTyping = eventBus.on("user_typing", handleTyping);
@@ -151,6 +152,7 @@ export function ChatsPage() {
     return () => {
       unsubscribeNew();
       unsubscribeEdited();
+      unsubscribeMessageEdited();
       unsubscribeSent();
       unsubscribeTyping();
       unsubscribeUserTyping();
