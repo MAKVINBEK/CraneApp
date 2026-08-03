@@ -4,6 +4,7 @@ import { useToasts } from "../../hooks/useToasts.js";
 import services from "../../services/serviceContainer.js";
 import { ToastStack } from "../../components/ui/ToastStack.jsx";
 import { Identicon } from "../../components/ui/Identicon.jsx";
+import { useTranslate } from "../../hooks/useTranslate.js";
 
 export function ContactsPage() {
   const { t } = useTranslate();
