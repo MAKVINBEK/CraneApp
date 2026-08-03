@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	cryptoclient "craneapp/backend-v2/internal/platform/crypto"
 	"github.com/lib/pq"
 )
 
@@ -47,12 +46,18 @@ type User struct {
 	PasswordHash string `json:"-"`
 }
 
-type Service struct {
-	db     *sql.DB
-	crypto *cryptoclient.Client
+type CryptoClient interface {
+	HashPassword(ctx context.Context, password string) (string, error)
+	VerifyPassword(ctx context.Context, password, hash string) (bool, error)
+	IssueToken(ctx context.Context, userID, username string) (string, error)
 }
 
-func NewService(db *sql.DB, crypto *cryptoclient.Client) *Service {
+type Service struct {
+	db     *sql.DB
+	crypto CryptoClient
+}
+
+func NewService(db *sql.DB, crypto CryptoClient) *Service {
 	return &Service{db: db, crypto: crypto}
 }
 
