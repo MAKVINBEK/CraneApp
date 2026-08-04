@@ -1,6 +1,6 @@
 import Chat from "../../domain/entities/Chat.js";
 import API_ENDPOINTS from "../../infrastructure/api/endpoints.js";
-import { getRawChat, invalidateChat } from "../core/chatCache.js";
+import { getRawChat, invalidateChat, primeChatCache } from "../core/chatCache.js";
 
 class ChatService {
   constructor(apiClient) {
@@ -9,7 +9,13 @@ class ChatService {
 
   async getChats() {
     const response = await this.apiClient.get(API_ENDPOINTS.CHATS);
-    return this.normalizeList(response.data).map((item) => Chat.fromAPI(item));
+    const rawList = this.normalizeList(response.data);
+
+    rawList.forEach((item) => {
+      if (item?.id) primeChatCache(item.id, item);
+    });
+
+    return rawList.map((item) => Chat.fromAPI(item));
   }
 
   async getChat(chatId) {

@@ -24,3 +24,10 @@ export function getRawChat(apiClient, chatId) {
 export function invalidateChat(chatId) {
   cache.delete(chatId);
 }
+
+export function primeChatCache(chatId, rawChatData) {
+  cache.set(chatId, {
+    promise: Promise.resolve(rawChatData),
+    expiresAt: Date.now() + TTL_MS,
+  });
+}
