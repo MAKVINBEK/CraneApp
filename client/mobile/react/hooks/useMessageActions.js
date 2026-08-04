@@ -3,6 +3,7 @@ import { useToasts } from "../hooks/useToasts.js";
 import services from "../services/serviceContainer.js";
 import { translateText } from "../services/translatorApi";
 import { useChatStore } from "../store/chat.js";
+import { useTranslation } from "react-i18next";
 
 export const useMessageActions = ({
   currentUser,
