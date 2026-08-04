@@ -1,11 +1,11 @@
 import { memo } from "react";
 import { useMessageLongPress } from "../../../hooks/useMessageLongPress";
-import { useTranslate } from "../../../hooks/useTranslate";
+import { useChatStore } from "../../../store/chat";
+import { formatMessageTime, hasMessageMedia } from "../../../utils/message";
+import { MessageCheckbox } from "../../ui/MessageCheckbox";
 import { MessageContentRenderer } from "./MessageContent";
 import { CallMessageContent, MessageMedia } from "./MessageMedia";
-import { useChatStore } from "../../../store/chat";
-import { MessageCheckbox } from "../../ui/MessageCheckbox";
-import { formatMessageTime, hasMessageMedia } from "../../../utils/message";
+import { useTranslation } from "react-i18next";
 
 export const MessageBubble = memo(
   ({ currentUserId, message, translations, onOpenImage, onSelection }) => {
@@ -16,7 +16,7 @@ export const MessageBubble = memo(
       messages,
       selectionMode,
     } = useChatStore();
-    const { t } = useTranslate();
+    const { t } = useTranslation();
 
     const mine = message.senderId === currentUserId;
     const isActionTarget = actionMenu?.messageId === message.id;

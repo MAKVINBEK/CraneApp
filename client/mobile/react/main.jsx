@@ -3,8 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App.jsx';
 
 // Global Scripts
-import '../scripts/i18n.js';
 import '../scripts/apple-emoji.js';
+import './configs/i18n.js';
 
 // Styles
 import './styles/tailwind.css';

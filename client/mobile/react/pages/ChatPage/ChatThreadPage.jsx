@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Link,
   useLoaderData,
@@ -6,7 +6,6 @@ import {
   useParams,
 } from "react-router-dom";
 import Message from "../../../domain/entities/Message.js";
-import { useCall } from "../../components/Calls/CallProvider.jsx";
 import { ForwardChatMessagesModal } from "../../components/components/ForwardChatMessagesModal.jsx";
 import { GroupInfoModal } from "../../components/components/GroupInfoModal.jsx";
 import { MessageBubble } from "../../components/components/MessageBubble/MessageBubble.jsx";
@@ -20,11 +19,13 @@ import services from "../../services/serviceContainer.js";
 import { useChatStore } from "../../store/chat.js";
 import "../../styles/ChatThreadPage.css";
 
+import { useTranslation } from "react-i18next";
 import { UserProfileModal } from "../../components/components/Modals/UserProfileModal.jsx";
 import { ThreadState } from "../../components/ui/ThreadState.jsx";
 import { STORAGE_KEYS } from "../../consts/storageKeys.js";
+import { useCall } from "../../hooks/useCall.js";
 import { useLocalStorage } from "../../hooks/useLocalStorage.js";
-import { useTranslate } from "../../hooks/useTranslate.js";
+import { getMessages } from "../../services/messagesApi.js";
 import { formatFileSize } from "../../utils/formatFileSize.js";
 import { getAttachmentIcon } from "../../utils/getAttachmentIcon.js";
 import { getChatSubtitle } from "../../utils/getChatSubtitle.js";
@@ -40,7 +41,7 @@ export function ChatThreadPage() {
   const { chatId } = useParams();
   const { onProfileStateChange, profileCloseToken, profileMode } =
     useOutletContext();
-  const { t } = useTranslate();
+  const { t } = useTranslation();
   const {
     chat,
     setChat,
@@ -79,20 +80,25 @@ export function ChatThreadPage() {
     error: "",
     user: null,
   });
+  const [offset, setOffset] = useState(0);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [isForwardModalOpen, setIsForwardModalOpen] = useState(false);
+  const [showCallMenu, setShowCallMenu] = useState(false);
   const [currentUser] = useLocalStorage(STORAGE_KEYS.USER, null);
   const bottomRef = useRef(null);
   const attachmentInputRef = useRef(null);
   const lastTypingSentAtRef = useRef(0);
   const typingTimeoutRef = useRef(null);
   const draftRef = useRef(null);
+  const timerRef = useRef(null);
+  const isLongPress = useRef(false);
+  const messagesRef = useRef(null);
+  const chatIdRef = useRef(chatId);
+
   const { eventBus, socket } = useRealtimeSocket(Boolean(chatId));
   const { initiateCall } = useCall();
   const { loadedChat, loadedMessages, loadedPinnedMessages } = useLoaderData();
-
-  const [showCallMenu, setShowCallMenu] = useState(false);
-  const timerRef = useRef(null);
-  const isLongPress = useRef(false);
 
   const handleTouchStart = () => {
     isLongPress.current = false;
@@ -114,6 +120,57 @@ export function ChatThreadPage() {
     }
     initiateCall(chatId, chat?.type, title, "audio");
   };
+
+  const loadMoreMessages = useCallback(async () => {
+    const requestChatId = chatId;
+    if (isLoadingMore || !hasMore) return;
+
+    setIsLoadingMore(true);
+
+    const container = messagesRef.current;
+    const prevHeight = container.scrollHeight;
+
+    const nextOffset = offset + 50;
+
+    const olderMessages = await getMessages({ chatId, offset: nextOffset });
+
+    if (chatIdRef.current !== requestChatId) {
+      return;
+    }
+
+    if (olderMessages.length < 50) {
+      setHasMore(false);
+    }
+
+    setMessages((prev) => [...olderMessages, ...prev]);
+    setOffset(nextOffset);
+
+    requestAnimationFrame(() => {
+      container.scrollTop += container.scrollHeight - prevHeight;
+    });
+
+    setIsLoadingMore(false);
+  }, [chatId, offset, hasMore, isLoadingMore]);
+
+  useEffect(() => {
+    chatIdRef.current = chatId;
+  }, [chatId]);
+
+  useEffect(() => {
+    const container = messagesRef.current;
+    if (!container) return;
+
+    const onScroll = () => {
+      const hasOverflow = container.scrollHeight > container.clientHeight;
+      if (hasOverflow && container.scrollTop <= 50) {
+        loadMoreMessages();
+      }
+    };
+
+    container.addEventListener("scroll", onScroll);
+
+    return () => container.removeEventListener("scroll", onScroll);
+  }, [loadMoreMessages]);
 
   useEffect(() => {
     if (profileMode !== "panel" || typeof onProfileStateChange !== "function")
@@ -157,6 +214,12 @@ export function ChatThreadPage() {
   }, [openedImage]);
 
   useEffect(() => {
+    setOffset(0);
+    setHasMore(true);
+    setIsLoadingMore(false);
+  }, [chatId]);
+
+  useEffect(() => {
     resetChatState();
     setChat(loadedChat);
     setMessages(loadedMessages);
@@ -166,10 +229,15 @@ export function ChatThreadPage() {
   }, [loadedChat, loadedMessages, loadedPinnedMessages]);
 
   useEffect(() => {
-    if (typeof bottomRef.current?.scrollIntoView === "function") {
-      bottomRef.current.scrollIntoView({ block: "end" });
-    }
-  }, [messages.length]);
+    if (isLoading) return;
+
+    requestAnimationFrame(() => {
+      bottomRef.current?.scrollIntoView({
+        block: "end",
+        behavior: "auto",
+      });
+    });
+  }, [chatId, isLoading]);
 
   useEffect(() => {
     const unsubscribeNew = eventBus.on("new_message", async (event) => {
@@ -317,6 +385,11 @@ export function ChatThreadPage() {
           replyToMessage?.id,
         );
         setMessages((items) => appendUniqueMessage(items, message));
+        requestAnimationFrame(() => {
+          bottomRef.current?.scrollIntoView({
+            behavior: "smooth",
+          });
+        });
         setPendingAttachment(null);
         setReplyToMessage(null);
         if (attachmentInputRef.current) attachmentInputRef.current.value = "";
@@ -328,6 +401,11 @@ export function ChatThreadPage() {
           replyToMessage?.id,
         );
         setMessages((items) => appendUniqueMessage(items, message));
+        requestAnimationFrame(() => {
+          bottomRef.current?.scrollIntoView({
+            behavior: "smooth",
+          });
+        });
         setReplyToMessage(null);
       }
       setDraft("");
@@ -737,7 +815,11 @@ export function ChatThreadPage() {
 
       <PinnedMessages messages={pinnedMessages} />
 
-      <section className="thread-messages" aria-busy={isLoading}>
+      <section
+        className="thread-messages"
+        aria-busy={isLoading}
+        ref={messagesRef}
+      >
         {isLoading && <ThreadSkeleton />}
         {!isLoading && error && messages.length === 0 && (
           <ThreadState

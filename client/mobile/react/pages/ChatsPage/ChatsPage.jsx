@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, Outlet, useNavigate, useParams } from "react-router-dom";
 import { EmptyChatListPlaceholder } from "../../components/components/EmptyChatsListPlaceholder.jsx";
 import { UserProfilePanel } from "../../components/components/ProfilePanel/UserProfilePanel.jsx";
@@ -9,7 +10,6 @@ import { STORAGE_KEYS } from "../../consts/storageKeys.js";
 import { useIsMobile } from "../../hooks/useIsMobile.js";
 import { useLocalStorage } from "../../hooks/useLocalStorage.js";
 import { useRealtimeSocket } from "../../hooks/useRealtimeSocket.js";
-import { useTranslate } from "../../hooks/useTranslate.js";
 import services from "../../services/serviceContainer.js";
 import { useChatsStore } from "../../store/chats.js";
 import { cn } from "../../utils/cn.js";
@@ -35,7 +35,7 @@ export function ChatsPage() {
     chat: null,
   });
   const [profileCloseToken, setProfileCloseToken] = useState(0);
-  const { t } = useTranslate();
+  const { t } = useTranslation();
 
   useEffect(() => {
     let isMounted = true;
@@ -307,7 +307,7 @@ export function ChatsPage() {
 }
 
 function ChatListItem({ chat }) {
-  const { t } = useTranslate();
+  const { t } = useTranslation();
   const title = chat.name || t("untitledChat", "Без названия");
   const lastMessage = chat.typingUserId
     ? t("typing", "печатает...")
@@ -436,8 +436,4 @@ function formatChatTime(value) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
-}
-
-function fallbackTranslate(_key, fallback) {
-  return fallback;
 }

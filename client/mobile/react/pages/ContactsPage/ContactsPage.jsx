@@ -1,12 +1,12 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { Identicon } from "../../components/ui/Identicon.jsx";
 import { useToasts } from "../../hooks/useToasts.js";
-import { useTranslate } from "../../hooks/useTranslate.js";
 import services from "../../services/serviceContainer.js";
 
 export function ContactsPage() {
-  const { t } = useTranslate();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { showToast } = useToasts();
   const [query, setQuery] = useState("");

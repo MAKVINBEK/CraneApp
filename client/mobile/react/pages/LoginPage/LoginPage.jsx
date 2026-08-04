@@ -1,13 +1,13 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { ROUTES } from "../../consts/routes.js";
 import { STORAGE_KEYS } from "../../consts/storageKeys.js";
 import { useToasts } from "../../hooks/useToasts.js";
-import { useTranslate } from "../../hooks/useTranslate.js";
 import {
-    fetchUserSettings,
-    loginUser,
-    saveAuthSession,
+  fetchUserSettings,
+  loginUser,
+  saveAuthSession,
 } from "../../services/authApi.js";
 
 export function LoginPage() {
@@ -16,7 +16,7 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { showToast } = useToasts();
-  const { t } = useTranslate();
+  const { t } = useTranslation();
 
   if (localStorage.getItem(STORAGE_KEYS.TOKEN)) {
     window.location.href = ROUTES.CHATS;
