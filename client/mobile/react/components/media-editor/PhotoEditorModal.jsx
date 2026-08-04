@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './PhotoEditorModal.css';
+import { useTranslation } from 'react-i18next';
 
 const DEFAULT_FILTERS = { brightness: 100, contrast: 100, saturate: 100, sepia: 0, blur: 0 };
 const DEFAULT_CROP = { x: 0, y: 0, width: 1, height: 1 };
