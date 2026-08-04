@@ -1,8 +1,8 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import { ROUTES } from "../../consts/routes.js";
 import { useToasts } from "../../hooks/useToasts.js";
-import { useTranslate } from "../../hooks/useTranslate.js";
 import services from "../../services/serviceContainer.js";
 
 export function CreateGroupPage() {
@@ -15,7 +15,7 @@ export function CreateGroupPage() {
   const [searchResults, setSearchResults] = useState([]);
   const [selectedMembers, setSelectedMembers] = useState([]);
   const [isCreating, setIsCreating] = useState(false);
-  const { t } = useTranslate();
+  const { t } = useTranslation();
 
   async function handleSearch(val) {
     setSearchQuery(val);

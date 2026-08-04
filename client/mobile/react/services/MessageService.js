@@ -2,6 +2,7 @@ import Message from "../../domain/entities/Message.js";
 import MessageValidator from "../../domain/validators/MessageValidator.js";
 import API_ENDPOINTS from "../../infrastructure/api/endpoints.js";
 import { sortMessagesChronologically } from "../../utils/sortMessagesChronologically.js";
+import { getRawChat } from "../core/chatCache.js";
 import { eventBus } from "../core/EventBus.js";
 
 const MEDIA_MESSAGE_TYPES = new Set([
@@ -20,9 +21,10 @@ class MessageService {
     this.apiClient = apiClient;
     this.cryptoService = cryptoService;
     this.messages = new Map();
+    this.pinnedMessages = new Map();
   }
 
-  async getMessages(chatId, limit = 50, offset = 0) {
+  async getMessages(chatId, offset = 0, limit = 50) {
     const cached = this.messages.get(chatId);
     if (cached && offset === 0) {
       return cached;
@@ -44,6 +46,13 @@ class MessageService {
 
     if (offset === 0) {
       this.messages.set(chatId, messages);
+    }
+
+    if (offset > 0 && cached) {
+      this.messages.set(
+        chatId,
+        sortMessagesChronologically([...cached, ...messages]),
+      );
     }
 
     return messages;
@@ -199,16 +208,16 @@ class MessageService {
 
   async getChatContext(chatId, purpose) {
     try {
-      const chatRes = await this.apiClient.get(`/chats/${chatId}`);
-      const chat = chatRes.data?.chat ?? chatRes.data;
+      const chat = await getRawChat(this.apiClient, chatId);
+
       return {
         ...(chat || {}),
-        type: chat?.type || "private",
+        type: chat?.type || 'private',
         peerPublicKey: chat?.peerPublicKey || null,
       };
     } catch (e) {
       console.warn(`Failed to fetch chat info for ${purpose} context`, e);
-      return { type: "private", peerPublicKey: null };
+      return { type: 'private', peerPublicKey: null };
     }
   }
 
@@ -297,6 +306,7 @@ class MessageService {
       },
     );
     const message = response.data;
+    this.updatePinnedMessageInCache(messageId, message);
     this.updateMessageInCache(messageId, message);
     eventBus.emit("message:edited", message);
 
@@ -355,6 +365,11 @@ class MessageService {
   }
 
   async listPins(chatId) {
+    const cached = this.pinnedMessages.get(chatId);
+    if (cached) {
+      return cached;
+    }
+
     const response = await this.apiClient
       .get(API_ENDPOINTS.CHAT_PINS(chatId))
       .then((response) => response.data?.pins ?? []);
@@ -376,6 +391,7 @@ class MessageService {
       ),
     );
 
+    this.pinnedMessages.set(chatId, messages);
     return messages;
   }
 
@@ -384,6 +400,7 @@ class MessageService {
       API_ENDPOINTS.CHAT_PIN_MESSAGE(chatId, messageId),
     );
 
+    this.addPinnedMessageToCache(chatId, response.data);
     eventBus.emit("message:pin", { chatId, messageId });
     return response.data;
   }
@@ -393,6 +410,7 @@ class MessageService {
       API_ENDPOINTS.CHAT_PIN_MESSAGE(chatId, messageId),
     );
 
+    this.removePinnedMessageFromCache(chatId);
     eventBus.emit("message:unpin", { chatId, messageId });
     return response.data;
   }
@@ -410,6 +428,41 @@ class MessageService {
         messages.map((message) =>
           message.id === messageId ? { ...message, ...patch } : message,
         ),
+      );
+    });
+  }
+
+  updatePinnedMessageInCache(messageId, patch) {
+    this.pinnedMessages.forEach((pinnedMessages, chatId) => {
+      this.pinnedMessages.set(
+        chatId,
+        pinnedMessages.map((pinned) =>
+          pinned.messageId === messageId
+            ? { ...pinned, message: { ...pinned.message, ...patch } }
+            : pinned,
+        ),
+      );
+    });
+  }
+
+  addPinnedMessageToCache(chatId, message) {
+    if (!this.pinnedMessages.has(chatId)) {
+      this.pinnedMessages.set(chatId, []);
+    }
+    this.pinnedMessages.set(
+      chatId,
+      sortMessagesChronologically([
+        ...this.pinnedMessages.get(chatId),
+        message,
+      ]),
+    );
+  }
+
+  removePinnedMessageFromCache(messageId) {
+    this.pinnedMessages.forEach((messages, chatId) => {
+      this.pinnedMessages.set(
+        chatId,
+        messages.filter((message) => message.id !== messageId),
       );
     });
   }

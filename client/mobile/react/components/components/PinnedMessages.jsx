@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { useTranslate } from "../../hooks/useTranslate";
 
 const MAX_VISIBLE_SEGMENTS = 4;
 
 export const PinnedMessages = ({ messages}) => {
   const navigate = useNavigate();
   const trackRef = useRef(null);
-  const { t } = useTranslate();
+  const { t } = useTranslation();
 
   const [currentPinnedMessageIndex, setCurrentPinnedMessageIndex] =
     useState(null);

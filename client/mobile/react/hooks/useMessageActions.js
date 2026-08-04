@@ -1,9 +1,8 @@
 import { useState } from "react";
+import { useToasts } from "../hooks/useToasts.js";
 import services from "../services/serviceContainer.js";
 import { translateText } from "../services/translatorApi";
 import { useChatStore } from "../store/chat.js";
-import { useToasts } from "../hooks/useToasts.js";
-import { useTranslate } from "./useTranslate";
 
 export const useMessageActions = ({
   currentUser,
@@ -14,7 +13,7 @@ export const useMessageActions = ({
   setIsForwardModalOpen,
   draftRef,
 }) => {
-  const { t } = useTranslate();
+  const { t } = useTranslation();
   const [translatingIds, setTranslatingIds] = useState(new Set());
   const {
     setMessages,

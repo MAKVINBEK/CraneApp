@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { STORAGE_KEYS } from "../../consts/storageKeys.js";
 import { useLocalStorage } from "../../hooks/useLocalStorage.js";
 import { useToasts } from "../../hooks/useToasts.js";
-import { useTranslate } from "../../hooks/useTranslate.js";
 import services from "../../services/serviceContainer.js";
 import { useChatStore } from "../../store/chat.js";
 import { useChatsStore } from "../../store/chats.js";
@@ -22,7 +22,7 @@ export function GroupInfoModal({ isOpen, onClose }) {
   const setChat = useChatStore((state) => state.setChat);
   const navigate = useNavigate();
   const [currentUserData] = useLocalStorage(STORAGE_KEYS.USER, {});
-  const { t } = useTranslate();
+  const { t } = useTranslation();
 
   useEffect(() => {
     fetchMembers();

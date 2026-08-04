@@ -1,5 +1,5 @@
+import { useTranslation } from "react-i18next";
 import { useMessageActions } from "../../../hooks/useMessageActions";
-import { useTranslate } from "../../../hooks/useTranslate";
 import { useChatStore } from "../../../store/chat";
 import { Icon } from "../../ui/Icon";
 
@@ -7,7 +7,7 @@ const REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 
 export const MessageActionsPopover = (props) => {
   const { message, onSelection, currentUserId } = props;
-  const { t } = useTranslate();
+  const { t } = useTranslation();
   const actions = useMessageActions(props); // Передаем props целиком, чтобы не деструктурировать дважды
   const { selectedMessages, pinnedMessages, selectionMode, actionMenu } =
     useChatStore();

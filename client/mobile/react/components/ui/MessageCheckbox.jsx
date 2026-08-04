@@ -1,4 +1,4 @@
-import { useTranslate } from "../../hooks/useTranslate";
+import { useTranslation } from "react-i18next";
 
 const Check = ({ className }) => {
   return (
@@ -20,7 +20,7 @@ const Check = ({ className }) => {
 };
 
 export function MessageCheckbox({ isChecked, onChange, className }) {
-  const { t } = useTranslate();
+  const { t } = useTranslation();
 
   return (
     <button

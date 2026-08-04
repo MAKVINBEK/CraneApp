@@ -1,13 +1,13 @@
 import { useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { ROUTES } from "../../consts/routes.js";
 import { STORAGE_KEYS } from "../../consts/storageKeys.js";
 import { useToasts } from "../../hooks/useToasts.js";
-import { useTranslate } from "../../hooks/useTranslate.js";
 import {
-    registerUser,
-    saveAuthSession,
-    uploadAvatar,
+  registerUser,
+  saveAuthSession,
+  uploadAvatar,
 } from "../../services/authApi.js";
 import { cn } from "../../utils/cn.js";
 
@@ -26,7 +26,7 @@ export function RegisterPage() {
   const { showToast } = useToasts();
   const avatarInputRef = useRef(null);
   const passwordScore = useMemo(() => getPasswordScore(password), [password]);
-  const { t } = useTranslate();
+  const { t, i18n } = useTranslation();
 
   if (localStorage.getItem(STORAGE_KEYS.TOKEN)) {
     window.location.href = ROUTES.CHATS;
@@ -91,7 +91,7 @@ export function RegisterPage() {
     setIsSubmitting(true);
     try {
       const language =
-        window.i18n?.currentLang ||
+        i18n.language ||
         localStorage.getItem(STORAGE_KEYS.LANGUAGE) ||
         "ru";
       const data = await registerUser({
@@ -152,7 +152,7 @@ export function RegisterPage() {
 }
 
 function WelcomeStep({ active, onNext }) {
-  const { t } = useTranslate();
+  const { t } = useTranslation();
   return (
     <section className={cn("screen", { active })} aria-hidden={!active}>
       <div className="welcome-logo">
@@ -216,7 +216,7 @@ function NameStep({
   onFirstNameChange,
   onNext,
 }) {
-  const { t } = useTranslate();
+  const { t } = useTranslation();
   return (
     <section className={cn("screen", { active })} aria-hidden={!active}>
       <BackButton onClick={onBack} />
@@ -279,7 +279,7 @@ function NameStep({
 
 function CredentialsStep(props) {
   const strength = getStrengthStyle(props.passwordScore);
-  const { t } = useTranslate();
+  const { t } = useTranslation();
   return (
     <section
       className={cn("screen", { active: props.active })}
@@ -514,8 +514,4 @@ function getStrengthStyle(score) {
     background: score > 0 ? colors[score - 1] : "transparent",
     width: score > 0 ? widths[score - 1] : "0%",
   };
-}
-
-function fallbackTranslate(_key, fallback) {
-  return fallback;
 }

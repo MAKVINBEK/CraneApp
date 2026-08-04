@@ -202,7 +202,7 @@
   .chats-search-icon { @apply shrink-0 text-[15px] leading-none; }
   .chats-search-placeholder { @apply min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[15px]; }
   .chats-icon-button { @apply w-8 h-8 flex items-center justify-center bg-transparent text-white text-2xl no-underline; }
-  .chats-list { @apply overflow-hidden; }
+  .chats-list { @apply overflow-hidden; scrollbar-width: thin; scrollbar-color: var(--color-panel) transparent; }
 
   .chat-row {
     @apply min-h-[72px] p-3 grid gap-3 text-inherit no-underline;

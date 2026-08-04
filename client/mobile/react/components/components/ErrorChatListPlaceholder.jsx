@@ -1,7 +1,7 @@
-import { useTranslate } from "../../hooks/useTranslate";
+import { useTranslation } from "react-i18next";
 
 export function ErrorChatListPlaceholder({ message, onRetry }) {
-  const { t } = useTranslate();
+  const { t } = useTranslation();
   return (
     <div className="chats-state">
       <div className="chats-state-icon">!</div>

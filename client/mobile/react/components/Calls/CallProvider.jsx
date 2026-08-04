@@ -1,8 +1,8 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { CallContext } from "../../hooks/useCall.js";
 import { useRealtimeSocket } from "../../hooks/useRealtimeSocket.js";
 import services from "../../services/serviceContainer.js";
 
-const CallContext = createContext(null);
 
 export function CallProvider({ children }) {
   const [incomingCall, setIncomingCall] = useState(null);
@@ -264,6 +264,4 @@ export function CallProvider({ children }) {
   );
 }
 
-export function useCall() {
-  return useContext(CallContext);
-}
+
