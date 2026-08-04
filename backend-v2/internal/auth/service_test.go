@@ -37,7 +37,9 @@ func TestRegister_CreatesUserWithExactUsername(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	crypto := &mockCrypto{
 		hashFunc: func(ctx context.Context, password string) (string, error) {
@@ -51,7 +53,7 @@ func TestRegister_CreatesUserWithExactUsername(t *testing.T) {
 	svc := auth.NewService(db, crypto)
 
 	mock.ExpectBegin()
-	mock.ExpectQuery("INSERT INTO auth.users").WithArgs("ivan", "hash", "Ivan", "").WillReturnRows(sqlmock.NewRows([]string{"id", "username", "first_name", "last_name"}).AddRow("user-id", "ivan", "Ivan", ""))
+	mock.ExpectQuery("INSERT INTO auth.users").WithArgs("ivan", "hash", "Ivan", "").WillReturnRows(sqlmock.NewRows([]string{"id", "username", "first_name", "last_name"}).AddRow("user_id", "ivan", "Ivan", ""))
 	mock.ExpectExec("INSERT INTO users.profiles").WithArgs("user_id", "Ivan", "").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec("INSERT INTO users.settings").WithArgs("user_id", sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
@@ -80,7 +82,9 @@ func TestRegister_ReturnsErrUsernameTakenOnDuplicate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	crypto := &mockCrypto{
 		hashFunc: func(ctx context.Context, password string) (string, error) {
@@ -112,7 +116,9 @@ func TestRegister_StoresUsernameLowercase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	crypto := &mockCrypto{
 		hashFunc:       func(ctx context.Context, password string) (string, error) { return "hash", nil },
@@ -122,7 +128,7 @@ func TestRegister_StoresUsernameLowercase(t *testing.T) {
 	svc := auth.NewService(db, crypto)
 
 	mock.ExpectBegin()
-	mock.ExpectQuery("INSERT INTO auth.users").WithArgs("ivan", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"id", "username", "first_name", "last_name"}).AddRow("user-id", "ivan", "Ivan", ""))
+	mock.ExpectQuery("INSERT INTO auth.users").WithArgs("ivan", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"id", "username", "first_name", "last_name"}).AddRow("user_id", "ivan", "Ivan", ""))
 	mock.ExpectExec("INSERT INTO users.profiles").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec("INSERT INTO users.settings").WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
@@ -143,7 +149,9 @@ func TestLogin_FindsUserByExactUsername(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	crypto := &mockCrypto{
 		verifyFunc:     func(ctx context.Context, password, hash string) (bool, error) { return true, nil },
@@ -153,8 +161,8 @@ func TestLogin_FindsUserByExactUsername(t *testing.T) {
 	svc := auth.NewService(db, crypto)
 	mock.ExpectQuery("SELECT u.id::text, u.username, u.first_name, u.last_name, u.password_hash").
 		WithArgs("ivan").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "username", "first_name", "last_name", "password_hash"}).
-			AddRow("user-id", "ivan", "Ivan", "", "hash"))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "username", "first_name", "last_name", "password_hash", "bio", "avatar_url"}).
+			AddRow("user-id", "ivan", "Ivan", "", "hash", "", ""))
 	mock.ExpectQuery("SELECT two_fa_enabled, two_fa_hash FROM auth.users").
 		WithArgs("user-id").
 		WillReturnRows(sqlmock.NewRows([]string{"two_fa_enabled", "two_fa_hash"}).
@@ -176,7 +184,9 @@ func TestLogin_DoesNotParseDiscriminator(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	crypto := &mockCrypto{
 		verifyFunc:     func(ctx context.Context, password, hash string) (bool, error) { return true, nil },
@@ -187,8 +197,8 @@ func TestLogin_DoesNotParseDiscriminator(t *testing.T) {
 
 	mock.ExpectQuery("SELECT u.id::text, u.username, u.first_name, u.last_name, u.password_hash").
 		WithArgs("ivan.123").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "username", "first_name", "last_name", "password_hash"}).
-			AddRow("user-id", "ivan.123", "Ivan", "", "hash"))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "username", "first_name", "last_name", "password_hash", "bio", "avatar_url"}).
+			AddRow("user-id", "ivan.123", "Ivan", "", "hash", "", ""))
 	mock.ExpectQuery("SELECT two_fa_enabled, two_fa_hash FROM auth.users").
 		WithArgs("user-id").
 		WillReturnRows(sqlmock.NewRows([]string{"two_fa_enabled", "two_fa_hash"}).
@@ -210,7 +220,9 @@ func TestLogin_ReturnsInvalidCredentialsWhenUserNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	crypto := &mockCrypto{}
 	svc := auth.NewService(db, crypto)
