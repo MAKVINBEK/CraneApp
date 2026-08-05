@@ -239,7 +239,7 @@ func (s *Service) List(ctx context.Context, userID string, archived bool) ([]Cha
 			         COALESCE(up.first_name, au.first_name, '') AS first_name,
 			         COALESCE(up.last_name,  au.last_name,  '') AS last_name,
 			         COALESCE(up.avatar_url, '') AS avatar_url,
-			         au.username || '.' || au.username_discriminator::text AS display_username,
+			         au.username AS display_username,
 			         EXISTS(SELECT 1 FROM public.user_sessions us WHERE us.user_id = au.id AND us.last_active > NOW() - INTERVAL '5 minutes') AS is_online,
 			         COALESCE((SELECT MAX(us.last_active)::text FROM public.user_sessions us WHERE us.user_id = au.id), '') AS last_seen
 			  FROM chats.members pm
@@ -309,7 +309,7 @@ func (s *Service) Get(ctx context.Context, userID, chatID string) (Chat, error) 
 			         COALESCE(up.first_name, au.first_name, '') AS first_name,
 			         COALESCE(up.last_name,  au.last_name,  '') AS last_name,
 			         COALESCE(up.avatar_url, '') AS avatar_url,
-			         au.username || '.' || au.username_discriminator::text AS display_username,
+			         au.username AS display_username,
 			         EXISTS(SELECT 1 FROM public.user_sessions us WHERE us.user_id = au.id AND us.last_active > NOW() - INTERVAL '5 minutes') AS is_online,
 			         COALESCE((SELECT MAX(us.last_active)::text FROM public.user_sessions us WHERE us.user_id = au.id), '') AS last_seen
 			  FROM chats.members pm
@@ -981,9 +981,9 @@ func (s *Service) SendMessage(ctx context.Context, userID, chatID, content, msgT
 	var role string
 	var isMuted sql.NullBool
 	err := s.db.QueryRowContext(ctx, `
-		SELECT cm.role, 
+		SELECT cm.role,
 		       (
-		         COALESCE(u.is_muted AND (u.muted_until IS NULL OR u.muted_until > NOW()), false) OR 
+		         COALESCE(u.is_muted AND (u.muted_until IS NULL OR u.muted_until > NOW()), false) OR
 		         (cm.role = 'member' AND cm.muted_until > NOW())
 		       )
 		FROM chats.members cm
