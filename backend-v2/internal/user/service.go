@@ -149,7 +149,7 @@ func (s *Service) Search(ctx context.Context, viewerID, query string) ([]SearchR
 	cleanQuery := strings.TrimPrefix(query, "@")
 
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT au.id::text, au.username, au.username_discriminator,
+		SELECT au.id::text, au.username,
 		       COALESCE(up.first_name, au.first_name), COALESCE(up.last_name, au.last_name), COALESCE(up.avatar_url, '')
 		FROM auth.users au
 		LEFT JOIN users.profiles up ON up.user_id = au.id
@@ -162,7 +162,9 @@ func (s *Service) Search(ctx context.Context, viewerID, query string) ([]SearchR
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var users []SearchResult
 	for rows.Next() {
@@ -425,7 +427,9 @@ func (s *Service) DeleteAllData(ctx context.Context, userID string) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() {
+		_ = tx.Rollback()
+	}()
 	if _, err := tx.ExecContext(ctx, `DELETE FROM messages.messages WHERE sender_id = $1`, userID); err != nil {
 		return err
 	}
@@ -463,7 +467,9 @@ func (s *Service) Export(ctx context.Context, userID string) (ExportData, error)
 	if err != nil {
 		return ExportData{}, err
 	}
-	defer rows.Close()
+	defer func() {
+		rows.Close()
+	}()
 	var chats []ExportChat
 	for rows.Next() {
 		var chat ExportChat
@@ -489,7 +495,9 @@ func (s *Service) Blocked(ctx context.Context, userID string) ([]BlockedUser, er
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		rows.Close()
+	}()
 	var blocked []BlockedUser
 	for rows.Next() {
 		var item BlockedUser
@@ -665,7 +673,9 @@ func (s *Service) Devices(ctx context.Context, userID string) ([]Session, error)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		rows.Close()
+	}()
 	var sessions []Session
 	for rows.Next() {
 		var sess Session
