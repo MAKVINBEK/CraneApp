@@ -5,9 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"path"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/google/uuid"
 )
 
 var (
@@ -17,6 +20,8 @@ var (
 	ErrUserNotFound    = errors.New("user not found")
 	ErrBlockedByUser   = errors.New("blocked by user")
 	ErrInvalidChatType = errors.New("invalid chat type")
+	ErrAlreadyMember   = errors.New("user already in group")
+	ErrUserBanned      = errors.New("user is banned")
 )
 
 type Chat struct {
@@ -669,27 +674,126 @@ type Ban struct {
 	CreatedAt   string  `json:"createdAt"`
 }
 
-func (s *Service) AddMember(ctx context.Context, actorID, chatID, userID string) error {
+type MemberAddedEvent struct {
+	Type   string  `json:"type"`
+	ChatID string  `json:"chatId"`
+	Member *Member `json:"member"`
+}
+
+func (s *Service) AddMember(ctx context.Context, actorID, chatID, userID string) (*Member, error) {
+	// 1. Валидация входных данных
+	if chatID == "" || userID == "" || !isValidUUID(chatID) || !isValidUUID(userID) {
+		return nil, ErrInvalidInput
+	}
+
+	// 2. Проверка прав актора
 	actorRole, err := s.memberRole(ctx, actorID, chatID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if actorRole != "owner" && actorRole != "admin" {
-		return ErrForbidden
+		return nil, ErrForbidden
 	}
-	// Check if banned.
-	var dummy int
+
+	// 3. Проверка типа чата
+	var chatType string
+	err = s.db.QueryRowContext(ctx, `SELECT type FROM chats.chats WHERE id = $1`, chatID).Scan(&chatType)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if chatType != "group" {
+		return nil, ErrInvalidChatType
+	}
+
+	// 4. Проверка существования и активности пользователя
+	var exists bool
+	err = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM auth.users WHERE id = $1 AND disabled_at IS NULL)`, userID).Scan(&exists)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, ErrUserNotFound
+	}
+
+	// 5. Проверка, что пользователь ещё не в группе
+	var isMember bool
+	err = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM chats.members WHERE chat_id = $1 AND user_id = $2)`, chatID, userID).Scan(&isMember)
+	if err != nil {
+		return nil, err
+	}
+	if isMember {
+		return nil, ErrAlreadyMember
+	}
+
+	// 6. Проверка бана с правильной ошибкой
+	var banned bool
 	err = s.db.QueryRowContext(ctx,
-		`SELECT 1 FROM chats.bans WHERE chat_id = $1 AND user_id = $2 AND (banned_until IS NULL OR banned_until > NOW())`,
-		chatID, userID).Scan(&dummy)
-	if err == nil {
-		return ErrForbidden // user is banned
+		`SELECT EXISTS(SELECT 1 FROM chats.bans WHERE chat_id = $1 AND user_id = $2 AND (banned_until IS NULL OR banned_until > NOW()))`,
+		chatID, userID).Scan(&banned)
+	if err != nil {
+		return nil, err
 	}
+	if banned {
+		return nil, ErrUserBanned
+	}
+
+	// 7. Вставка
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO chats.members (chat_id, user_id, role) VALUES ($1, $2, 'member')
 		ON CONFLICT DO NOTHING
 	`, chatID, userID)
-	return err
+	if err != nil {
+		return nil, err
+	}
+
+	// 8. Получение и возврат объекта Member
+	var permissions jsonMap
+	var m Member
+	err = s.db.QueryRowContext(ctx, `
+		SELECT au.id::text, au.username, COALESCE(up.first_name, au.first_name), COALESCE(up.last_name, au.last_name),
+		COALESCE(up.avatar_url, ''), cm.role, cm.permissions, COALESCE(cm.muted_until::text, ''), cm.joined_at::text
+		FROM auth.users au
+		JOIN chats.members cm ON cm.user_id = au.id
+		LEFT JOIN users.profiles up ON up.user_id = au.id
+		WHERE cm.chat_id = $1 AND au.id = $2
+		`, chatID, userID).Scan(
+		&m.ID,
+		&m.Username,
+		&m.FirstName,
+		&m.LastName,
+		&m.AvatarURL,
+		&m.Role,
+		&permissions,
+		&m.MutedUntil,
+		&m.JoinedAt,
+	)
+	m.Permissions = map[string]any(permissions)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, errors.New("added member not found after insertion")
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	// 9. Рассылка WebSocket-события
+	if s.ws != nil {
+		event := MemberAddedEvent{
+			Type:   "chat_member_added",
+			ChatID: chatID,
+			Member: &m,
+		}
+		payload, err := json.Marshal(event)
+		if err != nil {
+			slog.Error("failed to marshal member_added event", "err", err, "chatID", chatID, "userID", userID)
+		} else {
+			s.ws.BroadcastToChat(chatID, payload, "")
+		}
+	}
+
+	return &m, nil
 }
 
 func (s *Service) BanMember(ctx context.Context, actorID, chatID, userID, reason string) error {
@@ -1551,4 +1655,9 @@ func (s *Service) GetMlsState(ctx context.Context, chatID string) (int64, string
 		return 0, "", nil
 	}
 	return epoch, treeState.String, err
+}
+
+func isValidUUID(u string) bool {
+	err := uuid.Validate(u)
+	return err == nil
 }
