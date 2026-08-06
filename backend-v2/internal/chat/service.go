@@ -8,8 +8,6 @@ import (
 	"path"
 	"strings"
 	"unicode/utf8"
-
-	"github.com/google/uuid"
 )
 
 var (
@@ -362,15 +360,7 @@ func (s *Service) getChatInfo(ctx context.Context, userID, chatID string) (strin
 	err := s.db.QueryRowContext(ctx, `SELECT c.type, cm.role 
 	FROM chats.chats c JOIN chats.members cm ON cm.chat_id = c.id WHERE c.id = $2 AND cm.user_id = $1`, userID, chatID).Scan(&chatType, &role)
 
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", "", ErrForbidden
-	}
-
-	if err != nil {
-		return "", "", err
-	}
-
-	return chatType, role, nil
+	return chatType, role, err
 }
 
 func (s *Service) hydrateRealtimePresence(chats []Chat) {
@@ -1432,25 +1422,15 @@ func (s *Service) ListPins(
 	return pins, nil
 }
 
-func validateUUID(ids ...string) error {
-	for _, id := range ids {
-		if _, err := uuid.Parse(id); err != nil {
-			return ErrInvalidInput
-		}
-	}
-	return nil
-}
-
 func (s *Service) PinMessage(ctx context.Context, userID, chatID, messageID string) error {
-
-	if err := validateUUID(chatID, messageID); err != nil {
-		return err
-	}
 
 	// Проверяет, что чат существует и что пользователь состоит в чате. Возвращает тип чата, роль пользователя и ошибку.
 	chatType, role, err := s.getChatInfo(ctx, userID, chatID)
 
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrForbidden
+		}
 		return err
 	}
 
@@ -1494,14 +1474,14 @@ func (s *Service) PinMessage(ctx context.Context, userID, chatID, messageID stri
 }
 
 func (s *Service) UnpinMessage(ctx context.Context, userID, chatID, messageID string) error {
-	if err := validateUUID(chatID, messageID); err != nil {
-		return err
-	}
 
 	// Проверяет, что чат существует и что пользователь состоит в чате. Возвращает тип чата, роль пользователя и ошибку.
 	chatType, role, err := s.getChatInfo(ctx, userID, chatID)
 
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrForbidden
+		}
 		return err
 	}
 

@@ -15,10 +15,17 @@ import (
 	"craneapp/backend-v2/internal/platform/authctx"
 	"craneapp/backend-v2/internal/platform/config"
 	"craneapp/backend-v2/internal/platform/httpx"
+	"github.com/go-playground/validator/v10"
 )
 
 type Handler struct {
 	service *Service
+}
+
+var validate *validator.Validate
+
+func init() {
+	validate = validator.New()
 }
 
 func NewHandler(service *Service) *Handler {
@@ -621,6 +628,7 @@ func (h *Handler) Messages(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Pins(w http.ResponseWriter, r *http.Request) {
+
 	current := authctx.MustUser(r)
 	chatID, suffix := parseChatPath(r.URL.Path)
 	if chatID == "" || suffix != "/pins" && !strings.HasPrefix(suffix, "/pins/") {
@@ -647,11 +655,23 @@ func (h *Handler) Pins(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w, r)
 		return
 	}
+
+	pinsData := PinsData{ChatID: chatID, MessageID: messageID}
+
+	if err := validate.Struct(pinsData); err != nil {
+		if _, ok := err.(validator.ValidationErrors); ok {
+			httpx.ErrorJSON(w, r, http.StatusBadRequest, "invalid_input", "invalid chatId or messageId")
+			return
+		}
+		httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", "validation failed")
+		return
+	}
+
 	switch r.Method {
 	case http.MethodPost:
-		respondSuccess(w, r, h.service.PinMessage(r.Context(), current.ID, chatID, messageID))
+		respondSuccess(w, r, h.service.PinMessage(r.Context(), current.ID, pinsData.ChatID, pinsData.MessageID))
 	case http.MethodDelete:
-		respondSuccess(w, r, h.service.UnpinMessage(r.Context(), current.ID, chatID, messageID))
+		respondSuccess(w, r, h.service.UnpinMessage(r.Context(), current.ID, pinsData.ChatID, pinsData.MessageID))
 	default:
 		methodNotAllowed(w, r)
 	}
