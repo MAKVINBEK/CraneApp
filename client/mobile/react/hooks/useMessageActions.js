@@ -97,8 +97,7 @@ export const useMessageActions = ({
         setMessages((messages) =>
           messages.filter((message) => !selectedIds.has(message.id)),
         );
-        setSelectedMessages([]);
-        setSelectionMode(false);
+        handleCancelSelection()
       }
 
       if (!selectionMode) {
@@ -255,6 +254,7 @@ export const useMessageActions = ({
         .map((message) => message.content)
         .join("\n");
       navigator.clipboard.writeText(allContent);
+      handleCancelSelection();
       return;
     }
 
