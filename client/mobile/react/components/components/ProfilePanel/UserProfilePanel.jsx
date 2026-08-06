@@ -1,17 +1,16 @@
 import { memo, useMemo } from "react";
-import { useProfileEdit } from "../../../hooks/useProfileEdit";
-import { useTranslate } from "../../../hooks/useTranslate";
-// import { getChatSubtitle, getCurrentUser } from "../../../utils/utils";
 import { STORAGE_KEYS } from "../../../consts/storageKeys";
+import { useCall } from "../../../hooks/useCall";
 import { useLocalStorage } from "../../../hooks/useLocalStorage";
+import { useProfileEdit } from "../../../hooks/useProfileEdit";
 import { getChatSubtitle } from "../../../utils/getChatSubtitle";
-import { useCall } from "../../Calls/CallProvider";
 import { Icon } from "../../ui/Icon";
 import { Identicon } from "../../ui/Identicon";
+import { useTranslation } from "react-i18next";
 
 export const UserProfilePanel = memo(
   ({ profileState, onClose, stopPropagation = false }) => {
-    const { t } = useTranslate();
+    const { t } = useTranslation();
     const { initiateCall } = useCall();
     const [currentUser] = useLocalStorage(STORAGE_KEYS.USER, null);
 

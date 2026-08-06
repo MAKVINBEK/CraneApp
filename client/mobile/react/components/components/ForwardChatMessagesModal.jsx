@@ -4,8 +4,8 @@ import { useChatsStore } from "../../store/chats";
 import { useDebounce } from "../../hooks/useDebounce";
 
 import { useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useClickOutside } from "../../hooks/useClickOutside";
-import { useTranslate } from "../../hooks/useTranslate";
 import services from "../../services/serviceContainer";
 import { Identicon } from "../ui/Identicon";
 
@@ -55,7 +55,7 @@ export const ForwardChatMessagesModal = ({
   setSelectedMessages,
   setSelectionMode,
 }) => {
-  const { t } = useTranslate();
+  const { t } = useTranslation();
   const chats = useChatsStore((state) => state.chats);
 
   const navigate = useNavigate();

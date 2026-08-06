@@ -1,30 +1,29 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import services from '../../services/serviceContainer.js';
-import { ToastStack } from '../../components/ui/ToastStack.jsx';
-import { disconnectRealtimeSocket } from '../../hooks/useRealtimeSocket.js';
-import {useTranslate} from "../../hooks/useTranslate";
-import { useToasts } from '../../hooks/useToasts.js';
-import '../../styles/SettingsPage.css';
+import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
+import { disconnectRealtimeSocket } from "../../hooks/useRealtimeSocket.js";
+import { useToasts } from "../../hooks/useToasts.js";
+import services from "../../services/serviceContainer.js";
+import "../../styles/SettingsPage.css";
 
 export function SettingsPage() {
-    const { t } = useTranslate()
+  const { t } = useTranslation();
   const navigate = useNavigate();
-  const { toasts, showToast } = useToasts();
+  const { showToast } = useToasts();
   const [user, setUser] = useState({});
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [settings, setSettings] = useState({
-    theme: 'dark',
-    language: 'ru',
+    theme: "dark",
+    language: "ru",
     notifications: true,
     sounds: true,
   });
 
-  const token = localStorage.getItem('craneapp_auth_token');
+  const token = localStorage.getItem("craneapp_auth_token");
 
   useEffect(() => {
     if (!token) {
-      navigate('/login');
+      navigate("/login");
       return;
     }
 
@@ -38,15 +37,18 @@ export function SettingsPage() {
 
         if (nextUser) {
           setUser(nextUser);
-          localStorage.setItem('craneapp_user_data', JSON.stringify(nextUser));
+          localStorage.setItem("craneapp_user_data", JSON.stringify(nextUser));
         }
 
         if (settingsPayload.settings) {
           setSettings(settingsPayload.settings);
-          localStorage.setItem('craneapp_settings', JSON.stringify(settingsPayload.settings));
+          localStorage.setItem(
+            "craneapp_settings",
+            JSON.stringify(settingsPayload.settings),
+          );
         }
       } catch (e) {
-        showToast('error', 'Ошибка синхронизации настроек с сервером', '⚠️');
+        showToast("error", "Ошибка синхронизации настроек с сервером", "⚠️");
       }
     }
 
@@ -56,36 +58,37 @@ export function SettingsPage() {
   async function updateSetting(name, value) {
     const updated = { ...settings, [name]: value };
     setSettings(updated);
-    localStorage.setItem('craneapp_settings', JSON.stringify(updated));
+    localStorage.setItem("craneapp_settings", JSON.stringify(updated));
 
     try {
       await services.userService.updateSettings(updated);
-      showToast('success', t('settingsSaved', 'Настройки сохранены'), '✓');
+      showToast("success", t("settingsSaved", "Настройки сохранены"), "✓");
     } catch (_) {
-      showToast('error', 'Не удалось сохранить настройки на сервере', '⚠️');
+      showToast("error", "Не удалось сохранить настройки на сервере", "⚠️");
     }
   }
 
   async function handleLogout() {
     await services.authService.logout().catch(() => {
-      localStorage.removeItem('craneapp_auth_token');
-      localStorage.removeItem('craneapp_user_data');
+      localStorage.removeItem("craneapp_auth_token");
+      localStorage.removeItem("craneapp_user_data");
     });
     disconnectRealtimeSocket();
-    localStorage.removeItem('craneapp_settings');
-    navigate('/login');
+    localStorage.removeItem("craneapp_settings");
+    navigate("/login");
   }
 
-  const userInitials = (user.firstName || user.username || 'U').charAt(0).toUpperCase();
+  const userInitials = (user.firstName || user.username || "U")
+    .charAt(0)
+    .toUpperCase();
 
   return (
     <main className="settings-page">
-      <ToastStack toasts={toasts} />
       <header className="settings-header">
-        <button className="back-arrow-btn" onClick={() => navigate('/chats')}>
+        <button className="back-arrow-btn" onClick={() => navigate("/chats")}>
           ‹
         </button>
-        <h1>{t('settings', 'Настройки')}</h1>
+        <h1>{t("settings", "Настройки")}</h1>
       </header>
 
       <section className="settings-profile-card">
@@ -98,19 +101,24 @@ export function SettingsPage() {
         </div>
         <div className="settings-profile-info">
           <h2>
-            {user.firstName || 'Пользователь'}
-            {user.statusEmoji ? <span style={{ marginLeft: 8 }}>{user.statusEmoji}</span> : null}
+            {user.firstName || "Пользователь"}
+            {user.statusEmoji ? (
+              <span style={{ marginLeft: 8 }}>{user.statusEmoji}</span>
+            ) : null}
           </h2>
-          <p>{user.username ? `@${user.username}` : ''}</p>
+          <p>{user.username ? `@${user.username}` : ""}</p>
           {user.bio && <p style={{ marginTop: 6, opacity: 0.8 }}>{user.bio}</p>}
         </div>
       </section>
 
       <section className="settings-block-group">
-        <div className="settings-row-item" onClick={() => setIsEditModalOpen(true)}>
+        <div
+          className="settings-row-item"
+          onClick={() => setIsEditModalOpen(true)}
+        >
           <div className="settings-row-left">
             <span className="settings-row-icon">👤</span>
-            <span>{t('editProfile', 'Редактировать профиль')}</span>
+            <span>{t("editProfile", "Редактировать профиль")}</span>
           </div>
           <div className="settings-row-right">
             <span>›</span>
@@ -122,11 +130,13 @@ export function SettingsPage() {
         <div className="settings-row-item">
           <div className="settings-row-left">
             <span className="settings-row-icon">🔔</span>
-            <span>{t('notifications', 'Уведомления')}</span>
+            <span>{t("notifications", "Уведомления")}</span>
           </div>
           <div
-            className={`settings-toggle-switch ${settings.notifications ? 'is-active' : ''}`}
-            onClick={() => updateSetting('notifications', !settings.notifications)}
+            className={`settings-toggle-switch ${settings.notifications ? "is-active" : ""}`}
+            onClick={() =>
+              updateSetting("notifications", !settings.notifications)
+            }
           >
             <div className="settings-toggle-knob" />
           </div>
@@ -135,11 +145,11 @@ export function SettingsPage() {
         <div className="settings-row-item">
           <div className="settings-row-left">
             <span className="settings-row-icon">🎵</span>
-            <span>{t('sounds', 'Звуки')}</span>
+            <span>{t("sounds", "Звуки")}</span>
           </div>
           <div
-            className={`settings-toggle-switch ${settings.sounds ? 'is-active' : ''}`}
-            onClick={() => updateSetting('sounds', !settings.sounds)}
+            className={`settings-toggle-switch ${settings.sounds ? "is-active" : ""}`}
+            onClick={() => updateSetting("sounds", !settings.sounds)}
           >
             <div className="settings-toggle-knob" />
           </div>
@@ -147,21 +157,39 @@ export function SettingsPage() {
       </section>
 
       <section className="settings-block-group">
-        <div className="settings-row-item" onClick={() => showToast('info', 'Эта функция будет доступна в следующем обновлении', 'ℹ️')}>
+        <div
+          className="settings-row-item"
+          onClick={() =>
+            showToast(
+              "info",
+              "Эта функция будет доступна в следующем обновлении",
+              "ℹ️",
+            )
+          }
+        >
           <div className="settings-row-left">
             <span className="settings-row-icon">🎨</span>
-            <span>{t('appearance', 'Оформление')}</span>
+            <span>{t("appearance", "Оформление")}</span>
           </div>
           <div className="settings-row-right">
-            <span>{settings.theme === 'dark' ? 'Тёмная' : 'Светлая'}</span>
+            <span>{settings.theme === "dark" ? "Тёмная" : "Светлая"}</span>
             <span>›</span>
           </div>
         </div>
 
-        <div className="settings-row-item" onClick={() => showToast('info', 'Эта функция будет доступна в следующем обновлении', 'ℹ️')}>
+        <div
+          className="settings-row-item"
+          onClick={() =>
+            showToast(
+              "info",
+              "Эта функция будет доступна в следующем обновлении",
+              "ℹ️",
+            )
+          }
+        >
           <div className="settings-row-left">
             <span className="settings-row-icon">🌐</span>
-            <span>{t('language', 'Язык')}</span>
+            <span>{t("language", "Язык")}</span>
           </div>
           <div className="settings-row-right">
             <span>Русский</span>
@@ -172,7 +200,7 @@ export function SettingsPage() {
 
       <div className="logout-btn-container">
         <button className="logout-btn-block" onClick={handleLogout}>
-          {t('logout', 'Выйти из аккаунта')}
+          {t("logout", "Выйти из аккаунта")}
         </button>
       </div>
 
@@ -182,13 +210,17 @@ export function SettingsPage() {
           onClose={() => setIsEditModalOpen(false)}
           onSave={async (updatedFields) => {
             try {
-              const updatedUser = await services.userService.updateMe(updatedFields);
+              const updatedUser =
+                await services.userService.updateMe(updatedFields);
               setUser(updatedUser);
-              localStorage.setItem('craneapp_user_data', JSON.stringify(updatedUser));
-              showToast('success', 'Профиль обновлен', '✓');
+              localStorage.setItem(
+                "craneapp_user_data",
+                JSON.stringify(updatedUser),
+              );
+              showToast("success", "Профиль обновлен", "✓");
               setIsEditModalOpen(false);
             } catch (e) {
-              showToast('error', 'Не удалось обновить профиль', '⚠️');
+              showToast("error", "Не удалось обновить профиль", "⚠️");
             }
           }}
         />
@@ -198,14 +230,29 @@ export function SettingsPage() {
 }
 
 function EditProfileModal({ user, onClose, onSave }) {
-  const [firstName, setFirstName] = useState(user.firstName || '');
-  const [lastName, setLastName] = useState(user.lastName || '');
-  const [bio, setBio] = useState(user.bio || '');
-  const [statusEmoji, setStatusEmoji] = useState(user.statusEmoji || '');
+  const [firstName, setFirstName] = useState(user.firstName || "");
+  const [lastName, setLastName] = useState(user.lastName || "");
+  const [bio, setBio] = useState(user.bio || "");
+  const [statusEmoji, setStatusEmoji] = useState(user.statusEmoji || "");
   const [isSaving, setIsSaving] = useState(false);
-  const { t } = useTranslate();
+  const { t } = useTranslation();
 
-  const emojiOptions = ['', '😀', '😎', '💼', '🚀', '🔥', '🎉', '✈️', '🎮', '🎧', '😴', '🐱', '🍕', '☕'];
+  const emojiOptions = [
+    "",
+    "😀",
+    "😎",
+    "💼",
+    "🚀",
+    "🔥",
+    "🎉",
+    "✈️",
+    "🎮",
+    "🎧",
+    "😴",
+    "🐱",
+    "🍕",
+    "☕",
+  ];
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -218,88 +265,116 @@ function EditProfileModal({ user, onClose, onSave }) {
   };
 
   return (
-    <div className="group-info-modal-overlay" onClick={onClose} style={{ zIndex: 20000 }}>
-      <div className="group-info-modal-content glass-panel" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
+    <div
+      className="group-info-modal-overlay"
+      onClick={onClose}
+      style={{ zIndex: 20000 }}
+    >
+      <div
+        className="group-info-modal-content glass-panel"
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: 400 }}
+      >
         <header className="group-info-header">
           <h2>Редактировать профиль</h2>
-          <button className="close-btn" onClick={onClose}>✕</button>
+          <button className="close-btn" onClick={onClose}>
+            ✕
+          </button>
         </header>
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: 16 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <form
+          onSubmit={handleSubmit}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 14,
+            padding: 16,
+          }}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <label style={{ fontSize: 13, opacity: 0.8 }}>Имя</label>
             <input
               required
               value={firstName}
-              onChange={e => setFirstName(e.target.value)}
+              onChange={(e) => setFirstName(e.target.value)}
               placeholder="Имя"
               style={{
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid rgba(255,255,255,0.1)',
+                background: "rgba(255,255,255,0.06)",
+                border: "1px solid rgba(255,255,255,0.1)",
                 borderRadius: 8,
-                padding: '8px 12px',
-                color: '#fff',
-                fontSize: 15
+                padding: "8px 12px",
+                color: "#fff",
+                fontSize: 15,
               }}
             />
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <label style={{ fontSize: 13, opacity: 0.8 }}>Фамилия</label>
             <input
               value={lastName}
-              onChange={e => setLastName(e.target.value)}
+              onChange={(e) => setLastName(e.target.value)}
               placeholder="Фамилия"
               style={{
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid rgba(255,255,255,0.1)',
+                background: "rgba(255,255,255,0.06)",
+                border: "1px solid rgba(255,255,255,0.1)",
                 borderRadius: 8,
-                padding: '8px 12px',
-                color: '#fff',
-                fontSize: 15
+                padding: "8px 12px",
+                color: "#fff",
+                fontSize: 15,
               }}
             />
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <label style={{ fontSize: 13, opacity: 0.8 }}>О себе</label>
             <textarea
               value={bio}
-              onChange={e => setBio(e.target.value)}
+              onChange={(e) => setBio(e.target.value)}
               placeholder="О себе"
               rows={3}
               style={{
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid rgba(255,255,255,0.1)',
+                background: "rgba(255,255,255,0.06)",
+                border: "1px solid rgba(255,255,255,0.1)",
                 borderRadius: 8,
-                padding: '8px 12px',
-                color: '#fff',
+                padding: "8px 12px",
+                color: "#fff",
                 fontSize: 15,
-                resize: 'none'
+                resize: "none",
               }}
             />
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <label style={{ fontSize: 13, opacity: 0.8 }}>Статус-эмодзи</label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
-              {emojiOptions.map(emoji => (
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 8,
+                marginTop: 4,
+              }}
+            >
+              {emojiOptions.map((emoji) => (
                 <button
                   type="button"
-                  key={emoji || 'none'}
+                  key={emoji || "none"}
                   onClick={() => setStatusEmoji(emoji)}
                   style={{
                     fontSize: 18,
-                    background: statusEmoji === emoji ? 'var(--rd-accent-grad, #ff2d8b)' : 'rgba(255,255,255,0.06)',
-                    border: '1px solid rgba(255,255,255,0.1)',
+                    background:
+                      statusEmoji === emoji
+                        ? "var(--rd-accent-grad, #ff2d8b)"
+                        : "rgba(255,255,255,0.06)",
+                    border: "1px solid rgba(255,255,255,0.1)",
                     borderRadius: 6,
                     padding: 6,
-                    cursor: 'pointer',
+                    cursor: "pointer",
                     minWidth: 36,
                     height: 36,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#fff'
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#fff",
                   }}
                 >
-                  {emoji || '✕'}
+                  {emoji || "✕"}
                 </button>
               ))}
             </div>
@@ -309,16 +384,17 @@ function EditProfileModal({ user, onClose, onSave }) {
             disabled={isSaving || !firstName.trim()}
             style={{
               marginTop: 10,
-              background: 'var(--rd-accent-grad, linear-gradient(135deg, #ff2d8b 0%, #9b5cff 100%))',
+              background:
+                "var(--rd-accent-grad, linear-gradient(135deg, #ff2d8b 0%, #9b5cff 100%))",
               border: 0,
               borderRadius: 8,
-              padding: '10px 16px',
-              color: '#fff',
-              fontWeight: 'bold',
-              cursor: 'pointer'
+              padding: "10px 16px",
+              color: "#fff",
+              fontWeight: "bold",
+              cursor: "pointer",
             }}
           >
-            {isSaving ? 'Сохранение...' : 'Сохранить'}
+            {isSaving ? "Сохранение..." : "Сохранить"}
           </button>
         </form>
       </div>

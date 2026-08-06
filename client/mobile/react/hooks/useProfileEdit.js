@@ -1,5 +1,4 @@
-import { useState, useEffect } from "react";
-import { useTranslate } from "./useTranslate";
+import { useEffect, useState } from "react";
 
 export const useProfileEdit = (profileUser, displayName) => {
   const [editableUser, setEditableUser] = useState(profileUser);
@@ -7,7 +6,7 @@ export const useProfileEdit = (profileUser, displayName) => {
   const [editDraft, setEditDraft] = useState({ firstName: "", bio: "" });
   const [editError, setEditError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const { t } = useTranslate();
+  const { t } = useTranslation();
 
   // Сброс состояния при смене пользователя
   useEffect(() => {

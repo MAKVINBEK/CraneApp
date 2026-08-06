@@ -10,35 +10,53 @@ class CryptoService {
     this.privateKey = null;
     this.publicKey = null;
     this.groupStates = new Map();
+    this.ready = false;
+    this.initPromise = null;
+    this.publicKeyUploaded = false;
   }
 
   async init() {
     const accountId = this.getAccountId();
     if (!accountId) return;
-    if (!this.hasWebCrypto()) {
-      console.warn('🔐 Crypto: WebCrypto is unavailable. Open the app via HTTPS or localhost for E2E.');
-      return;
-    }
+
+    if (!this.hasWebCrypto()) return;
+
     if (this.ready && this.accountId === accountId) {
-      await this.uploadPublicKey();
       return;
     }
-    try {
-      await this.initDB();
-      this.accountId = accountId;
-      const storedKeys = await this.dbGet(this.keypairKey());
-      if (storedKeys) {
-        await this.loadStoredKeypair(storedKeys);
-        await this.uploadPublicKey();
-        console.log('🔐 Crypto: Loaded existing keypair');
-      } else {
-        await this.generateAndStoreKeys();
-        console.log('🔐 Crypto: Generated new keypair');
-      }
-      this.ready = true;
-    } catch (err) {
-      console.error('Crypto init failed:', err);
+
+    if (this.initPromise) {
+      return this.initPromise;
     }
+
+    this.initPromise = this.doInit(accountId);
+
+    try {
+      await this.initPromise;
+    } finally {
+      this.initPromise = null;
+    }
+  }
+
+  async doInit(accountId) {
+    await this.initDB();
+
+    this.accountId = accountId;
+
+    const storedKeys = await this.dbGet(this.keypairKey());
+
+    if (storedKeys) {
+        await this.loadStoredKeypair(storedKeys);
+    } else {
+        await this.generateAndStoreKeys();
+    }
+
+    if (!this.publicKeyUploaded) {
+        await this.uploadPublicKey();
+        this.publicKeyUploaded = true;
+    }
+
+    this.ready = true;
   }
 
   getAccountId() {
@@ -152,6 +170,7 @@ class CryptoService {
   }
 
   async uploadPublicKey() {
+    if (this.publicKeyUploaded) return;
     if (!this.publicKey || !this.hasWebCrypto()) return;
     const pubRaw = await crypto.subtle.exportKey('spki', this.publicKey);
     const pubB64 = this.bufToB64(pubRaw);

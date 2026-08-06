@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback } from "react";
 import { calculateMenuPosition } from "../utils/calculateMenuPosition";
 
-export const useMessageLongPress = (messageId, selectionMode, onSelection, setActionMenu, message) => {
+export const useMessageLongPress = (messageId, selectionMode, onSelection, actionMenu, setActionMenu, message) => {
     const longPressTimerRef = useRef(null);
     const longPressPointRef = useRef(null);
     const suppressNextClickRef = useRef(false);
@@ -34,8 +34,12 @@ export const useMessageLongPress = (messageId, selectionMode, onSelection, setAc
 
     const handleContextMenu = useCallback((event) => {
         event.preventDefault();
+        if (actionMenu) {
+            setActionMenu(null)
+            return
+        }
         openMessageActions(event.clientX, event.clientY);
-    }, [openMessageActions]);
+    }, [openMessageActions, actionMenu, setActionMenu]);
 
     const handlePointerDown = useCallback((event) => {
         if (event.button !== 0 || (event.pointerType !== "touch" && event.pointerType !== "pen")) return;

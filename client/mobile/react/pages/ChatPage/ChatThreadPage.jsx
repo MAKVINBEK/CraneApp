@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Link,
   useLoaderData,
@@ -6,8 +6,6 @@ import {
   useParams,
 } from "react-router-dom";
 import Message from "../../../domain/entities/Message.js";
-import { sortMessagesChronologically } from "../../../utils/sortMessagesChronologically.js";
-import { useCall } from "../../components/Calls/CallProvider.jsx";
 import { ForwardChatMessagesModal } from "../../components/components/ForwardChatMessagesModal.jsx";
 import { GroupInfoModal } from "../../components/components/GroupInfoModal.jsx";
 import { MessageBubble } from "../../components/components/MessageBubble/MessageBubble.jsx";
@@ -17,17 +15,19 @@ import { PhotoEditorModal } from "../../components/media-editor/PhotoEditorModal
 import { Identicon } from "../../components/ui/Identicon.jsx";
 import { ThreadSkeleton } from "../../components/ui/Skeletons/ThreadSkeleton.jsx";
 import { useRealtimeSocket } from "../../hooks/useRealtimeSocket.js";
-import { useToasts } from "../../hooks/useToasts.js";
 import services from "../../services/serviceContainer.js";
-import { translateText } from "../../services/translatorApi.js";
 import { useChatStore } from "../../store/chat.js";
 import "../../styles/ChatThreadPage.css";
 
+import { useTranslation } from "react-i18next";
 import { UserProfileModal } from "../../components/components/Modals/UserProfileModal.jsx";
 import { ThreadState } from "../../components/ui/ThreadState.jsx";
 import { STORAGE_KEYS } from "../../consts/storageKeys.js";
+import { useCall } from "../../hooks/useCall.js";
 import { useLocalStorage } from "../../hooks/useLocalStorage.js";
-import { useTranslate } from "../../hooks/useTranslate.js";
+import { getMessages } from "../../services/messagesApi.js";
+import { formatFileSize } from "../../utils/formatFileSize.js";
+import { getAttachmentIcon } from "../../utils/getAttachmentIcon.js";
 import { getChatSubtitle } from "../../utils/getChatSubtitle.js";
 import {
   appendUniqueMessage,
@@ -36,14 +36,15 @@ import {
   updateMessage,
   updatePinnedMessage,
 } from "../../utils/message.js";
-import { formatFileSize } from "../../utils/formatFileSize.js";
-import { getAttachmentIcon } from "../../utils/getAttachmentIcon.js";
+import { useMessageActions } from "../../hooks/useMessageActions.js";
+import { Icon } from "../../components/ui/Icon.jsx";
+import { useIsMobile } from "../../hooks/useIsMobile.js";
 
 export function ChatThreadPage() {
   const { chatId } = useParams();
   const { onProfileStateChange, profileCloseToken, profileMode } =
     useOutletContext();
-  const { t } = useTranslate();
+  const { t } = useTranslation();
   const {
     chat,
     setChat,
@@ -82,21 +83,43 @@ export function ChatThreadPage() {
     error: "",
     user: null,
   });
+  const [offset, setOffset] = useState(0);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [isForwardModalOpen, setIsForwardModalOpen] = useState(false);
+  const [showCallMenu, setShowCallMenu] = useState(false);
   const [currentUser] = useLocalStorage(STORAGE_KEYS.USER, null);
   const bottomRef = useRef(null);
   const attachmentInputRef = useRef(null);
   const lastTypingSentAtRef = useRef(0);
   const typingTimeoutRef = useRef(null);
   const draftRef = useRef(null);
-  const { eventBus, socket } = useRealtimeSocket(Boolean(chatId));
-  const { initiateCall } = useCall();
-  const { showToast } = useToasts();
-  const { loadedChat, loadedMessages, loadedPinnedMessages } = useLoaderData();
-
-  const [showCallMenu, setShowCallMenu] = useState(false);
   const timerRef = useRef(null);
   const isLongPress = useRef(false);
+  const messagesRef = useRef(null);
+  const chatIdRef = useRef(chatId);
+
+  const { eventBus, socket } = useRealtimeSocket(Boolean(chatId));
+  const { initiateCall } = useCall();
+  const { loadedChat, loadedMessages, loadedPinnedMessages } = useLoaderData();
+  const isMobile = useIsMobile();
+
+  const {
+    handleCancelSelection,
+    runMessageAction,
+    handleCopyMessage,
+    handleDelete,
+    handleForward,
+    handleCloseForwardModal,
+  } = useMessageActions({
+    currentUser,
+    chatId,
+    chatType: chat?.type,
+    chatRole: chat?.role,
+    draftRef,
+    setIsForwardModalOpen,
+    updateMessage,
+  });
 
   const handleTouchStart = () => {
     isLongPress.current = false;
@@ -119,6 +142,57 @@ export function ChatThreadPage() {
     initiateCall(chatId, chat?.type, title, "audio");
   };
 
+  const loadMoreMessages = useCallback(async () => {
+    const requestChatId = chatId;
+    if (isLoadingMore || !hasMore) return;
+
+    setIsLoadingMore(true);
+
+    const container = messagesRef.current;
+    const prevHeight = container.scrollHeight;
+
+    const nextOffset = offset + 50;
+
+    const olderMessages = await getMessages({ chatId, offset: nextOffset });
+
+    if (chatIdRef.current !== requestChatId) {
+      return;
+    }
+
+    if (olderMessages.length < 50) {
+      setHasMore(false);
+    }
+
+    setMessages((prev) => [...olderMessages, ...prev]);
+    setOffset(nextOffset);
+
+    requestAnimationFrame(() => {
+      container.scrollTop += container.scrollHeight - prevHeight;
+    });
+
+    setIsLoadingMore(false);
+  }, [chatId, offset, hasMore, isLoadingMore]);
+
+  useEffect(() => {
+    chatIdRef.current = chatId;
+  }, [chatId]);
+
+  useEffect(() => {
+    const container = messagesRef.current;
+    if (!container) return;
+
+    const onScroll = () => {
+      const hasOverflow = container.scrollHeight > container.clientHeight;
+      if (hasOverflow && container.scrollTop <= 50) {
+        loadMoreMessages();
+      }
+    };
+
+    container.addEventListener("scroll", onScroll);
+
+    return () => container.removeEventListener("scroll", onScroll);
+  }, [loadMoreMessages]);
+
   useEffect(() => {
     if (profileMode !== "panel" || typeof onProfileStateChange !== "function")
       return;
@@ -133,6 +207,19 @@ export function ChatThreadPage() {
     if (profileCloseToken === 0) return;
     setProfileModal({ isOpen: false, isLoading: false, error: "", user: null });
   }, [profileCloseToken]);
+
+  useEffect(() => {
+    if (!selectionMode) return;
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") handleCancelSelection();
+    };
+
+    window.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [selectionMode]);
 
   useEffect(() => {
     if (!actionMenu) return undefined;
@@ -161,6 +248,12 @@ export function ChatThreadPage() {
   }, [openedImage]);
 
   useEffect(() => {
+    setOffset(0);
+    setHasMore(true);
+    setIsLoadingMore(false);
+  }, [chatId]);
+
+  useEffect(() => {
     resetChatState();
     setChat(loadedChat);
     setMessages(loadedMessages);
@@ -170,10 +263,15 @@ export function ChatThreadPage() {
   }, [loadedChat, loadedMessages, loadedPinnedMessages]);
 
   useEffect(() => {
-    if (typeof bottomRef.current?.scrollIntoView === "function") {
-      bottomRef.current.scrollIntoView({ block: "end" });
-    }
-  }, [messages.length]);
+    if (isLoading) return;
+
+    requestAnimationFrame(() => {
+      bottomRef.current?.scrollIntoView({
+        block: "end",
+        behavior: "auto",
+      });
+    });
+  }, [chatId, isLoading]);
 
   useEffect(() => {
     const unsubscribeNew = eventBus.on("new_message", async (event) => {
@@ -287,6 +385,7 @@ export function ChatThreadPage() {
 
   async function handleSubmit(event) {
     event.preventDefault();
+    if (selectionMode) return;
     const content = draft.trim();
     if ((!content && !pendingAttachment) || isSending) return;
 
@@ -321,6 +420,11 @@ export function ChatThreadPage() {
           replyToMessage?.id,
         );
         setMessages((items) => appendUniqueMessage(items, message));
+        requestAnimationFrame(() => {
+          bottomRef.current?.scrollIntoView({
+            behavior: "smooth",
+          });
+        });
         setPendingAttachment(null);
         setReplyToMessage(null);
         if (attachmentInputRef.current) attachmentInputRef.current.value = "";
@@ -332,6 +436,11 @@ export function ChatThreadPage() {
           replyToMessage?.id,
         );
         setMessages((items) => appendUniqueMessage(items, message));
+        requestAnimationFrame(() => {
+          bottomRef.current?.scrollIntoView({
+            behavior: "smooth",
+          });
+        });
         setReplyToMessage(null);
       }
       setDraft("");
@@ -504,26 +613,6 @@ export function ChatThreadPage() {
       return [...messages, message];
     });
   }
-
-  function handleForward(message) {
-    if (selectionMode) {
-      setIsForwardModalOpen(true);
-      return;
-    }
-
-    setSelectedMessages([message]);
-    setIsForwardModalOpen(true);
-  }
-
-  const handleCloseForwardModal = () => {
-    if (selectionMode) {
-      setIsForwardModalOpen(false);
-      return;
-    }
-
-    setSelectedMessages([]);
-    setIsForwardModalOpen(false);
-  };
 
   const title = chat?.name || chat?.title || t("chat", "Чат");
   const subtitle = getChatSubtitle(chat, typingUserId, t);
@@ -741,7 +830,11 @@ export function ChatThreadPage() {
 
       <PinnedMessages messages={pinnedMessages} />
 
-      <section className="thread-messages" aria-busy={isLoading}>
+      <section
+        className="thread-messages"
+        aria-busy={isLoading}
+        ref={messagesRef}
+      >
         {isLoading && <ThreadSkeleton />}
         {!isLoading && error && messages.length === 0 && (
           <ThreadState
@@ -781,15 +874,13 @@ export function ChatThreadPage() {
             currentUser={currentUser}
             draftRef={draftRef}
             chatId={chatId}
+            chatType={chat?.type}
+            chatRole={chat?.role}
             updateMessage={updateMessage}
             setIsForwardModalOpen={setIsForwardModalOpen}
           />
         </>
       )}
-
-      {error && messages.length > 0 ? (
-        <div className="thread-inline-error">{error}</div>
-      ) : null}
 
       {openedImage ? (
         <div
@@ -883,80 +974,104 @@ export function ChatThreadPage() {
             </div>
           )}
 
-          <div className="thread-composer-row">
-            <input
-              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar"
-              aria-label={t("attachFile", "Прикрепить файл")}
-              className="thread-file-input"
-              onChange={handleAttachmentChange}
-              ref={attachmentInputRef}
-              type="file"
-            />
+          {!selectionMode && (
+            <div className="thread-composer-row">
+              <input
+                accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar"
+                aria-label={t("attachFile", "Прикрепить файл")}
+                className="thread-file-input"
+                onChange={handleAttachmentChange}
+                ref={attachmentInputRef}
+                type="file"
+              />
 
-            <button
-              aria-label={t("attachFile", "Прикрепить файл")}
-              className="thread-composer-action-btn thread-attach-button"
-              disabled={isSending || Boolean(editingMessage)}
-              onClick={() => attachmentInputRef.current?.click()}
-              type="button"
-            >
-              <svg
-                fill="none"
-                height="22"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-                width="22"
-              >
-                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-              </svg>
-            </button>
-
-            <input
-              ref={draftRef}
-              aria-label={t("message", "Сообщение")}
-              className="thread-composer-input"
-              onChange={handleDraftChange}
-              onKeyDown={handleComposerKeyDown}
-              placeholder={t("messagePlaceholder", "Сообщение...")}
-              value={draft}
-            />
-
-            <button
-              aria-label={t("emoji", "Смайлики")}
-              className="thread-composer-action-btn"
-              type="button"
-            >
-              <svg
-                fill="none"
-                height="22"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-                width="22"
-              >
-                <circle cx="12" cy="12" r="10" />
-                <path d="M8 14s1.5 2 4 2 4-2 4-2" />
-                <line x1="9" x2="9.01" y1="9" y2="9" />
-                <line x1="15" x2="15.01" y1="9" y2="9" />
-              </svg>
-            </button>
-
-            <div className="thread-composer-submit-wrap">
               <button
-                className={`thread-composer-action-btn thread-send-btn ${
-                  draft.trim() || pendingAttachment ? "is-visible" : ""
-                }`}
-                disabled={(!draft.trim() && !pendingAttachment) || isSending}
-                type="submit"
+                aria-label={t("attachFile", "Прикрепить файл")}
+                className="thread-composer-action-btn thread-attach-button"
+                disabled={isSending || Boolean(editingMessage)}
+                onClick={() => attachmentInputRef.current?.click()}
+                type="button"
               >
-                {isSending ? (
-                  <span className="thread-sending-spinner">⏳</span>
-                ) : (
+                <svg
+                  fill="none"
+                  height="22"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  viewBox="0 0 24 24"
+                  width="22"
+                >
+                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                </svg>
+              </button>
+
+              <input
+                ref={draftRef}
+                aria-label={t("message", "Сообщение")}
+                className="thread-composer-input"
+                onChange={handleDraftChange}
+                onKeyDown={handleComposerKeyDown}
+                placeholder={t("messagePlaceholder", "Сообщение...")}
+                value={draft}
+              />
+
+              <button
+                aria-label={t("emoji", "Смайлики")}
+                className="thread-composer-action-btn"
+                type="button"
+              >
+                <svg
+                  fill="none"
+                  height="22"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  viewBox="0 0 24 24"
+                  width="22"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+                  <line x1="9" x2="9.01" y1="9" y2="9" />
+                  <line x1="15" x2="15.01" y1="9" y2="9" />
+                </svg>
+              </button>
+
+              <div className="thread-composer-submit-wrap">
+                <button
+                  className={`thread-composer-action-btn thread-send-btn ${
+                    draft.trim() || pendingAttachment ? "is-visible" : ""
+                  }`}
+                  disabled={(!draft.trim() && !pendingAttachment) || isSending}
+                  type="submit"
+                >
+                  {isSending ? (
+                    <span className="thread-sending-spinner">⏳</span>
+                  ) : (
+                    <svg
+                      fill="none"
+                      height="20"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      viewBox="0 0 24 24"
+                      width="20"
+                    >
+                      <line x1="22" x2="11" y1="2" y2="13" />
+                      <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                    </svg>
+                  )}
+                </button>
+
+                <button
+                  aria-label={t("voiceMessage", "Голосовое сообщение")}
+                  className={`thread-composer-action-btn thread-mic-btn ${
+                    !draft.trim() && !pendingAttachment ? "is-visible" : ""
+                  }`}
+                  type="button"
+                >
                   <svg
                     fill="none"
                     height="20"
@@ -967,37 +1082,53 @@ export function ChatThreadPage() {
                     viewBox="0 0 24 24"
                     width="20"
                   >
-                    <line x1="22" x2="11" y1="2" y2="13" />
-                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                    <line x1="12" x2="12" y1="19" y2="23" />
+                    <line x1="8" x2="16" y1="23" y2="23" />
                   </svg>
-                )}
-              </button>
+                </button>
+              </div>
+            </div>
+          )}
 
-              <button
-                aria-label={t("voiceMessage", "Голосовое сообщение")}
-                className={`thread-composer-action-btn thread-mic-btn ${
-                  !draft.trim() && !pendingAttachment ? "is-visible" : ""
-                }`}
-                type="button"
-              >
-                <svg
-                  fill="none"
-                  height="20"
-                  stroke="currentColor"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  viewBox="0 0 24 24"
-                  width="20"
+          {selectionMode && (
+            <div className="thread-composer-row justify-between">
+              <div className="flex items-center gap-x-2">
+                <button
+                  type="button"
+                  onClick={() => runMessageAction(handleForward)}
+                  className="flex items-center gap-x-1 w-auto action-btn px-3 bg-transparent text-[rgba(255,255,255,0.85)] font-normal hover:backdrop-blur-md rounded-4xl"
                 >
-                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                  <line x1="12" x2="12" y1="19" y2="23" />
-                  <line x1="8" x2="16" y1="23" y2="23" />
-                </svg>
+                  <Icon name="forward" />
+                  {!isMobile && <span>{t("forward", "Переслать")}</span>}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => runMessageAction(handleCopyMessage)}
+                  className="flex items-center gap-x-1 w-auto action-btn px-3 bg-transparent text-[rgba(255,255,255,0.85)] font-normal hover:backdrop-blur-md rounded-4xl"
+                >
+                  <Icon name="copy" />
+                  {!isMobile && <span>{t("copy", "Скопировать")}</span>}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => runMessageAction(handleDelete)}
+                  className="flex items-center gap-x-1 w-auto action-btn px-3 bg-transparent text-[rgba(255,255,255,0.85)] font-normal hover:backdrop-blur-md rounded-4xl"
+                >
+                  <Icon name="trash" />
+                  {!isMobile && <span>{t("delete", "Удалить")}</span>}
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={handleCancelSelection}
+                className="w-auto action-btn px-3 bg-transparent text-[rgba(255,255,255,0.85)] font-normal hover:backdrop-blur-md rounded-4xl"
+              >
+                <span>{t("cancel", "Отмена")}</span>
               </button>
             </div>
-          </div>
+          )}
         </div>
       </form>
 

@@ -1,11 +1,11 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { formatCallDuration, parseCallContent } from "../../../utils/call";
 import { formatFileSize } from "../../../utils/formatFileSize";
 import { Icon } from "../../ui/Icon";
-import { useTranslate } from "../../../hooks/useTranslate";
 
 export const CallMessageContent = ({ message }) => {
-  const { t } = useTranslate();
+  const { t } = useTranslation();
   const duration = formatCallDuration(
     parseCallContent(message.content).duration,
   );
@@ -23,7 +23,7 @@ export const CallMessageContent = ({ message }) => {
 };
 
 export const MessageMedia = ({ message, onOpenImage }) => {
-  const { t } = useTranslate();
+  const { t } = useTranslation();
   const {
     mediaUnavailable,
     mediaUnavailableReason,

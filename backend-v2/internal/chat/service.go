@@ -360,6 +360,14 @@ func (s *Service) Get(ctx context.Context, userID, chatID string) (Chat, error) 
 	return chat, nil
 }
 
+func (s *Service) getChatInfo(ctx context.Context, userID, chatID string) (string, string, error) {
+	var chatType, role string
+	err := s.db.QueryRowContext(ctx, `SELECT c.type, cm.role 
+	FROM chats.chats c JOIN chats.members cm ON cm.chat_id = c.id WHERE c.id = $2 AND cm.user_id = $1`, userID, chatID).Scan(&chatType, &role)
+
+	return chatType, role, err
+}
+
 func (s *Service) hydrateRealtimePresence(chats []Chat) {
 	if s.ws == nil {
 		return
@@ -1247,6 +1255,19 @@ func (s *Service) DeleteMessage(ctx context.Context, userID, messageID string) e
 	return nil
 }
 
+func (s *Service) getMessage(ctx context.Context, chat_id, messageID string) (bool, error) {
+	var exists bool
+	err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1
+	 FROM messages.messages WHERE id = $2
+	AND chat_id = $1 AND deleted_at IS NULL)`, chat_id, messageID).Scan(&exists)
+
+	if err != nil {
+		return exists, err
+	}
+
+	return exists, nil
+}
+
 // ForwardMessage copies a message into a target chat.
 func (s *Service) ForwardMessage(ctx context.Context, userID, messageID, targetChatID string) (Message, error) {
 	if ok, err := s.isMember(ctx, userID, targetChatID); err != nil || !ok {
@@ -1506,20 +1527,49 @@ func (s *Service) ListPins(
 }
 
 func (s *Service) PinMessage(ctx context.Context, userID, chatID, messageID string) error {
-	role, err := s.memberRole(ctx, userID, chatID)
+
+	// Проверяет, что чат существует и что пользователь состоит в чате. Возвращает тип чата, роль пользователя и ошибку.
+	chatType, role, err := s.getChatInfo(ctx, userID, chatID)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrForbidden
+		}
+		return err
+	}
+
+	if role == "member" && chatType != "private" {
+		return ErrForbidden
+	}
+
+	//  Проверяет, что сообщение существует, оно принадлежит чату с указанным chatID и не было удалено.
+	messageExists, err := s.getMessage(ctx, chatID, messageID)
+
 	if err != nil {
 		return err
 	}
-	if role == "member" {
-		return ErrForbidden
+
+	if !messageExists {
+		return ErrNotFound
 	}
-	_, err = s.db.ExecContext(ctx, `
+
+	result, err := s.db.ExecContext(ctx, `
 		INSERT INTO messages.pins (chat_id, message_id, pinned_by)
 		VALUES ($1, $2, $3) ON CONFLICT DO NOTHING
 	`, chatID, messageID, userID)
 	if err != nil {
 		return err
 	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rows == 0 {
+		return nil
+	}
+
 	if s.ws != nil {
 		payload, _ := json.Marshal(map[string]any{"type": "message_pinned", "chatId": chatID, "messageId": messageID})
 		s.ws.BroadcastToChat(chatID, payload, "")
@@ -1528,17 +1578,47 @@ func (s *Service) PinMessage(ctx context.Context, userID, chatID, messageID stri
 }
 
 func (s *Service) UnpinMessage(ctx context.Context, userID, chatID, messageID string) error {
-	role, err := s.memberRole(ctx, userID, chatID)
+
+	// Проверяет, что чат существует и что пользователь состоит в чате. Возвращает тип чата, роль пользователя и ошибку.
+	chatType, role, err := s.getChatInfo(ctx, userID, chatID)
+
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrForbidden
+		}
 		return err
 	}
-	if role == "member" {
+
+	if role == "member" && chatType != "private" {
 		return ErrForbidden
 	}
-	_, err = s.db.ExecContext(ctx, `DELETE FROM messages.pins WHERE chat_id = $1 AND message_id = $2`, chatID, messageID)
+
+	// Проверяет, что сообщение существует, оно принадлежит чату с указанным chatID и не было удалено.
+	messageExists, err := s.getMessage(ctx, chatID, messageID)
+
 	if err != nil {
 		return err
 	}
+
+	if !messageExists {
+		return ErrNotFound
+	}
+
+	result, err := s.db.ExecContext(ctx, `DELETE FROM messages.pins WHERE chat_id = $1 AND message_id = $2`, chatID, messageID)
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+
+	if err != nil {
+		return err
+	}
+
+	if rows == 0 {
+		return nil
+	}
+
 	if s.ws != nil {
 		payload, _ := json.Marshal(map[string]any{"type": "message_unpinned", "chatId": chatID, "messageId": messageID})
 		s.ws.BroadcastToChat(chatID, payload, "")
