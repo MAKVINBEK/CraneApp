@@ -145,7 +145,32 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 		if !decode(w, r, &input) {
 			return
 		}
-		respondSuccess(w, r, h.service.AddMember(r.Context(), current.ID, chatID, input.UserID))
+		member, err := h.service.AddMember(r.Context(), current.ID, chatID, input.UserID)
+		switch {
+		case errors.Is(err, ErrInvalidInput):
+			httpx.ErrorJSON(w, r, http.StatusBadRequest, "validation_failed", err.Error())
+		case errors.Is(err, ErrNotFound):
+			httpx.ErrorJSON(w, r, http.StatusNotFound, "chat_not_found", err.Error())
+		case errors.Is(err, ErrInvalidChatType):
+			httpx.ErrorJSON(w, r, http.StatusBadRequest, "invalid_chat_type", err.Error())
+		case errors.Is(err, ErrUserNotFound):
+			httpx.ErrorJSON(w, r, http.StatusNotFound, "user_not_found", err.Error())
+		case errors.Is(err, ErrForbidden):
+			httpx.ErrorJSON(w, r, http.StatusForbidden, "access_denied", err.Error())
+		case errors.Is(err, ErrAlreadyMember):
+			httpx.ErrorJSON(w, r, http.StatusConflict, "already_member", err.Error())
+		case errors.Is(err, ErrUserBanned):
+			httpx.ErrorJSON(w, r, http.StatusConflict, "user_banned", err.Error())
+		case err != nil:
+			httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", "failed to add member")
+		default:
+			response := MemberAddedEvent{
+				Type:   "chat_member_added",
+				ChatID: chatID,
+				Member: member,
+			}
+			httpx.JSON(w, http.StatusCreated, response)
+		}
 	case suffix == "/members-online" && r.Method == http.MethodGet:
 		ids, err := h.service.MembersOnline(r.Context(), current.ID, chatID)
 		if errors.Is(err, ErrForbidden) {
