@@ -686,9 +686,15 @@ type MemberAddedEvent struct {
 	Member *Member `json:"member"`
 }
 
+type addMemberInput struct {
+	ChatID string `validate:"required,uuid"`
+	UserID string `validate:"required,uuid"`
+}
+
 func (s *Service) AddMember(ctx context.Context, actorID, chatID, userID string) (*Member, error) {
 	// 1. Валидация входных данных
-	if chatID == "" || userID == "" || !isValidUUID(chatID) || !isValidUUID(userID) {
+	input := addMemberInput{ChatID: chatID, UserID: userID}
+	if err := validate.Struct(input); err != nil {
 		return nil, ErrInvalidInput
 	}
 
@@ -1733,8 +1739,4 @@ func (s *Service) GetMlsState(ctx context.Context, chatID string) (int64, string
 		return 0, "", nil
 	}
 	return epoch, treeState.String, err
-}
-
-func isValidUUID(u string) bool {
-	return validate.Var(u, "uuid") == nil
 }
