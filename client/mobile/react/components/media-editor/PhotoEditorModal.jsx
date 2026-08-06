@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './PhotoEditorModal.css';
-import { useTranslate } from '../../hooks/useTranslate';
+import { useTranslation } from 'react-i18next';
 
 const DEFAULT_FILTERS = { brightness: 100, contrast: 100, saturate: 100, sepia: 0, blur: 0 };
 const DEFAULT_CROP = { x: 0, y: 0, width: 1, height: 1 };
@@ -72,7 +72,7 @@ export function PhotoEditorModal({ file, onCancel, onSave }) {
   const [editingTextId, setEditingTextId] = useState(null);
   const [canvasDisplayWidth, setCanvasDisplayWidth] = useState(1000);
 
-  const { t } = useTranslate();
+  const { t } = useTranslation();
 
   const currentState = useMemo(() => ({ filters, rotation, flipX, flipY, crop, cropRatio, objects }), [crop, cropRatio, filters, flipX, flipY, objects, rotation]);
   stateRef.current = currentState;

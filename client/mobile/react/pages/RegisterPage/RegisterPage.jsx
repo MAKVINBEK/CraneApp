@@ -1,10 +1,9 @@
 import { useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
-import { ToastStack } from "../../components/ui/ToastStack.jsx";
 import { ROUTES } from "../../consts/routes.js";
 import { STORAGE_KEYS } from "../../consts/storageKeys.js";
 import { useToasts } from "../../hooks/useToasts.js";
-import { useTranslate } from "../../hooks/useTranslate.js";
 import {
   registerUser,
   saveAuthSession,
@@ -24,10 +23,10 @@ export function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showPasswordRepeat, setShowPasswordRepeat] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { showToast, toasts } = useToasts();
+  const { showToast } = useToasts();
   const avatarInputRef = useRef(null);
   const passwordScore = useMemo(() => getPasswordScore(password), [password]);
-  const { t } = useTranslate();
+  const { t, i18n } = useTranslation();
 
   if (localStorage.getItem(STORAGE_KEYS.TOKEN)) {
     window.location.href = ROUTES.CHATS;
@@ -92,7 +91,7 @@ export function RegisterPage() {
     setIsSubmitting(true);
     try {
       const language =
-        window.i18n?.currentLang ||
+        i18n.language ||
         localStorage.getItem(STORAGE_KEYS.LANGUAGE) ||
         "ru";
       const data = await registerUser({
@@ -116,7 +115,6 @@ export function RegisterPage() {
   return (
     <div className="register-page">
       <div className="register-container">
-        <ToastStack toasts={toasts} />
         <WelcomeStep active={step === 1} onNext={() => goTo(2)} />
         <NameStep
           active={step === 2}
@@ -154,7 +152,7 @@ export function RegisterPage() {
 }
 
 function WelcomeStep({ active, onNext }) {
-  const { t } = useTranslate();
+  const { t } = useTranslation();
   return (
     <section className={cn("screen", { active })} aria-hidden={!active}>
       <div className="welcome-logo">
@@ -218,7 +216,7 @@ function NameStep({
   onFirstNameChange,
   onNext,
 }) {
-  const { t } = useTranslate();
+  const { t } = useTranslation();
   return (
     <section className={cn("screen", { active })} aria-hidden={!active}>
       <BackButton onClick={onBack} />
@@ -281,7 +279,7 @@ function NameStep({
 
 function CredentialsStep(props) {
   const strength = getStrengthStyle(props.passwordScore);
-  const { t } = useTranslate();
+  const { t } = useTranslation();
   return (
     <section
       className={cn("screen", { active: props.active })}
@@ -293,14 +291,14 @@ function CredentialsStep(props) {
         🔐
       </div>
       <div className="step-title">
-        {props.t("chooseLoginTitle", "Придумайте логин")}
+        {t("chooseLoginTitle", "Придумайте логин")}
       </div>
       <div className="step-sub">
-        {props.t("chooseLoginSub", "Юзернейм и пароль для входа")}
+        {t("chooseLoginSub", "Юзернейм и пароль для входа")}
       </div>
 
       <div className="field">
-        <label htmlFor="username">{props.t("username", "Юзернейм")}</label>
+        <label htmlFor="username">{t("username", "Юзернейм")}</label>
         <input
           id="username"
           type="text"
@@ -318,10 +316,10 @@ function CredentialsStep(props) {
       </div>
       <PasswordField
         id="password"
-        label={props.t("password", "Пароль")}
+        label={t("password", "Пароль")}
         onChange={props.onPasswordChange}
         onToggle={props.onTogglePassword}
-        placeholder={props.t("passwordMin", "Минимум 6 символов")}
+        placeholder={t("passwordMin", "Минимум 6 символов")}
         show={props.showPassword}
         value={props.password}
       />
@@ -330,10 +328,10 @@ function CredentialsStep(props) {
       </div>
       <PasswordField
         id="password2"
-        label={props.t("repeatPassword", "Повторите пароль")}
+        label={t("repeatPassword", "Повторите пароль")}
         onChange={props.onPasswordRepeatChange}
         onToggle={props.onTogglePasswordRepeat}
-        placeholder={props.t("repeatPassword", "Повторите пароль")}
+        placeholder={t("repeatPassword", "Повторите пароль")}
         show={props.showPasswordRepeat}
         value={props.passwordRepeat}
       />
@@ -345,12 +343,12 @@ function CredentialsStep(props) {
         disabled={props.isSubmitting}
       >
         {props.isSubmitting
-          ? props.t("creatingAccount", "Создание аккаунта...")
-          : props.t("createAccount", "Создать аккаунт")}
+          ? t("creatingAccount", "Создание аккаунта...")
+          : t("createAccount", "Создать аккаунт")}
       </button>
       <div className="footer-link">
-        {props.t("alreadyHaveAccount", "Уже есть аккаунт?")}{" "}
-        <a href={props.loginHref}>{props.t("login", "Войти")}</a>
+        {t("alreadyHaveAccount", "Уже есть аккаунт?")}{" "}
+        <a href={props.loginHref}>{t("login", "Войти")}</a>
       </div>
     </section>
   );
@@ -516,8 +514,4 @@ function getStrengthStyle(score) {
     background: score > 0 ? colors[score - 1] : "transparent",
     width: score > 0 ? widths[score - 1] : "0%",
   };
-}
-
-function fallbackTranslate(_key, fallback) {
-  return fallback;
 }

@@ -127,66 +127,70 @@ export function AppLayout() {
   const { chatId } = useParams();
   const isMobile = useIsMobile();
 
-  if (isMobile) {
-    return (
-      <div className="mobile-layout">
-        <div className="mobile-content">
-          <Outlet />
+  return (
+    <>
+      {isMobile && (
+        <div className="mobile-layout">
+          <div className="mobile-content">
+            <Outlet />
+          </div>
+          {!chatId && (
+            <div className="nav-rail mobile-nav-rail">
+              {/* Чаты */}
+              {navItems.map(({ Icon, key, label, path }) => (
+                <NavLink
+                  key={key}
+                  to={path}
+                  className={cn(
+                    "rail-tab",
+                    pathname.includes(path) && "active",
+                  )}
+                >
+                  <Icon />
+                  <span>{label}</span>
+                </NavLink>
+              ))}
+            </div>
+          )}
         </div>
-        {!chatId && (
-          <div className="nav-rail mobile-nav-rail">
-            {/* Чаты */}
+      )}
+      {!isMobile && (
+        <div className="app-layout">
+          <div className="nav-rail">
+            <NavLink
+              className="rail-burger"
+              to={ROUTES.SETTINGS}
+              data-tip="Настройки"
+            >
+              <SettingsIcon />
+            </NavLink>
+
             {navItems.map(({ Icon, key, label, path }) => (
               <NavLink
                 key={key}
                 to={path}
                 className={cn("rail-tab", pathname.includes(path) && "active")}
+                data-tip={label}
               >
                 <Icon />
-                <span>{label}</span>
               </NavLink>
             ))}
+
+            <div className="rail-spacer"></div>
+
+            <NavLink
+              className="rail-help"
+              to={ROUTES.SETTINGS}
+              data-tip="Настройки"
+            >
+              <SettingsIcon />
+            </NavLink>
           </div>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div className="app-layout">
-      <div className="nav-rail">
-        <NavLink
-          className="rail-burger"
-          to={ROUTES.SETTINGS}
-          data-tip="Настройки"
-        >
-          <SettingsIcon />
-        </NavLink>
-
-        {navItems.map(({ Icon, key, label, path }) => (
-          <NavLink
-            key={key}
-            to={path}
-            className={cn("rail-tab", pathname.includes(path) && "active")}
-            data-tip={label}
-          >
-            <Icon />
-          </NavLink>
-        ))}
-
-        <div className="rail-spacer"></div>
-
-        <NavLink
-          className="rail-help"
-          to={ROUTES.SETTINGS}
-          data-tip="Настройки"
-        >
-          <SettingsIcon />
-        </NavLink>
-      </div>
-      <div className="app-main-content">
-        <Outlet />
-      </div>
-    </div>
+          <div className="app-main-content">
+            <Outlet />
+          </div>
+        </div>
+      )}
+    </>
   );
 }
