@@ -4,6 +4,7 @@ import services from "../services/serviceContainer.js";
 import { translateText } from "../services/translatorApi";
 import { useChatStore } from "../store/chat.js";
 import { useTranslation } from "react-i18next";
+import { sortMessagesChronologically } from "../../utils/sortMessagesChronologically.js";
 
 export const useMessageActions = ({
   currentUser,
@@ -214,6 +215,16 @@ export const useMessageActions = ({
     setIsForwardModalOpen(true);
   };
 
+  const handleCloseForwardModal = () => {
+    if (selectionMode) {
+      setIsForwardModalOpen(false);
+      return;
+    }
+
+    setSelectedMessages([]);
+    setIsForwardModalOpen(false);
+  };
+
   const startReply = (message) => {
     setReplyToMessage(message);
     setEditingMessage(null);
@@ -236,9 +247,24 @@ export const useMessageActions = ({
     closeMessageActions();
   };
 
-  const handleCopyMessage = (message) => {
+  function handleCopyMessage(message) {
+    if (selectionMode) {
+      const sortedMessages = sortMessagesChronologically(selectedMessages);
+
+      const allContent = sortedMessages
+        .map((message) => message.content)
+        .join("\n");
+      navigator.clipboard.writeText(allContent);
+      return;
+    }
+
     navigator.clipboard.writeText(message.content);
-  };
+  }
+
+  function handleCancelSelection() {
+    setSelectedMessages([]);
+    setSelectionMode(false);
+  }
 
   return {
     translatingIds,
@@ -249,10 +275,12 @@ export const useMessageActions = ({
     handlePinMessage,
     startSelection,
     handleForward,
+    handleCloseForwardModal,
     startReply,
     startEdit,
     closeMessageActions,
     runMessageAction,
     handleCopyMessage,
+    handleCancelSelection,
   };
 };

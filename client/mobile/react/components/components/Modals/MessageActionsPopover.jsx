@@ -26,7 +26,7 @@ export const MessageActionsPopover = (props) => {
       action: () => actions.startReply(message),
     },
     {
-      show: !selectionMode,
+      show: true,
       icon: "copy",
       key: "copy",
       def: "Скопировать",

@@ -36,6 +36,9 @@ import {
   updateMessage,
   updatePinnedMessage,
 } from "../../utils/message.js";
+import { useMessageActions } from "../../hooks/useMessageActions.js";
+import { Icon } from "../../components/ui/Icon.jsx";
+import { useIsMobile } from "../../hooks/useIsMobile.js";
 
 export function ChatThreadPage() {
   const { chatId } = useParams();
@@ -99,6 +102,24 @@ export function ChatThreadPage() {
   const { eventBus, socket } = useRealtimeSocket(Boolean(chatId));
   const { initiateCall } = useCall();
   const { loadedChat, loadedMessages, loadedPinnedMessages } = useLoaderData();
+  const isMobile = useIsMobile();
+
+  const {
+    handleCancelSelection,
+    runMessageAction,
+    handleCopyMessage,
+    handleDelete,
+    handleForward,
+    handleCloseForwardModal,
+  } = useMessageActions({
+    currentUser,
+    chatId,
+    chatType: chat?.type,
+    chatRole: chat?.role,
+    draftRef,
+    setIsForwardModalOpen,
+    updateMessage,
+  });
 
   const handleTouchStart = () => {
     isLongPress.current = false;
@@ -186,6 +207,19 @@ export function ChatThreadPage() {
     if (profileCloseToken === 0) return;
     setProfileModal({ isOpen: false, isLoading: false, error: "", user: null });
   }, [profileCloseToken]);
+
+  useEffect(() => {
+    if (!selectionMode) return;
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") handleCancelSelection();
+    };
+
+    window.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [selectionMode]);
 
   useEffect(() => {
     if (!actionMenu) return undefined;
@@ -351,6 +385,7 @@ export function ChatThreadPage() {
 
   async function handleSubmit(event) {
     event.preventDefault();
+    if (selectionMode) return;
     const content = draft.trim();
     if ((!content && !pendingAttachment) || isSending) return;
 
@@ -578,26 +613,6 @@ export function ChatThreadPage() {
       return [...messages, message];
     });
   }
-
-  function handleForward(message) {
-    if (selectionMode) {
-      setIsForwardModalOpen(true);
-      return;
-    }
-
-    setSelectedMessages([message]);
-    setIsForwardModalOpen(true);
-  }
-
-  const handleCloseForwardModal = () => {
-    if (selectionMode) {
-      setIsForwardModalOpen(false);
-      return;
-    }
-
-    setSelectedMessages([]);
-    setIsForwardModalOpen(false);
-  };
 
   const title = chat?.name || chat?.title || t("chat", "Чат");
   const subtitle = getChatSubtitle(chat, typingUserId, t);
@@ -959,80 +974,104 @@ export function ChatThreadPage() {
             </div>
           )}
 
-          <div className="thread-composer-row">
-            <input
-              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar"
-              aria-label={t("attachFile", "Прикрепить файл")}
-              className="thread-file-input"
-              onChange={handleAttachmentChange}
-              ref={attachmentInputRef}
-              type="file"
-            />
+          {!selectionMode && (
+            <div className="thread-composer-row">
+              <input
+                accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar"
+                aria-label={t("attachFile", "Прикрепить файл")}
+                className="thread-file-input"
+                onChange={handleAttachmentChange}
+                ref={attachmentInputRef}
+                type="file"
+              />
 
-            <button
-              aria-label={t("attachFile", "Прикрепить файл")}
-              className="thread-composer-action-btn thread-attach-button"
-              disabled={isSending || Boolean(editingMessage)}
-              onClick={() => attachmentInputRef.current?.click()}
-              type="button"
-            >
-              <svg
-                fill="none"
-                height="22"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-                width="22"
-              >
-                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-              </svg>
-            </button>
-
-            <input
-              ref={draftRef}
-              aria-label={t("message", "Сообщение")}
-              className="thread-composer-input"
-              onChange={handleDraftChange}
-              onKeyDown={handleComposerKeyDown}
-              placeholder={t("messagePlaceholder", "Сообщение...")}
-              value={draft}
-            />
-
-            <button
-              aria-label={t("emoji", "Смайлики")}
-              className="thread-composer-action-btn"
-              type="button"
-            >
-              <svg
-                fill="none"
-                height="22"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-                width="22"
-              >
-                <circle cx="12" cy="12" r="10" />
-                <path d="M8 14s1.5 2 4 2 4-2 4-2" />
-                <line x1="9" x2="9.01" y1="9" y2="9" />
-                <line x1="15" x2="15.01" y1="9" y2="9" />
-              </svg>
-            </button>
-
-            <div className="thread-composer-submit-wrap">
               <button
-                className={`thread-composer-action-btn thread-send-btn ${
-                  draft.trim() || pendingAttachment ? "is-visible" : ""
-                }`}
-                disabled={(!draft.trim() && !pendingAttachment) || isSending}
-                type="submit"
+                aria-label={t("attachFile", "Прикрепить файл")}
+                className="thread-composer-action-btn thread-attach-button"
+                disabled={isSending || Boolean(editingMessage)}
+                onClick={() => attachmentInputRef.current?.click()}
+                type="button"
               >
-                {isSending ? (
-                  <span className="thread-sending-spinner">⏳</span>
-                ) : (
+                <svg
+                  fill="none"
+                  height="22"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  viewBox="0 0 24 24"
+                  width="22"
+                >
+                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                </svg>
+              </button>
+
+              <input
+                ref={draftRef}
+                aria-label={t("message", "Сообщение")}
+                className="thread-composer-input"
+                onChange={handleDraftChange}
+                onKeyDown={handleComposerKeyDown}
+                placeholder={t("messagePlaceholder", "Сообщение...")}
+                value={draft}
+              />
+
+              <button
+                aria-label={t("emoji", "Смайлики")}
+                className="thread-composer-action-btn"
+                type="button"
+              >
+                <svg
+                  fill="none"
+                  height="22"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  viewBox="0 0 24 24"
+                  width="22"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+                  <line x1="9" x2="9.01" y1="9" y2="9" />
+                  <line x1="15" x2="15.01" y1="9" y2="9" />
+                </svg>
+              </button>
+
+              <div className="thread-composer-submit-wrap">
+                <button
+                  className={`thread-composer-action-btn thread-send-btn ${
+                    draft.trim() || pendingAttachment ? "is-visible" : ""
+                  }`}
+                  disabled={(!draft.trim() && !pendingAttachment) || isSending}
+                  type="submit"
+                >
+                  {isSending ? (
+                    <span className="thread-sending-spinner">⏳</span>
+                  ) : (
+                    <svg
+                      fill="none"
+                      height="20"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      viewBox="0 0 24 24"
+                      width="20"
+                    >
+                      <line x1="22" x2="11" y1="2" y2="13" />
+                      <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                    </svg>
+                  )}
+                </button>
+
+                <button
+                  aria-label={t("voiceMessage", "Голосовое сообщение")}
+                  className={`thread-composer-action-btn thread-mic-btn ${
+                    !draft.trim() && !pendingAttachment ? "is-visible" : ""
+                  }`}
+                  type="button"
+                >
                   <svg
                     fill="none"
                     height="20"
@@ -1043,37 +1082,53 @@ export function ChatThreadPage() {
                     viewBox="0 0 24 24"
                     width="20"
                   >
-                    <line x1="22" x2="11" y1="2" y2="13" />
-                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                    <line x1="12" x2="12" y1="19" y2="23" />
+                    <line x1="8" x2="16" y1="23" y2="23" />
                   </svg>
-                )}
-              </button>
+                </button>
+              </div>
+            </div>
+          )}
 
-              <button
-                aria-label={t("voiceMessage", "Голосовое сообщение")}
-                className={`thread-composer-action-btn thread-mic-btn ${
-                  !draft.trim() && !pendingAttachment ? "is-visible" : ""
-                }`}
-                type="button"
-              >
-                <svg
-                  fill="none"
-                  height="20"
-                  stroke="currentColor"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  viewBox="0 0 24 24"
-                  width="20"
+          {selectionMode && (
+            <div className="thread-composer-row justify-between">
+              <div className="flex items-center gap-x-2">
+                <button
+                  type="button"
+                  onClick={() => runMessageAction(handleForward)}
+                  className="flex items-center gap-x-1 w-auto action-btn px-3 bg-transparent text-[rgba(255,255,255,0.85)] font-normal hover:backdrop-blur-md rounded-4xl"
                 >
-                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                  <line x1="12" x2="12" y1="19" y2="23" />
-                  <line x1="8" x2="16" y1="23" y2="23" />
-                </svg>
+                  <Icon name="forward" />
+                  {!isMobile && <span>{t("forward", "Переслать")}</span>}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => runMessageAction(handleCopyMessage)}
+                  className="flex items-center gap-x-1 w-auto action-btn px-3 bg-transparent text-[rgba(255,255,255,0.85)] font-normal hover:backdrop-blur-md rounded-4xl"
+                >
+                  <Icon name="copy" />
+                  {!isMobile && <span>{t("copy", "Скопировать")}</span>}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => runMessageAction(handleDelete)}
+                  className="flex items-center gap-x-1 w-auto action-btn px-3 bg-transparent text-[rgba(255,255,255,0.85)] font-normal hover:backdrop-blur-md rounded-4xl"
+                >
+                  <Icon name="trash" />
+                  {!isMobile && <span>{t("delete", "Удалить")}</span>}
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={handleCancelSelection}
+                className="w-auto action-btn px-3 bg-transparent text-[rgba(255,255,255,0.85)] font-normal hover:backdrop-blur-md rounded-4xl"
+              >
+                <span>{t("cancel", "Отмена")}</span>
               </button>
             </div>
-          </div>
+          )}
         </div>
       </form>
 

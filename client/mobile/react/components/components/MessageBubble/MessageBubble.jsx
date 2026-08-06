@@ -29,6 +29,7 @@ export const MessageBubble = memo(
       message.id,
       selectionMode,
       onSelection,
+      actionMenu,
       setActionMenu,
       message,
     );
