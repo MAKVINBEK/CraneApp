@@ -16,7 +16,7 @@ class ChatService {
 
   async getChat(chatId) {
     const raw = await getRawChat(this.apiClient, chatId);
-    return Chat.fromAPI(raw);
+    return raw;
   }
 
   createChat(type, participants, title = "") {
