@@ -344,13 +344,16 @@ export function ChatThreadPage() {
 			if (event.chatId && event.chatId !== chatId) return;
 
 			const message = await services.messageService.processMessageForDisplay(chatId, event.pin.message)
-			setPinnedMessages((prev) => [...prev, {...event.pin, message}]);
+			const pinned = { ...event.pin, message }
+			setPinnedMessages((prev) => [...prev, pinned]);
+			services.messageService.addPinnedMessageToCache(chatId, pinned)
     });
     const unsubscribeUnpinned = eventBus.on("message_unpinned", (event) => {
       if (event.chatId && event.chatId !== chatId) return;
       setPinnedMessages((items) =>
         items.filter((item) => item.messageId !== event.messageId),
-      );
+			);
+      services.messageService.removePinnedMessageFromCache(event.messageId)
     });
 
     return () => {
