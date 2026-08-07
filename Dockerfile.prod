@@ -3,7 +3,7 @@ FROM node:20-slim AS frontend
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install --include=dev
-COPY vite.config.js index.html mobile.html ./
+COPY vite.config.ts index.html mobile.html ./
 RUN echo "css-bust-v8"
 COPY client ./client
 COPY public ./public
