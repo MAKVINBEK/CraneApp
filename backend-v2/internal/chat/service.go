@@ -1575,10 +1575,30 @@ func (s *Service) PinMessage(ctx context.Context, userID, chatID, messageID stri
 	}
 
 	if s.ws != nil {
-		payload, _ := json.Marshal(map[string]any{"type": "message_pinned", "chatId": chatID, "messageId": messageID})
-		s.ws.BroadcastToChat(chatID, payload, "")
+		pins, err := s.ListPins(ctx, userID, chatID)
+		if err == nil {
+			for _, pin := range pins {
+				if pin.MessageID != messageID {
+					continue
+				}
+				payload, marshalErr := messagePinnedPayload(pin)
+				if marshalErr == nil {
+					s.ws.BroadcastToChat(chatID, payload, "")
+				}
+				break
+			}
+		}
 	}
 	return nil
+}
+
+func messagePinnedPayload(pin Pin) ([]byte, error) {
+	return json.Marshal(map[string]any{
+		"type":      "message_pinned",
+		"chatId":    pin.ChatID,
+		"messageId": pin.MessageID,
+		"pin":       pin,
+	})
 }
 
 func (s *Service) UnpinMessage(ctx context.Context, userID, chatID, messageID string) error {
