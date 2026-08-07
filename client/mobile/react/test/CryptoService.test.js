@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import CryptoService from '../../application/services/CryptoService';
+import CryptoService from '../services/CryptoService.js';
 
 // Mock IndexedDB and Crypto
 const mockStore = new Map();
