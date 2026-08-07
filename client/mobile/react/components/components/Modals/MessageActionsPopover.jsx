@@ -6,13 +6,13 @@ import { Icon } from "../../ui/Icon";
 const REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 
 export const MessageActionsPopover = (props) => {
-  const { message, onSelection, currentUserId } = props;
+  const { message, onSelection, currentUser } = props;
   const { t } = useTranslation();
   const actions = useMessageActions(props); // Передаем props целиком, чтобы не деструктурировать дважды
   const { selectedMessages, pinnedMessages, selectionMode, actionMenu } =
     useChatStore();
 
-  const mine = message.senderId === currentUserId;
+  const mine = message.senderId === currentUser?.id;
   const isPinned = pinnedMessages.some((p) => p.messageId === message.id);
   const isSelected = selectedMessages.some((m) => m.id === message.id);
 
@@ -22,56 +22,70 @@ export const MessageActionsPopover = (props) => {
       show: !selectionMode,
       icon: "reply",
       key: "reply",
-      def: "Ответить",
+      def: t("messageActions.reply", "Ответить"),
       action: () => actions.startReply(message),
     },
     {
       show: true,
       icon: "copy",
       key: "copy",
-      def: "Скопировать",
+      def: t("messageActions.copy", "Скопировать"),
       action: () => actions.handleCopyMessage(message),
     },
     {
       show: !mine && !selectionMode,
       icon: "language",
       key: "translate",
-      def: "Перевести",
+      def: t("action.translate", "Перевести"),
       action: () => actions.handleTranslateMessage(message),
     },
     {
       show: mine && !selectionMode,
       icon: "edit",
       key: "edit",
-      def: "Изменить",
+      def: t("messageActions.edit", "Изменить"),
       action: () => actions.startEdit(message),
     },
     {
       show: !isPinned && !selectionMode,
       icon: "pin",
       key: "pin",
-      def: "Закрепить",
+			def: t("messageActions.pin", "Закрепить"),
+      action: () => actions.handlePinMessage(message),
+    },
+    {
+      show: !isPinned && selectionMode,
+      icon: "pin",
+      key: "pin",
+      def: t("messageActions.pinAll", "Закрепить всё"),
       action: () => actions.handlePinMessage(message),
     },
     {
       show: isPinned && !selectionMode,
       icon: "pin",
       key: "unpin",
-      def: "Открепить",
+      def: t("messageActions.unpin", "Открепить"),
+      action: () => actions.handleUnpinMessage(message),
+    },
+    {
+      show: isPinned && selectionMode,
+      icon: "pin",
+      key: "unpin",
+      def: t("messageActions.unpinAll", "Открепить всё"),
       action: () => actions.handleUnpinMessage(message),
     },
     {
       show: true,
       icon: "forward",
       key: "forward",
-      def: "Переслать",
+      def: t("messageActions.forward", "Переслать"),
       action: () => actions.handleForward(message),
     },
     {
       show: mine,
       icon: "trash",
       key: "delete",
-      def: "Удалить",
+      def: t("messageActions.delete","Удалить"),
       action: () => actions.handleDelete(message),
       className: "is-danger",
     },
