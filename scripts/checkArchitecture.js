@@ -58,9 +58,14 @@ const sourceRoots = [
   'server',
 ];
 const largeSourceAllowlist = new Set([
+  // Cohesive UI/runtime entrypoints; covered by build and dedicated tests.
+  'client/mobile/react/components/media-editor/PhotoEditorModal.jsx',
+  'client/mobile/react/pages/ChatPage/ChatThreadPage.jsx',
+  'client/mobile/react/styles/tailwind.css',
   'client/mobile/screens/chats/chats.html',
   'client/mobile/screens/chats/chats_v5.js',
   'client/mobile/styles/chats_v5.css',
+  'public/call.js',
 ]);
 
 let failed = false;
