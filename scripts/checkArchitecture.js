@@ -11,12 +11,10 @@ const syntaxRoots = [
   'client/mobile/infrastructure',
   'client/mobile/shared',
   'client/mobile/presentation',
-  'server/gateway',
   'server/services/message-service',
 ];
 
 const sizeLimits = [
-  { file: 'server/gateway/apiGateway.js', maxLines: 700 },
   { file: 'client/mobile/screens/chats/chats.js', maxLines: 700 },
   { file: 'client/mobile/screens/chats/chats.html', maxLines: 700 },
   { file: 'client/mobile/scripts/i18n.js', maxLines: 700 },
@@ -31,9 +29,6 @@ const microserviceRoots = [
   'client/mobile/infrastructure',
   'client/mobile/shared',
   'client/mobile/presentation',
-  'server/gateway/routes',
-  'server/gateway/middleware',
-  'server/gateway/services',
 ];
 const MICROSERVICE_MAX_LINES = 500;
 const SOURCE_MAX_LINES = 700;

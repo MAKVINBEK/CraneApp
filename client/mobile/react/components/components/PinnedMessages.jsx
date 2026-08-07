@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { Icon } from "../ui/Icon";
+import { cn } from "../../utils/cn";
 
 const MAX_VISIBLE_SEGMENTS = 4;
 
-export const PinnedMessages = ({ messages}) => {
+export const PinnedMessages = ({ messages, setPinnedMessagesOpen }) => {
   const navigate = useNavigate();
   const trackRef = useRef(null);
   const { t } = useTranslation();
@@ -58,56 +60,64 @@ export const PinnedMessages = ({ messages}) => {
   };
 
   return (
-    <button
-      className="pinned-messages"
-      aria-label="Закреплённые сообщения"
-      onClick={handleClick}
-      type="button"
-    >
-      <div
-        className="pinned-messages__progress"
-        aria-hidden="true"
-        style={{ "--pm-visible": visibleSegments }}
+    <div className="pinned-messages-wrapper">
+      <button
+        className="pinned-messages"
+        aria-label="Закреплённые сообщения"
+        onClick={handleClick}
+        type="button"
       >
         <div
-          ref={trackRef}
-          className={`pinned-messages__track ${isFilling ? "pinned-messages__track--fill" : ""}`}
-          style={{ "--pm-window-start": windowStart }}
+          className="pinned-messages__progress"
+          aria-hidden="true"
+          style={{ "--pm-visible": visibleSegments }}
         >
-          {messages.map((message, index) => (
-            <span
-              key={message.messageId}
-              className={`pinned-messages__segment ${
-                index === currentPinnedMessageIndex
-                  ? "pinned-messages__segment--active"
-                  : ""
-              }`}
-            />
-          ))}
+          <div
+            ref={trackRef}
+            className={`pinned-messages__track ${isFilling ? "pinned-messages__track--fill" : ""}`}
+            style={{ "--pm-window-start": windowStart }}
+          >
+            {messages.map((message, index) => (
+              <span
+                key={message.messageId}
+                className={cn(
+                  "pinned-messages__segment",
+                  index === currentPinnedMessageIndex &&
+                    "pinned-messages__segment--active",
+                )}
+              />
+            ))}
+          </div>
         </div>
-      </div>
 
-      <div className="pinned-messages__content">
-        <span className="pinned-messages__title">
-          {t("pinnedMessages", "Закреплённое сообщение")} #
-          {currentPinnedMessageIndex + 1}
-        </span>
+        <div className="pinned-messages__content">
+          <span className="pinned-messages__title">
+            {t("pinnedMessages", "Закреплённое сообщение")} #
+            {currentPinnedMessageIndex + 1}
+          </span>
 
-        {(currentMessage.type === "text" || currentMessage.content) &&
-          currentMessage.type !== "image" && (
-            <p className="pinned-messages__text">{currentMessage.content}</p>
+          {(currentMessage.type === "text" || currentMessage.content) &&
+            currentMessage.type !== "image" && (
+              <p className="pinned-messages__text">{currentMessage.content}</p>
+            )}
+
+          {currentMessage.type === "image" && (
+            <p className="pinned-messages__text">{currentMessage.mediaUrl}</p>
           )}
 
-        {currentMessage.type === "image" && (
-          <p className="pinned-messages__text">{currentMessage.mediaUrl}</p>
-        )}
-
-        {currentMessage.type === "file" && (
-          <p className="pinned-messages__text">
-            {currentMessage.mediaEncryption.fileName}
-          </p>
-        )}
-      </div>
-    </button>
+          {currentMessage.type === "file" && (
+            <p className="pinned-messages__text">
+              {currentMessage.mediaEncryption.fileName}
+            </p>
+          )}
+        </div>
+      </button>
+      <button
+        className="rotate-45 cursor-pointer text-[rgba(255,255,255,0.95)]"
+        onClick={() => setPinnedMessagesOpen(true)}
+      >
+        <Icon name="pin" />
+      </button>
+    </div>
   );
 };

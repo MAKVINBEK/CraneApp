@@ -774,7 +774,42 @@
     @apply w-10 h-10 rounded-[12px] flex items-center justify-center text-white text-[30px] leading-none no-underline transition-colors;
     background: rgba(255,255,255,0.06);
   }
-  .thread-back:hover {
+  .pinned-thread-back {
+    @apply w-12.5 h-12.5 rounded-[12px] flex items-center justify-center text-white text-[30px] leading-none no-underline transition-colors rounded-full shrink-0 cursor-pointer;
+		/* Glassmorphism фон */
+		background: linear-gradient(
+			180deg, 
+			rgba(14, 14, 14, 0.86) 0%, 
+			rgba(134, 133, 133, 0.15) 100%
+		);
+		backdrop-filter: blur(12px);
+		-webkit-backdrop-filter: blur(12px);
+		
+		/* Форма и рамка */
+		border: 1px solid rgba(255, 255, 255, 0.18);
+		box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25), 
+		            inset 0 1px 0 rgba(255, 255, 255, 0.2);
+		transition: transform 0.15s, border-color 0.2s, background-color 0.2s;
+		-webkit-tap-highlight-color: transparent;
+    background: rgba(255,255,255,0.06);
+  }
+  .pinned-thread-back svg {
+		display: block;
+		transition: transform 0.2s ease;
+	}
+
+	.pinned-thread-back:hover {
+		border-color: rgba(255, 255, 255, 0.35);
+	}
+
+	.pinned-thread-back:hover svg {
+		transform: translateX(-2px); /* Легкий микро-сдвиг стрелочки влево при наведении */
+	}
+
+	.pinned-thread-back:active {
+		transform: scale(0.92); /* Отклик нажатия */
+	}
+  .pinned-thread-back:hover {
     background: rgba(255,255,255,0.1);
   }
   .thread-avatar {
@@ -814,8 +849,11 @@
   .thread-call-icon-video { width: 31px; height: 31px; opacity: 0.9; }
   .thread-messages { @apply min-h-0 h-full overflow-y-auto flex flex-col gap-[10px]; padding: 18px 12px; }
 
+  .pinned-messages-wrapper {
+    @apply w-full flex gap-2 py-1.5 md:py-3 px-2 pr-4 cursor-pointer transition-colors border-b border-border bg-panel outline-0 hover:bg-[rgba(255,255,255,0.05)];
+  }
   .pinned-messages {
-    @apply w-full flex gap-2 py-1.5 md:py-3 px-2 cursor-pointer transition-colors border-b border-border bg-panel outline-0 hover:bg-[rgba(255,255,255,0.05)];
+    @apply w-full flex gap-2 cursor-pointer outline-0 bg-transparent;
   }
 
   .pinned-messages__progress {

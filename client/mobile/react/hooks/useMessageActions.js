@@ -97,7 +97,7 @@ export const useMessageActions = ({
         setMessages((messages) =>
           messages.filter((message) => !selectedIds.has(message.id)),
         );
-        handleCancelSelection()
+        handleCancelSelection();
       }
 
       if (!selectionMode) {
@@ -140,6 +140,13 @@ export const useMessageActions = ({
 
   const handleUnpinMessage = async (message) => {
     try {
+      if (selectionMode) {
+        for (const message of selectedMessages) {
+          await services.messageService.unpinMessage(chatId, message.id);
+        }
+        return;
+      }
+
       await services.messageService.unpinMessage(chatId, message.id);
     } catch (err) {
       setError(
@@ -170,6 +177,13 @@ export const useMessageActions = ({
 
   const handlePinMessage = async (message) => {
     try {
+      if (selectionMode) {
+        for (const message of selectedMessages) {
+          await services.messageService.pinMessage(chatId, message.id);
+        }
+        return;
+      }
+
       await services.messageService.pinMessage(chatId, message.id);
     } catch (err) {
       setError(

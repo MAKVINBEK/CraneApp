@@ -5,7 +5,12 @@ import { resolve } from 'node:path';
 
 export default defineConfig({
   plugins: [tailwindcss(), react()],
-  publicDir: 'public',
+	publicDir: 'public',
+  resolve: {
+		alias: {
+			'@': path.resolve(__dirname, './client/mobile/react'),
+		},
+	},
   server: {
     proxy: {
       '/api': {
