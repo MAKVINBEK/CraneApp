@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"os/signal"
 	"strings"
 	"sync"
@@ -256,7 +257,7 @@ func main() {
 		limitedMux.ServeHTTP(w, r)
 	}))
 
-	server := &http.Server{Addr: config.Value("EDGE_ADDR", ":8080"), Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 5 * time.Minute, WriteTimeout: 5 * time.Minute, IdleTimeout: 120 * time.Second}
+	server := &http.Server{Addr: edgeAddress(), Handler: handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 5 * time.Minute, WriteTimeout: 5 * time.Minute, IdleTimeout: 120 * time.Second}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	go func() {
@@ -270,6 +271,16 @@ func main() {
 	shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = server.Shutdown(shutdown)
+}
+
+func edgeAddress() string {
+	if address := os.Getenv("EDGE_ADDR"); address != "" {
+		return address
+	}
+	if port := os.Getenv("PORT"); port != "" {
+		return ":" + strings.TrimPrefix(port, ":")
+	}
+	return ":8080"
 }
 
 func frontendFallback(frontendDir, requestPath string) string {

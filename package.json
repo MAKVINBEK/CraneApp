@@ -2,7 +2,7 @@
   "name": "craneapp",
   "version": "1.0.0",
   "description": "CraneApp Messenger",
-  "main": "server/gateway/apiGateway.js",
+  "private": true,
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
