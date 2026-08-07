@@ -47,8 +47,12 @@ class AuthService {
     return response.data;
   }
 
-  async login({ username, password }) {
-    const response = await this.apiClient.post(API_ENDPOINTS.AUTH_LOGIN, { username, password });
+  async login({ username, password, twoFAPassword = '' }) {
+    const response = await this.apiClient.post(API_ENDPOINTS.AUTH_LOGIN, {
+      username,
+      password,
+      twoFAPassword,
+    });
 
     if (response.data?.token) {
       this.authStorage.setToken(response.data.token);
@@ -64,6 +68,41 @@ class AuthService {
   async logout() {
     try {
       await this.apiClient.post(API_ENDPOINTS.AUTH_LOGOUT);
+    } finally {
+      this.authStorage.logout();
+    }
+  }
+
+  sessions() {
+    return this.apiClient
+      .get(API_ENDPOINTS.AUTH_SESSIONS)
+      .then((response) => response.data?.sessions ?? []);
+  }
+
+  changePassword(currentPassword, newPassword) {
+    return this.apiClient
+      .post(API_ENDPOINTS.AUTH_CHANGE_PASSWORD, { currentPassword, newPassword })
+      .then((response) => response.data);
+  }
+
+  twoFAStatus() {
+    return this.apiClient
+      .get(API_ENDPOINTS.AUTH_2FA_STATUS)
+      .then((response) => Boolean(response.data?.enabled));
+  }
+
+  setTwoFA(enabled, password) {
+    const endpoint = enabled
+      ? API_ENDPOINTS.AUTH_2FA_ENABLE
+      : API_ENDPOINTS.AUTH_2FA_DISABLE;
+    return this.apiClient.post(endpoint, { password }).then((response) => response.data);
+  }
+
+  async logoutAll() {
+    try {
+      return await this.apiClient
+        .post(API_ENDPOINTS.AUTH_LOGOUT_ALL)
+        .then((response) => response.data);
     } finally {
       this.authStorage.logout();
     }

@@ -119,6 +119,22 @@ const navItems = [
     path: ROUTES.MEETINGS,
     Icon: MeetingsIcon,
   },
+  {
+    key: "settings",
+    label: "Настройки",
+    path: ROUTES.SETTINGS,
+    Icon: SettingsIcon,
+  },
+];
+
+const mobileNavItems = [
+  ...navItems,
+  {
+    key: "settings",
+    label: "Настройки",
+    path: ROUTES.SETTINGS,
+    Icon: SettingsIcon,
+  },
 ];
 
 export function AppLayout() {
@@ -137,7 +153,7 @@ export function AppLayout() {
           {!chatId && (
             <div className="nav-rail mobile-nav-rail">
               {/* Чаты */}
-              {navItems.map(({ Icon, key, label, path }) => (
+              {mobileNavItems.map(({ Icon, key, label, path }) => (
                 <NavLink
                   key={key}
                   to={path}
@@ -157,14 +173,6 @@ export function AppLayout() {
       {!isMobile && (
         <div className="app-layout">
           <div className="nav-rail">
-            <NavLink
-              className="rail-burger"
-              to={ROUTES.SETTINGS}
-              data-tip="Настройки"
-            >
-              <SettingsIcon />
-            </NavLink>
-
             {navItems.map(({ Icon, key, label, path }) => (
               <NavLink
                 key={key}
@@ -175,16 +183,6 @@ export function AppLayout() {
                 <Icon />
               </NavLink>
             ))}
-
-            <div className="rail-spacer"></div>
-
-            <NavLink
-              className="rail-help"
-              to={ROUTES.SETTINGS}
-              data-tip="Настройки"
-            >
-              <SettingsIcon />
-            </NavLink>
           </div>
           <div className="app-main-content">
             <Outlet />
