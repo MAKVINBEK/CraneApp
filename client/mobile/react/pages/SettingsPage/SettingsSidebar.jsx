@@ -1,11 +1,8 @@
 // components/Settings/SettingsSidebar.jsx
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import '../../styles/SettingsPage.css';
 import '../../styles/SettingsSidebar.css';
 export function SettingsSidebar({ activeTab, onSelectTab, t }) {
-  const navigate = useNavigate();
-
   const menuItems = [
     {
       id: 'account',
@@ -19,7 +16,7 @@ export function SettingsSidebar({ activeTab, onSelectTab, t }) {
     },
     {
       id: 'notifications',
-      label: t ? t('settings.notifications', 'Уведомления и звуки') : 'Уведомления и звуки',
+      label: t ? t('settings.notifications', 'Уведомления') : 'Уведомления',
       icon: (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
@@ -74,12 +71,6 @@ export function SettingsSidebar({ activeTab, onSelectTab, t }) {
   return (
     <aside className="settings-sidebar">
       <div className="settings-sidebar-header">
-        <button className="settings-back-btn" onClick={() => navigate('/chats')} title="Вернуться к чатам">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="19" y1="12" x2="5" y2="12"></line>
-            <polyline points="12 19 5 12 12 5"></polyline>
-          </svg>
-        </button>
         <h2>Настройки</h2>
       </div>
 

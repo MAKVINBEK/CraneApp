@@ -26,6 +26,11 @@ export function SettingsDetailPage({ activeTab, searchQuery, t }) {
   const [twoFAEnabled, setTwoFAEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [accountView, setAccountView] = useState("overview");
+
+  useEffect(() => {
+    setAccountView("overview");
+  }, [activeTab]);
 
   useEffect(() => {
     let active = true;
@@ -103,19 +108,30 @@ export function SettingsDetailPage({ activeTab, searchQuery, t }) {
 
   return (
     <main className="settings-detail-page">
-      {activeTab === "account" && (
-        <AccountSettings
+      {activeTab === "account" && accountView === "profile" && <ProfileSettings
           user={user}
-          sessions={sessions}
-          twoFAEnabled={twoFAEnabled}
           saving={saving}
           setSaving={setSaving}
           onUserChange={setUser}
-          onTwoFAChange={setTwoFAEnabled}
-          onLogout={logout}
+          onBack={() => setAccountView("overview")}
           showToast={showToast}
+        />}
+      {activeTab === "account" && accountView === "password" && <PasswordSettings saving={saving} setSaving={setSaving} onBack={() => setAccountView("overview")} showToast={showToast} />}
+      {activeTab === "account" && accountView === "email" && <EmailSettings user={user} onBack={() => setAccountView("overview")} showToast={showToast} />}
+      {activeTab === "account" && accountView === "twoFA" && <TwoFASettings enabled={twoFAEnabled} saving={saving} setSaving={setSaving} onEnabledChange={setTwoFAEnabled} onBack={() => setAccountView("overview")} showToast={showToast} />}
+      {activeTab === "account" && accountView === "sessions" && <SessionsSettings sessions={sessions} onLogoutAll={() => logout(true)} onBack={() => setAccountView("overview")} />}
+      {activeTab === "account" && accountView === "overview" && <AccountSettings
+          user={user}
+          sessions={sessions}
+          twoFAEnabled={twoFAEnabled}
+          onLogout={logout}
+          onEditProfile={() => setAccountView("profile")}
+          onOpenEmail={() => setAccountView("email")}
+          onOpenPassword={() => setAccountView("password")}
+          onOpenTwoFA={() => setAccountView("twoFA")}
+          onOpenSessions={() => setAccountView("sessions")}
         />
-      )}
+      }
       {activeTab === "notifications" && (
         <SettingsSection title="Уведомления и звуки" description="Настройте поведение уведомлений на этом устройстве.">
           <ToggleRow label="Уведомления" value={settings.notifications} onChange={(value) => saveSettings({ notifications: value })} />
@@ -148,11 +164,141 @@ export function SettingsDetailPage({ activeTab, searchQuery, t }) {
   );
 }
 
-function AccountSettings({ user, sessions, twoFAEnabled, saving, setSaving, onUserChange, onTwoFAChange, onLogout, showToast }) {
-  const [profile, setProfile] = useState({ firstName: user.firstName || "", lastName: user.lastName || "", bio: user.bio || "" });
+function AccountSettings({ user, sessions, twoFAEnabled, onLogout, onEditProfile, onOpenEmail, onOpenPassword, onOpenTwoFA, onOpenSessions }) {
+  const initials = (user.firstName || user.username || "U").slice(0, 1).toUpperCase();
+  return (
+    <>
+      <section className="settings-account-overview">
+        <h1>Аккаунт</h1>
+        <div className="settings-account-summary settings-overview-profile">
+          <div className="settings-account-avatar">{user.avatarUrl ? <img src={user.avatarUrl} alt="" /> : initials}</div>
+          <div className="settings-account-identity">
+            <strong>{[user.firstName, user.lastName].filter(Boolean).join(" ") || user.username || "Пользователь"}</strong>
+            <span>{user.online ? "в сети" : `@${user.username || "user"}`}</span>
+          </div>
+          <button type="button" className="settings-edit-profile" onClick={onEditProfile}>Изменить профиль</button>
+        </div>
+        <h2>Настройки аккаунта</h2>
+        <div className="settings-overview-group">
+          <button type="button" onClick={onOpenEmail}><span>Электронная почта</span><span>{user.email || "не привязана"}<b>›</b></span></button>
+          <button type="button" onClick={onOpenPassword}><span>Пароль</span><span>•••••••••• <b>›</b></span></button>
+          <button type="button" onClick={onOpenTwoFA}><span>Двухфакторная аутентификация</span><span>{twoFAEnabled ? "включена" : "отключена"}<b>›</b></span></button>
+        </div>
+        <h2>Действия</h2>
+        <div className="settings-overview-group">
+          <button type="button" onClick={onOpenSessions}><span>Активные сеансы</span><span>{sessions.length}<b>›</b></span></button>
+          <button type="button" onClick={() => onLogout(false)}><span>Выйти из аккаунта</span><span className="settings-overview-danger">Выйти</span></button>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function EmailSettings({ user, onBack, showToast }) {
+  const [email, setEmail] = useState(user.email || "");
+
+  async function saveEmail(event) {
+    event.preventDefault();
+    showToast("info", "Изменение электронной почты пока недоступно", "ℹ️");
+  }
+
+  return <AccountSubpage title="Электронная почта" description="Укажите адрес для уведомлений и восстановления доступа." onBack={onBack}>
+    <form className="settings-profile-editor-form" onSubmit={saveEmail}>
+      <div className="settings-profile-fields">
+        <Field label="Электронная почта" type="email" value={email} required autoComplete="email" placeholder="name@example.com" onChange={setEmail} />
+        <p className="settings-email-hint">После изменения адрес может потребоваться подтвердить.</p>
+      </div>
+      <EditorActions saving={false} onCancel={onBack} label="Сохранить почту" />
+    </form>
+  </AccountSubpage>;
+}
+
+function PasswordSettings({ saving, setSaving, onBack, showToast }) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [twoFAPassword, setTwoFAPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+
+  async function changePassword(event) {
+    event.preventDefault();
+    if (newPassword.length < 10) return showToast("error", "Новый пароль должен содержать минимум 10 символов", "⚠️");
+    if (newPassword !== confirmation) return showToast("error", "Пароли не совпадают", "⚠️");
+    setSaving(true);
+    try {
+      await services.authService.changePassword(currentPassword, newPassword);
+      showToast("success", "Пароль изменён", "✓");
+      onBack();
+    } catch (_) {
+      showToast("error", "Не удалось изменить пароль", "⚠️");
+    } finally { setSaving(false); }
+  }
+
+  return <AccountSubpage title="Изменить пароль" description="Используйте не менее 10 символов." onBack={onBack}>
+    <form className="settings-profile-editor-form" onSubmit={changePassword}>
+      <div className="settings-profile-fields">
+        <Field label="Текущий пароль" type="password" value={currentPassword} required onChange={setCurrentPassword} />
+        <Field label="Новый пароль" type="password" value={newPassword} required minLength={10} onChange={setNewPassword} />
+        <Field label="Повторите новый пароль" type="password" value={confirmation} required onChange={setConfirmation} />
+      </div>
+      <EditorActions saving={saving} onCancel={onBack} label="Изменить пароль" />
+    </form>
+  </AccountSubpage>;
+}
+
+function TwoFASettings({ enabled, saving, setSaving, onEnabledChange, onBack, showToast }) {
+  const [password, setPassword] = useState("");
+  async function submit(event) {
+    event.preventDefault();
+    if (password.length < 6) return showToast("error", "Введите пароль 2FA — минимум 6 символов", "⚠️");
+    setSaving(true);
+    try {
+      await services.authService.setTwoFA(!enabled, password);
+      onEnabledChange(!enabled);
+      showToast("success", enabled ? "2FA отключена" : "2FA включена", "✓");
+      onBack();
+    } catch (_) {
+      showToast("error", "Не удалось изменить настройки 2FA", "⚠️");
+    } finally { setSaving(false); }
+  }
+  return <AccountSubpage title="Двухфакторная аутентификация" description="Дополнительная защита при входе в аккаунт." onBack={onBack}>
+    <div className={`settings-security-status ${enabled ? "is-enabled" : ""}`}><span>{enabled ? "Защита включена" : "Защита отключена"}</span><b>{enabled ? "Включена" : "Отключена"}</b></div>
+    <form className="settings-profile-editor-form" onSubmit={submit}>
+      <div className="settings-profile-fields"><Field label="Пароль 2FA" type="password" value={password} required minLength={6} onChange={setPassword} /></div>
+      <EditorActions saving={saving} onCancel={onBack} label={enabled ? "Отключить 2FA" : "Включить 2FA"} danger={enabled} />
+    </form>
+  </AccountSubpage>;
+}
+
+function SessionsSettings({ sessions, onLogoutAll, onBack }) {
+  return <AccountSubpage title="Активные сеансы" description="Устройства, на которых выполнен вход в аккаунт." onBack={onBack}>
+    <div className="settings-sessions-card">
+      {sessions.length ? sessions.map((session, index) => <div className="settings-session-row" key={session.id}>
+        <span className="settings-session-device">{session.deviceType === "mobile" ? "▯" : "▱"}</span>
+        <div><strong>{session.deviceName || "Устройство"}</strong><span>{session.deviceType || "unknown"} · {formatDate(session.lastActive)}</span></div>
+        {index === 0 && <b>Текущий</b>}
+      </div>) : <div className="settings-sessions-empty">Активных сеансов в списке нет</div>}
+    </div>
+    <button type="button" className="settings-terminate-sessions" onClick={onLogoutAll}>Завершить все сеансы</button>
+  </AccountSubpage>;
+}
+
+function AccountSubpage({ title, description, onBack, children }) {
+  return <section className="settings-profile-editor settings-account-subpage">
+    <button type="button" className="settings-detail-back" onClick={onBack}>‹ <span>Назад</span></button>
+    <header className="settings-profile-editor-header"><h1>{title}</h1><p>{description}</p></header>
+    {children}
+  </section>;
+}
+
+function EditorActions({ saving, onCancel, label, danger = false }) {
+  return <div className="settings-profile-editor-actions">
+    <button type="button" className="settings-profile-cancel" onClick={onCancel}>Отмена</button>
+    <button className={danger ? "settings-editor-danger" : "settings-profile-save"} disabled={saving}>{saving ? "Сохранение…" : label}</button>
+  </div>;
+}
+
+function ProfileSettings({ user, saving, setSaving, onUserChange, onBack, showToast }) {
+  const [profile, setProfile] = useState({ firstName: user.firstName || "", lastName: user.lastName || "", bio: user.bio || "" });
+  const initials = (user.firstName || user.username || "U").slice(0, 1).toUpperCase();
 
   async function saveProfile(event) {
     event.preventDefault();
@@ -162,6 +308,7 @@ function AccountSettings({ user, sessions, twoFAEnabled, saving, setSaving, onUs
       onUserChange(updated);
       localStorage.setItem("craneapp_user_data", JSON.stringify(updated));
       showToast("success", "Профиль обновлён", "✓");
+      onBack();
     } catch (_) {
       showToast("error", "Не удалось обновить профиль", "⚠️");
     } finally {
@@ -169,77 +316,31 @@ function AccountSettings({ user, sessions, twoFAEnabled, saving, setSaving, onUs
     }
   }
 
-  async function changePassword(event) {
-    event.preventDefault();
-    if (newPassword.length < 10) {
-      showToast("error", "Новый пароль должен содержать минимум 10 символов", "⚠️");
-      return;
-    }
-    setSaving(true);
-    try {
-      await services.authService.changePassword(currentPassword, newPassword);
-      setCurrentPassword("");
-      setNewPassword("");
-      showToast("success", "Пароль изменён", "✓");
-    } catch (_) {
-      showToast("error", "Не удалось изменить пароль", "⚠️");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function toggleTwoFA() {
-    if (twoFAPassword.length < 6) {
-      showToast("error", "Введите пароль 2FA — минимум 6 символов", "⚠️");
-      return;
-    }
-    setSaving(true);
-    try {
-      await services.authService.setTwoFA(!twoFAEnabled, twoFAPassword);
-      onTwoFAChange(!twoFAEnabled);
-      setTwoFAPassword("");
-      showToast("success", twoFAEnabled ? "2FA отключена" : "2FA включена", "✓");
-    } catch (_) {
-      showToast("error", "Не удалось изменить настройки 2FA", "⚠️");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const initials = (user.firstName || user.username || "U").slice(0, 1).toUpperCase();
   return (
-    <>
-      <SettingsSection title="Аккаунт" description="Профиль и данные вашего аккаунта.">
-        <div className="settings-account-summary">
-          <div className="settings-account-avatar">{user.avatarUrl ? <img src={user.avatarUrl} alt="" /> : initials}</div>
-          <div><strong>{user.firstName || "Пользователь"}</strong><span>@{user.username}</span></div>
-        </div>
-        <form className="settings-form" onSubmit={saveProfile}>
+    <section className="settings-profile-editor">
+      <button type="button" className="settings-detail-back" onClick={onBack}>‹ <span>Назад</span></button>
+      <header className="settings-profile-editor-header">
+        <h1>Изменить профиль</h1>
+        <p>Обновите имя и информацию, которую видят другие пользователи.</p>
+      </header>
+      <div className="settings-profile-editor-identity">
+        <div className="settings-account-avatar">{user.avatarUrl ? <img src={user.avatarUrl} alt="" /> : initials}</div>
+        <div><strong>{[user.firstName, user.lastName].filter(Boolean).join(" ") || user.username || "Пользователь"}</strong><span>@{user.username || "user"}</span></div>
+        <button type="button" disabled title="Загрузка аватара пока недоступна">Изменить фото</button>
+      </div>
+      <form className="settings-profile-editor-form" onSubmit={saveProfile}>
+        <div className="settings-profile-fields">
           <Field label="Имя" value={profile.firstName} required onChange={(value) => setProfile({ ...profile, firstName: value })} />
           <Field label="Фамилия" value={profile.lastName} onChange={(value) => setProfile({ ...profile, lastName: value })} />
-          <Field label="О себе" value={profile.bio} multiline onChange={(value) => setProfile({ ...profile, bio: value })} />
-          <button className="settings-primary-button" disabled={saving || !profile.firstName.trim()}>Сохранить профиль</button>
-        </form>
-      </SettingsSection>
-      <SettingsSection title="Пароль" description="После изменения остальные устройства останутся авторизованы.">
-        <form className="settings-form" onSubmit={changePassword}>
-          <Field label="Текущий пароль" type="password" value={currentPassword} required onChange={setCurrentPassword} />
-          <Field label="Новый пароль" type="password" value={newPassword} required onChange={setNewPassword} />
-          <button className="settings-primary-button" disabled={saving}>Изменить пароль</button>
-        </form>
-      </SettingsSection>
-      <SettingsSection title="Двухфакторная защита" description={twoFAEnabled ? "Защита включена" : "Защита отключена"}>
-        <div className="settings-inline-action">
-          <input type="password" value={twoFAPassword} onChange={(event) => setTwoFAPassword(event.target.value)} placeholder="Пароль 2FA" />
-          <button className="settings-secondary-button" disabled={saving} onClick={toggleTwoFA}>{twoFAEnabled ? "Отключить" : "Включить"}</button>
+          <Field label="О себе" value={profile.bio} multiline maxLength={160} onChange={(value) => setProfile({ ...profile, bio: value })} />
+          <span className="settings-profile-bio-counter">{profile.bio.length}/160</span>
         </div>
-      </SettingsSection>
-      <SettingsSection title="Активные сессии" description="Сессии входа, зарегистрированные сервером.">
-        <div className="settings-session-list">{sessions.length ? sessions.map((session) => <div className="settings-session" key={session.id}><strong>{session.deviceName || "Устройство"}</strong><span>{session.deviceType || "unknown"} · {formatDate(session.lastActive)}</span></div>) : <span className="settings-muted">Активных сессий в списке нет</span>}</div>
-        <button className="settings-danger-button" onClick={() => onLogout(true)}>Завершить все сессии</button>
-      </SettingsSection>
-      <button className="settings-danger-button settings-logout-button" onClick={() => onLogout(false)}>Выйти из аккаунта</button>
-    </>
+        <div className="settings-profile-editor-actions">
+          <button type="button" className="settings-profile-cancel" onClick={onBack}>Отмена</button>
+          <button className="settings-profile-save" disabled={saving || !profile.firstName.trim()}>{saving ? "Сохранение…" : "Сохранить"}</button>
+        </div>
+      </form>
+    </section>
   );
 }
 
