@@ -15,6 +15,7 @@ WORKDIR /src
 COPY backend-v2/go.mod backend-v2/go.sum ./
 RUN go mod download
 COPY backend-v2/internal ./internal
+COPY backend-v2/contracts ./contracts
 COPY backend-v2/cmd ./cmd
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /binaries/auth    ./cmd/auth && \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /binaries/user    ./cmd/user && \
