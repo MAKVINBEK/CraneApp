@@ -119,6 +119,12 @@ const navItems = [
     path: ROUTES.MEETINGS,
     Icon: MeetingsIcon,
   },
+  {
+    key: "settings",
+    label: "Настройки",
+    path: ROUTES.SETTINGS,
+    Icon: SettingsIcon,
+  },
 ];
 
 export function AppLayout() {

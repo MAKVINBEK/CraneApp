@@ -462,6 +462,21 @@
   line-height: 1;
 }
 
+@media (max-width: 390px) {
+  .mobile-nav-rail {
+    width: calc(100% - 16px);
+  }
+
+  .mobile-nav-rail .rail-tab span {
+    font-size: 9px;
+  }
+
+  .mobile-nav-rail .rail-tab svg {
+    width: 18px;
+    height: 18px;
+  }
+}
+
 .mobile-nav-rail .rail-tab.active {
   color: #ffffff;
   background: rgba(255, 255, 255, 0.16);
