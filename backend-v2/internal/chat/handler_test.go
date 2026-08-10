@@ -3,6 +3,7 @@ package chat
 import (
 	"bytes"
 	"craneapp/backend-v2/internal/platform/authctx"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -123,6 +124,108 @@ func TestHandler_AddMember(t *testing.T) {
 				if resp.Code != tt.expectedCode {
 					t.Errorf("expected error code %q, got %q", tt.expectedCode, resp.Code)
 				}
+			}
+		})
+	}
+}
+
+// TestHandler_LeaveChat проверяет маппинг LeaveChat-ошибок в HTTP статусы и JSON-коды.
+func TestHandler_LeaveChat(t *testing.T) {
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	svc := NewService(db, nil)
+	h := NewHandler(svc)
+
+	userID := "550e8400-e29b-41d4-a716-446655440003"
+	chatID := "550e8400-e29b-41d4-a716-446655440002"
+
+	tests := []struct {
+		name       string
+		setupMock  func()
+		wantStatus int
+		wantCode   string
+	}{
+		{
+			name: "success_member_200",
+			setupMock: func() {
+				mock.ExpectQuery(`SELECT role FROM chats.members WHERE user_id = $1 AND chat_id = $2`).
+					WithArgs(userID, chatID).
+					WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow("member"))
+				mock.ExpectBegin()
+				mock.ExpectExec(`DELETE FROM crypto.chat_encryption_keys WHERE chat_id = $1 AND user_id = $2`).
+					WithArgs(chatID, userID).WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectExec(`DELETE FROM chats.user_chat_settings WHERE user_id = $1 AND chat_id = $2`).
+					WithArgs(userID, chatID).WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectExec(`DELETE FROM chats.members WHERE chat_id=$1 AND user_id=$2 AND role<>'owner'`).
+					WithArgs(chatID, userID).WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectCommit()
+			},
+			wantStatus: http.StatusOK,
+			wantCode:   "", // success не требует code
+		},
+		{
+			name: "owner_409_ownership_transfer_required",
+			setupMock: func() {
+				mock.ExpectQuery(`SELECT role FROM chats.members WHERE user_id = $1 AND chat_id = $2`).
+					WithArgs(userID, chatID).
+					WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow("owner"))
+			},
+			wantStatus: http.StatusConflict,
+			wantCode:   "ownership_transfer_required",
+		},
+		{
+			name: "not_member_403_access_denied",
+			setupMock: func() {
+				mock.ExpectQuery(`SELECT role FROM chats.members WHERE user_id = $1 AND chat_id = $2`).
+					WithArgs(userID, chatID).
+					WillReturnError(sql.ErrNoRows)
+			},
+			wantStatus: http.StatusForbidden,
+			wantCode:   "access_denied",
+		},
+		{
+			name: "invalid_chatID_400_validation_failed",
+			setupMock: func() {
+				// SQL ожиданий нет — up-сайд
+			},
+			wantStatus: http.StatusBadRequest,
+			wantCode:   "validation_failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.setupMock()
+			idToUse := chatID
+			if tt.name == "invalid_chatID_400_validation_failed" {
+				idToUse = "not-a-uuid"
+			}
+			req := httptest.NewRequest(http.MethodPost, "/api/v2/chats/"+idToUse+"/leave", nil)
+			ctx := authctx.WithUser(req.Context(), authctx.User{ID: userID})
+			req = req.WithContext(ctx)
+
+			rr := httptest.NewRecorder()
+			h.Chat(rr, req)
+
+			if rr.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d, body %s", rr.Code, tt.wantStatus, rr.Body.String())
+			}
+
+			if tt.wantCode != "" {
+				var body map[string]any
+				if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+					t.Fatalf("unmarshal: %v", err)
+				}
+				if body["code"] != tt.wantCode {
+					t.Fatalf("error code = %q, want %q; body %s", body["code"], tt.wantCode, rr.Body.String())
+				}
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatalf("mock expectations: %v", err)
 			}
 		})
 	}
