@@ -40,7 +40,6 @@ export const MessageBubble = memo(
     );
 
     const { t } = useTranslation();
-    // console.log(message);
     const mine = message.senderId === currentUserId;
 
     const longPressHandlers = useMessageLongPress(

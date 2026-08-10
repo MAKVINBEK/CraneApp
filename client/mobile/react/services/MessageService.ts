@@ -330,11 +330,15 @@ export class MessageService {
     item: IMessageDto,
     chatContext: IChatContext,
   ) {
-    if (!("mediaUrl" in item.metadata)) return;
-    const mediaUrl = item.metadata.mediaUrl;
+    const metadata = item.metadata;
+
+    if (!metadata || !("mediaUrl" in metadata)) {
+      return {};
+    }
+    const mediaUrl = metadata.mediaUrl;
     if (!mediaUrl) return {};
 
-    const mediaEncrypted = item.metadata.mediaEncrypted ?? false;
+    const mediaEncrypted = metadata.mediaEncrypted ?? false;
     if (!mediaEncrypted) {
       if (!MEDIA_MESSAGE_TYPES.has(item.type)) return {};
       return {
@@ -362,7 +366,7 @@ export class MessageService {
         mediaUrl: objectUrl,
         mediaOriginalUrl: mediaUrl,
         mediaEncrypted: true,
-        mediaEncryption: item.metadata.mediaEncryption ?? null,
+        mediaEncryption: metadata.mediaEncryption ?? null,
         mediaUnavailable: false,
       };
     } catch (error) {
@@ -371,7 +375,7 @@ export class MessageService {
         mediaUrl: null,
         mediaOriginalUrl: mediaUrl,
         mediaEncrypted: true,
-        mediaEncryption: item.metadata.mediaEncryption ?? null,
+        mediaEncryption: metadata.mediaEncryption ?? null,
         mediaUnavailable: true,
         mediaUnavailableReason: "Медиа недоступно: ошибка расшифровки",
       };
