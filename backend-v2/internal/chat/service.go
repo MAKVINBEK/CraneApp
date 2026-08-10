@@ -1746,6 +1746,13 @@ type leaveChatInput struct {
 	ChatID string `validate:"required,uuid"`
 }
 
+type MemberRemovedEvent struct {
+	Type   string `json:"type"`
+	ChatID string `json:"chatId"`
+	UserID string `json:"userId"`
+	Reason string `json:"reason"`
+}
+
 func (s *Service) LeaveChat(ctx context.Context, userID, chatID string) error {
 	input := leaveChatInput{ChatID: chatID}
 	if err := validate.Struct(input); err != nil {
@@ -1759,6 +1766,22 @@ func (s *Service) LeaveChat(ctx context.Context, userID, chatID string) error {
 	if role == "owner" {
 		return ErrOwnershipTransferRequired
 	}
+
+	if s.ws != nil {
+		event := MemberRemovedEvent{
+			Type:   "chat_member_removed",
+			ChatID: chatID,
+			UserID: userID,
+			Reason: "left",
+		}
+		payload, err := json.Marshal(event)
+		if err != nil {
+			slog.Error("failed to marshal member_removed event", "err", err, "chatID", chatID, "userID", userID)
+		} else {
+			s.ws.BroadcastToChat(chatID, payload, "")
+		}
+	}
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
