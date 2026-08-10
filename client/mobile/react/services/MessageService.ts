@@ -1,7 +1,22 @@
 import { eventBus, getRawChat } from "@/core";
 import { sortMessagesChronologically } from "@/utils";
 import { API_ENDPOINTS, ApiClient } from "@/api";
-import type { IChatContext, IMediaItem, IMessageDto, IMessageResponse, IMessagesResponse, IPinnedDto, IPinnedListResponse, IPinnedMessageDto, IReactionsResponse, TMediaMessageType, TMessagesList, TMessageType, TPinnedList } from "@/types";
+import type {
+  IChatContext,
+  ILastMessageDto,
+  IMediaItem,
+  IMessageDto,
+  IMessageResponse,
+  IMessagesResponse,
+  IPinnedDto,
+  IPinnedListResponse,
+  IPinnedMessageDto,
+  IReactionsResponse,
+  TMediaMessageType,
+  TMessagesList,
+  TMessageType,
+  TPinnedList,
+} from "@/types";
 import type { CryptoService } from "@/services";
 import { STORAGE_KEYS, WS_EVENTS } from "@/consts";
 
@@ -18,9 +33,9 @@ const LEGACY_MEDIA_UNAVAILABLE = "Медиа недоступно: файл не
 
 export class MessageService {
   private apiClient: ApiClient;
-  private cryptoService: CryptoService
-  private messages: Map<string, TMessagesList>
-  private pinnedMessages: Map<string, TPinnedList>
+  private cryptoService: CryptoService;
+  private messages: Map<string, TMessagesList>;
+  private pinnedMessages: Map<string, TPinnedList>;
 
   constructor(apiClient: ApiClient, cryptoService: CryptoService) {
     this.apiClient = apiClient;
@@ -29,16 +44,23 @@ export class MessageService {
     this.pinnedMessages = new Map();
   }
 
-  async getMessages(chatId: string, offset: number = 0, limit: number = 50): Promise<TMessagesList> {
+  async getMessages(
+    chatId: string,
+    offset: number = 0,
+    limit: number = 50,
+  ): Promise<TMessagesList> {
     const cached = this.messages.get(chatId);
     if (cached && offset === 0) {
       return cached;
     }
 
-    const response = await this.apiClient.get<IMessagesResponse>(API_ENDPOINTS.MESSAGES(chatId), {
-      limit,
-      offset,
-    });
+    const response = await this.apiClient.get<IMessagesResponse>(
+      API_ENDPOINTS.MESSAGES(chatId),
+      {
+        limit,
+        offset,
+      },
+    );
 
     const chatContext = await this.getChatContext(chatId, "decryption");
     const messages = sortMessagesChronologically(
@@ -73,7 +95,12 @@ export class MessageService {
     }
   }
 
-  async sendMessage(chatId: string, content: string, type: TMessageType = "text", replyTo: string | null = null): Promise<IMessageDto> {
+  async sendMessage(
+    chatId: string,
+    content: string,
+    type: TMessageType = "text",
+    replyTo: string | null = null,
+  ): Promise<IMessageDto> {
     if (typeof content !== "string" || !content.trim()) {
       throw new Error("Message must be a string");
     }
@@ -99,10 +126,10 @@ export class MessageService {
     );
 
     const messageObj = response.data;
-    const message: IMessageDto = { ...messageObj, content: content.trim() }
+    const message: IMessageDto = { ...messageObj, content: content.trim() };
 
     this.addMessageToCache(chatId, message);
-    eventBus.emit("message:sent", { message, chatId });
+    // eventBus.emit(WS_EVENTS.MESSAGE.LOCAL.SENT, { message, chatId });
 
     return message;
   }
@@ -143,7 +170,7 @@ export class MessageService {
     // service JSON limit. The media service already stores the ciphertext.
     const mediaEncryption = this.mediaMetadataFromPayload(encryptedMedia);
 
-    const response = await this.apiClient.post(
+    const response = await this.apiClient.post<IMessageResponse>(
       API_ENDPOINTS.MESSAGE_SEND(chatId),
       {
         content: encryptedCaption,
@@ -168,29 +195,27 @@ export class MessageService {
             ),
           )
         : uploadResponse.data?.url;
-    const message = Message.fromAPI({
+    const message = {
       ...messageObj,
       content: trimmedCaption,
       mediaUrl: localUrl,
       mediaEncrypted: true,
       mediaEncryption,
-    });
+    };
 
     this.addMessageToCache(chatId, message);
-    eventBus.emit("message:sent", message);
+    // eventBus.emit("message:sent", message);
 
     return message;
   }
 
-  async processMessageForDisplay(chatId: string, item, chatContext: IChatContext | null = null) {
+  async processMessageForDisplay(
+    chatId: string,
+    item: IMessageDto,
+    chatContext: IChatContext | null = null,
+  ) {
     const context =
       chatContext || (await this.getChatContext(chatId, "display"));
-    const normalizedItem = { ...item.metadata, ...item };
-    const type =
-      normalizedItem.type ||
-      normalizedItem.mediaType ||
-      normalizedItem.media_type ||
-      "text";
     let content = item.content;
 
     if (content) {
@@ -198,16 +223,63 @@ export class MessageService {
         chatId,
         content,
         context,
-        item.senderId ?? item.sender_id,
+        item.senderId,
+      );
+    }
+
+    const mediaPatch = await this.resolveMediaForDisplay(chatId, item, context);
+    return { ...item, content, ...mediaPatch };
+  }
+
+  async processPinnedMessageForDisplay(
+    chatId: string,
+    message: IPinnedDto,
+    chatContext: IChatContext | null = null,
+  ): Promise<IPinnedDto> {
+    const context =
+      chatContext || (await this.getChatContext(chatId, "display"));
+
+    let content = message.message.content;
+    if (content) {
+      content = await this.decryptContent(
+        chatId,
+        content,
+        context,
+        message.message.senderId,
       );
     }
 
     const mediaPatch = await this.resolveMediaForDisplay(
       chatId,
-      { ...normalizedItem, type },
+      message.message,
       context,
     );
-    return { ...normalizedItem, type, content, ...mediaPatch };
+
+    return {
+      ...message,
+      message: { ...message.message, content, ...mediaPatch },
+    };
+  }
+
+  async processLastMessageForDisplay(
+    chatId: string,
+    message: ILastMessageDto,
+    chatContext: IChatContext | null = null,
+  ): Promise<ILastMessageDto> {
+    const context =
+      chatContext || (await this.getChatContext(chatId, "display"));
+
+    let content = message.content;
+    if (content) {
+      content = await this.decryptContent(
+        chatId,
+        content,
+        context,
+        message.senderId,
+      );
+    }
+
+    return { ...message, content };
   }
 
   async getChatContext(chatId: string, purpose: string): Promise<IChatContext> {
@@ -225,7 +297,11 @@ export class MessageService {
     }
   }
 
-  async encryptContent(chatId: string, content: string, chatContext: IChatContext) {
+  async encryptContent(
+    chatId: string,
+    content: string,
+    chatContext: IChatContext,
+  ) {
     if (!content) return content;
     if (chatContext.type === "group") {
       return this.cryptoService.encryptGroup(chatId, content);
@@ -233,7 +309,12 @@ export class MessageService {
     return this.cryptoService.encryptDM(content, chatContext.peerPublicKey);
   }
 
-  async decryptContent(chatId: string, content, chatContext: IChatContext, senderId: string | null = null) {
+  async decryptContent(
+    chatId: string,
+    content: string,
+    chatContext: IChatContext,
+    senderId: string | null = null,
+  ) {
     if (!content) return content;
     if (chatContext.type === "group") {
       return this.cryptoService.decryptGroup(chatId, content);
@@ -244,11 +325,16 @@ export class MessageService {
     });
   }
 
-  async resolveMediaForDisplay(chatId: string, item, chatContext: IChatContext) {
-    const mediaUrl = item.mediaUrl ?? item.media_url ?? null;
+  async resolveMediaForDisplay(
+    chatId: string,
+    item: IMessageDto,
+    chatContext: IChatContext,
+  ) {
+    if (!("mediaUrl" in item.metadata)) return;
+    const mediaUrl = item.metadata.mediaUrl;
     if (!mediaUrl) return {};
 
-    const mediaEncrypted = item.mediaEncrypted ?? item.media_encrypted ?? false;
+    const mediaEncrypted = item.metadata.mediaEncrypted ?? false;
     if (!mediaEncrypted) {
       if (!MEDIA_MESSAGE_TYPES.has(item.type)) return {};
       return {
@@ -276,7 +362,7 @@ export class MessageService {
         mediaUrl: objectUrl,
         mediaOriginalUrl: mediaUrl,
         mediaEncrypted: true,
-        mediaEncryption: item.mediaEncryption ?? item.media_encryption ?? null,
+        mediaEncryption: item.metadata.mediaEncryption ?? null,
         mediaUnavailable: false,
       };
     } catch (error) {
@@ -285,7 +371,7 @@ export class MessageService {
         mediaUrl: null,
         mediaOriginalUrl: mediaUrl,
         mediaEncrypted: true,
-        mediaEncryption: item.mediaEncryption ?? item.media_encryption ?? null,
+        mediaEncryption: item.metadata.mediaEncryption ?? null,
         mediaUnavailable: true,
         mediaUnavailableReason: "Медиа недоступно: ошибка расшифровки",
       };
@@ -349,14 +435,14 @@ export class MessageService {
 
     const message = sortMessagesChronologically(
       await Promise.all(
-        this.normalizeList([response.data.message]).map(async (item: IMessageDto) => {
+        [response.data.message].map(async (item: IMessageDto) => {
           return this.processMessageForDisplay(targetChatId, item);
         }),
       ),
     )[0];
 
     this.addMessageToCache(targetChatId, message);
-    eventBus.emit("message:sent", { message, chatId: targetChatId });
+    // eventBus.emit("message:sent", { message, chatId: targetChatId });
 
     return message;
   }
@@ -381,7 +467,7 @@ export class MessageService {
 
     const messages = sortMessagesChronologically(
       await Promise.all(
-        this.normalizeList(response).map(async (item: IPinnedDto) => {
+        response.map(async (item: IPinnedDto) => {
           return {
             ...item,
             message: await this.processMessageForDisplay(
@@ -422,7 +508,10 @@ export class MessageService {
       .then((response) => response.data);
   }
 
-  updateMessageInCache(messageId: string, patch: Partial<Omit<IMessageDto, "id">>) {
+  updateMessageInCache(
+    messageId: string,
+    patch: Partial<Omit<IMessageDto, "id">>,
+  ) {
     this.messages.forEach((messages, chatId) => {
       this.messages.set(
         chatId,
@@ -433,7 +522,10 @@ export class MessageService {
     });
   }
 
-  updatePinnedMessageInCache(messageId: string, patch: Partial<Omit<IPinnedMessageDto, "id">>) {
+  updatePinnedMessageInCache(
+    messageId: string,
+    patch: Partial<Omit<IPinnedMessageDto, "id">>,
+  ) {
     this.pinnedMessages.forEach((pinnedMessages, chatId) => {
       this.pinnedMessages.set(
         chatId,
@@ -485,10 +577,5 @@ export class MessageService {
         messages.filter((message) => message.id !== messageId),
       );
     });
-  }
-
-  normalizeList(data) {
-    if (Array.isArray(data)) return data;
-    return data?.messages ?? data?.items ?? [];
   }
 }

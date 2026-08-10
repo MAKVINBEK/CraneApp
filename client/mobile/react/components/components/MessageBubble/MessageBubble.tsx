@@ -1,30 +1,48 @@
-import { memo } from "react";
-import { useMessageLongPress } from "../../../hooks/useMessageLongPress";
-import { useChatStore } from "../../../store/chat";
-import { formatMessageTime, hasMessageMedia } from "../../../utils/message";
-import { useTranslation } from "react-i18next";
-import { CallMessageContent, MessageMedia } from "./MessageMedia";
-import { MessageContentRenderer } from "./MessageContent";
 import { MessageCheckbox } from "@/components/ui";
+import { useMessageLongPress } from "@/hooks";
+import { useChatStore } from "@/store";
+import type { IMessageDto } from "@/types";
+import { formatMessageTime, hasMessageMedia } from "@/utils";
+import { memo } from "react";
+import { useTranslation } from "react-i18next";
+import { MessageContentRenderer } from "./MessageContent";
+import { CallMessageContent, MessageMedia } from "./MessageMedia";
+
+interface Props {
+  currentUserId: string;
+  message: IMessageDto;
+  translations: Record<string, string>;
+  onOpenImage: (url: string) => void;
+  onSelection: (message: IMessageDto) => void;
+}
 
 export const MessageBubble = memo(
-  ({ currentUserId, message, translations, onOpenImage, onSelection }) => {
-    const {
-      actionMenu,
-      setActionMenu,
-      selectedMessages,
-      messages,
-      selectionMode,
-    } = useChatStore();
+  ({
+    currentUserId,
+    message,
+    translations,
+    onOpenImage,
+    onSelection,
+  }: Props) => {
+    const setActionMenu = useChatStore((state) => state.setActionMenu);
+    const actionMenu = useChatStore(state => state.actionMenu)
+    const isActionTarget = useChatStore(
+      (state) => state.actionMenu?.messageId === message.id,
+    );
+    const selectionMode = useChatStore((state) => state.selectionMode);
+    const isSelected = useChatStore((state) =>
+      state.selectedMessages.some(({ id }) => id === message.id),
+    );
+    const repliedMessage = useChatStore((state) =>
+      message.replyTo
+        ? state.messages.find(({ id }) => id === message.replyTo)
+        : null,
+    );
+
     const { t } = useTranslation();
-    // console.log(message)
+    // console.log(message);
     const mine = message.senderId === currentUserId;
-    const isActionTarget = actionMenu?.messageId === message.id;
 
-    // Оптимизация: some() вместо find() для булевой проверки
-    const isSelected = selectedMessages.some(({ id }) => id === message.id);
-
-    // Подключаем наш кастомный хук и деструктурируем все события сразу
     const longPressHandlers = useMessageLongPress(
       message.id,
       selectionMode,
@@ -35,9 +53,6 @@ export const MessageBubble = memo(
     );
 
     // Вычисляем данные ответов
-    const repliedMessage = message.replyTo
-      ? messages.find(({ id }) => id === message.replyTo)
-      : null;
     const replyText =
       repliedMessage?.content?.trim() || message.replyToContent?.trim() || "";
     const replyImage =
@@ -103,15 +118,12 @@ export const MessageBubble = memo(
           <div className="message-meta">
             {message.isEdited && <span>{t("edited", "изменено")}</span>}
             <time>
-              {formatMessageTime(message.timestamp || message.createdAt)}
+              {formatMessageTime(message.createdAt)}
             </time>
           </div>
         </div>
         {selectionMode && (
-          <MessageCheckbox
-            isChecked={isSelected}
-            className="grow-0 self-end"
-          />
+          <MessageCheckbox isChecked={isSelected} className="grow-0 self-end" />
         )}
       </article>
     );

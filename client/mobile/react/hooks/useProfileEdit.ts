@@ -1,6 +1,6 @@
+import { services } from "@/services";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import services from '../services/serviceContainer'
 
 export const useProfileEdit = (profileUser, displayName: string) => {
   const [editableUser, setEditableUser] = useState(profileUser);

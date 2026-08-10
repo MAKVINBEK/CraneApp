@@ -1,7 +1,7 @@
 import { DEFAULT_PROFILE_SETTINGS } from "@/consts";
-import { useProfileStore } from "@/store/profile.js";
-import type { ISettingsDto, IUserDto } from "@/types/user.types.js";
-import services from "./serviceContainer.js";
+import { useProfileStore } from "@/store";
+import type { ISettingsDto, IUserDto } from "@/types";
+import { services } from "@/services";
 
 export async function registerUser({
   firstName,
@@ -35,9 +35,7 @@ export async function loginUser({
   username: string;
 }) {
   return services.authService.login({
-    clientIP,
     password,
-    twoFAPassword,
     username,
   });
 }

@@ -1,40 +1,161 @@
 import type { WS_EVENTS } from "@/consts";
-import type { IMessageDto } from "./message.types";
+import type {
+  IMemberDto,
+  IMessageDto,
+  IPinnedDto,
+  TChat,
+  TMessageType,
+  TReactionsList,
+} from "@/types";
 
-export interface IMessageDeletedEvent {
-  messageId: string;
-}
-export interface IMessagesReadEvent {
+export interface IMessageNewEvent {
+  type: string;
   chatId: string;
-  messageIds: string[];
-}
-export interface IMessageSentEvent {
   message: IMessageDto;
+}
+export interface IMessageEditedEvent {
+  type: string;
+  chatId: string;
+  messageId: string;
+  content: string;
+  updatedAt: Date;
+}
+export interface IMessageDeletedEvent {
+  type: string;
+  messageId: string;
   chatId: string;
 }
 export interface IMessagePinEvent {
+  type: string;
+  chatId: string;
+  messageId: string;
+  pin: IPinnedDto;
+}
+export interface IMessageUnpinEvent {
+  type: string;
   chatId: string;
   messageId: string;
 }
-export interface IChatMemberEvent {
+
+export interface IReactionUpdatedEvent {
+  type: string;
   chatId: string;
-  userId: string;
+  messageId: string;
+  reactions: TReactionsList;
 }
+
+export interface IChatUpdatedEvent {
+  type: string;
+  chatId: string;
+  chat: TChat;
+}
+
+export interface IChatAddMemberEvent {
+  type: string;
+  chatId: string;
+  member: IMemberDto;
+}
+
 export interface ITypingEvent {
+  type: string;
   chatId: string;
   userId: string;
-  isTyping: boolean;
+  senderId: string;
 }
-export interface IIncomingCallEvent {
-  callId: string;
-  callerId: string;
+
+export interface ICallErrorEvent {
+  type: string;
+  reason: string;
 }
-export interface ICallCanceledEvent {
-  callId: string;
+
+interface IPeer {
+  userId: string;
+  displayName: string;
+  avatarUrl: string;
+}
+
+export interface ICallJoinedEvent {
+  type: string;
+  roomId: string;
+  peers: IPeer[];
+  self: { userId: string };
+}
+export interface ICallPeerJoinedEvent {
+  type: string;
+  roomId: string;
+  peer: IPeer;
+}
+export interface ICallPeerLeftEvent {
+  type: string;
+  roomId: string;
+  peer: { userId: string };
+}
+export interface ICallIncomingEvent {
+  type: string;
+  roomId: string;
+  kind: string;
+  callType: string;
+  from: string;
+  fromName: string;
+  fromAvatar: string;
+  title: string;
+}
+export interface ICallCenceledEvent {
+  type: string;
+  roomId: string;
 }
 export interface ICallInviteResponseEvent {
-  callId: string;
-  accepted: boolean;
+  type: string;
+  roomId: string;
+  from: string;
+  accepted: string;
+  reason: string;
+}
+export interface ICallOfferEvent {
+  type: string;
+  roomId: string;
+  from: string;
+  payload: any;
+}
+export interface ICallAnswerEvent {
+  type: string;
+  roomId: string;
+  from: string;
+  payload: any;
+}
+export interface ICallIceEvent {
+  type: string;
+  roomId: string;
+  from: string;
+  payload: any;
+}
+
+export interface ILastMessagePayloadDto {
+  chatId: string;
+  message: {
+    content: string;
+    message: {
+      chatId: string;
+      content: string;
+      createdAt: Date;
+      id: string;
+      isEdited: boolean;
+      isForwarded: boolean;
+      isPinned: boolean;
+      senderFirstName: string;
+      senderId: string;
+      senderName: string;
+      type: TMessageType;
+      updatedAt: Date;
+    };
+  };
+}
+
+export interface IPingEvent {
+  type: "ping";
+}
+export interface IPongEvent {
+  type: "pong";
 }
 
 type ValueOf<T> = T[keyof T];
@@ -44,60 +165,31 @@ export type TWsEventType = ValueOf<{
 }>;
 
 export interface IWsEventMap {
-  [WS_EVENTS.MESSAGE.NEW]: IMessageDto;
-  [WS_EVENTS.MESSAGE.EDITED]: IMessageDto;
-  [WS_EVENTS.MESSAGE.DELETED]: {
-    messageId: string;
-  };
-  [WS_EVENTS.MESSAGE.PINNED]: {
-    chatId: string;
-    messageId: string;
-  };
-  [WS_EVENTS.MESSAGE.UNPINNED]: {
-    chatId: string;
-    messageId: string;
-  };
-  [WS_EVENTS.MESSAGE.SENT]: {
-    message: IMessageDto;
-    chatId: string;
-  };
-  [WS_EVENTS.MESSAGE.MESSAGE_SENT]: {
-    message: IMessageDto;
-    chatId: string;
-  };
-  [WS_EVENTS.MESSAGE.MESSAGE_READ]: {
-    chatId: string;
-    messageIds: string[];
-  };
+  [WS_EVENTS.CALL.ANSWER]: ICallAnswerEvent;
+  [WS_EVENTS.CALL.CANCELED]: ICallCenceledEvent;
+  [WS_EVENTS.CALL.ERROR]: ICallErrorEvent;
+  [WS_EVENTS.CALL.ICE]: ICallIceEvent;
+  [WS_EVENTS.CALL.INCOMING]: ICallIncomingEvent;
+  [WS_EVENTS.CALL.INVITE_RESPONSE]: ICallInviteResponseEvent;
+  [WS_EVENTS.CALL.JOINED]: ICallJoinedEvent;
+  [WS_EVENTS.CALL.OFFER]: ICallOfferEvent;
+  [WS_EVENTS.CALL.PEER_JOINED]: ICallPeerJoinedEvent;
+  [WS_EVENTS.CALL.PEER_LEFT]: ICallPeerLeftEvent;
 
-  [WS_EVENTS.CHAT.ADD_MEMBER]: {
-    chatId: string;
-    userId: string;
-  };
+  [WS_EVENTS.CHAT.ADD_MEMBER]: IChatAddMemberEvent;
+  [WS_EVENTS.CHAT.UPDATED]: IChatUpdatedEvent;
 
-  [WS_EVENTS.USER.TYPING]: {
-    chatId: string;
-    userId: string;
-    isTyping: boolean;
-  };
+  [WS_EVENTS.MESSAGE.DELETED]: IMessageDeletedEvent;
+  [WS_EVENTS.MESSAGE.EDITED]: IMessageEditedEvent;
+  [WS_EVENTS.MESSAGE.NEW]: IMessageNewEvent;
+  [WS_EVENTS.MESSAGE.PINNED]: IMessagePinEvent;
+  [WS_EVENTS.MESSAGE.UNPINNED]: IMessageUnpinEvent;
+  // [WS_EVENTS.MESSAGE.LOCAL]: ,
 
-  [WS_EVENTS.USER.USER_TYPING]: {
-    chatId: string;
-    userId: string;
-    isTyping: boolean;
-  };
+  [WS_EVENTS.OTHER.PING]: IPingEvent;
+  [WS_EVENTS.OTHER.PONG]: IPongEvent;
 
-  [WS_EVENTS.CALL.INCOMING]: {
-    callId: string;
-    callerId: string;
-  };
+  [WS_EVENTS.REACTIONS.REACTION_UPDATED]: IReactionUpdatedEvent;
 
-  [WS_EVENTS.CALL.CANCELED]: {
-    callId: string;
-  };
-
-  [WS_EVENTS.CALL.INVITE_RESPONSE]: {
-    callId: string;
-    accepted: boolean;
-  };
+  [WS_EVENTS.USER.TYPING]: ITypingEvent;
 }

@@ -16,7 +16,7 @@ function hashBytes(str: string) {
 interface Props {
 	userId: string | null
 	size: number
-	className: string
+	className?: string
 }
 
 export function Identicon({ userId = '', size = 40, className = '' }: Props) {

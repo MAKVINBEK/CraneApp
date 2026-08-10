@@ -1,7 +1,7 @@
 import { cn } from "@/utils";
 import { useTranslation } from "react-i18next";
 
-const Check = ({ className }) => {
+const Check = ({ className }: { className?: string }) => {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -19,7 +19,12 @@ const Check = ({ className }) => {
   );
 };
 
-export function MessageCheckbox({ isChecked, onChange, className }) {
+interface Props {
+  isChecked: boolean;
+  className?: string;
+}
+
+export function MessageCheckbox({ isChecked, className }: Props) {
   const { t } = useTranslation();
 
   return (
@@ -27,7 +32,6 @@ export function MessageCheckbox({ isChecked, onChange, className }) {
       type="button"
       className={`size-6 flex items-center justify-center shrink-0 rounded-full
         border-2 transition-colors ${isChecked ? "border-accent bg-accent" : "border-zinc-500 bg-transparent"} ${className}`}
-      onClick={onChange}
       aria-pressed={!!isChecked}
       aria-label={
         isChecked

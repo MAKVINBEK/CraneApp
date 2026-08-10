@@ -6,7 +6,8 @@ export type TMessageType =
   | "voice"
   | "sticker"
   | "gif"
-  | "file";
+  | "file"
+  | "call"
 export type TMediaMessageType =
   | "image"
   | "audio"
@@ -40,13 +41,15 @@ interface IMediaMetadata {
 }
 
 export interface IReaction {
-  id: string
+  emoji: string;
+  count: number;
+  myReaction: boolean;
 }
 
-export type TReactionsList = IReaction[]
+export type TReactionsList = IReaction[];
 
 export interface IReactionsResponse {
-  reactions: TReactionsList
+  reactions: TReactionsList;
 }
 
 export interface IMessageDto {
@@ -68,13 +71,13 @@ export interface IMessageDto {
   replyToSenderName: string | null;
   metadata: IForwardedMetadata | IMediaMetadata;
   forwardedSenderName: string;
-  reactions: TReactionsList
+  reactions: TReactionsList;
 }
 
 export type TMessagesList = IMessageDto[];
 
 export interface IMessageResponse {
-  message: IMessageDto
+  message: IMessageDto;
 }
 
 export interface IMessagesResponse {
@@ -85,6 +88,7 @@ export interface IPinnedMessageDto {
   id: string;
   content: string;
   type: TMessageType;
+  senderId: string
 }
 
 export interface IPinnedDto {
@@ -92,7 +96,8 @@ export interface IPinnedDto {
   messageId: string;
   pinnedBy: string;
   pinnedAt: Date;
-  message: IPinnedMessageDto;
+  chatId: string;
+  message: IMessageDto;
 }
 
 export type TPinnedList = IPinnedDto[];

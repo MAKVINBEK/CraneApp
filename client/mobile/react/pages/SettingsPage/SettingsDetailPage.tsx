@@ -1,32 +1,35 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { disconnectRealtimeSocket } from "../../hooks/useRealtimeSocket";
-import { useLanguage } from "../../components/locales/LanguageContext";
 import { useToasts } from "../../hooks/useToasts";
 import { services } from "../../services/serviceContainer";
 import "../../styles/SettingsControls.css";
-import { useTheme } from "@/components/Context/ThemeContext";
+import { useLanguageStore, useProfileStore, useThemeStore, type TThemeType } from "@/store";
+import { DEFAULT_PROFILE_SETTINGS } from "@/consts";
+import { useTranslation } from "react-i18next";
 
-const DEFAULT_SETTINGS = {
-  theme: "dark",
-  language: "ru",
-  notifications: true,
-  sounds: true,
-};
+interface Props {
+  activeTab: string,
+  searchQuery: string
+}
 
-export function SettingsDetailPage({ activeTab, searchQuery, t }) {
+export function SettingsDetailPage({ activeTab, searchQuery}: Props) {
+  const {t} = useTranslation()
   const navigate = useNavigate();
   const { showToast } = useToasts();
-  const { theme, setTheme } = useTheme();
-  const { lang, changeLanguage } = useLanguage();
+  const theme = useThemeStore(state => state.theme);
+  const setTheme = useThemeStore(state => state.setTheme);
+  const language = useLanguageStore(state => state.language);
+  const setLanguage = useLanguageStore(state => state.setLanguage);
   const [user, setUser] = useState({});
-  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [privacy, setPrivacy] = useState({});
   const [sessions, setSessions] = useState([]);
   const [twoFAEnabled, setTwoFAEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [accountView, setAccountView] = useState("overview");
+  const settings = useProfileStore(state => state.settings)
+  const setSettings = useProfileStore(state => state.setSettings)
 
   useEffect(() => {
     setAccountView("overview");
@@ -37,16 +40,16 @@ export function SettingsDetailPage({ activeTab, searchQuery, t }) {
     Promise.all([
       services.userService.getMe(),
       services.userService.getSettings(),
-      services.authService.twoFAStatus(),
-      services.authService.sessions(),
+      // services.authService.twoFAStatus(),
+      // services.authService.sessions(),
     ])
       .then(([nextUser, payload, enabled, nextSessions]) => {
         if (!active) return;
         setUser(nextUser || {});
-        setSettings({ ...DEFAULT_SETTINGS, ...(payload?.settings || {}) });
+        setSettings({ ...DEFAULT_PROFILE_SETTINGS, ...(payload?.settings || {}) });
         setPrivacy(payload?.privacy || {});
-        setTwoFAEnabled(enabled);
-        setSessions(nextSessions);
+        setTwoFAEnabled(enabled || false);
+        setSessions(nextSessions || []);
         if (nextUser) {
           localStorage.setItem("craneapp_user_data", JSON.stringify(nextUser));
         }
@@ -140,7 +143,7 @@ export function SettingsDetailPage({ activeTab, searchQuery, t }) {
       )}
       {activeTab === "appearance" && (
         <SettingsSection title="Внешний вид" description="Выберите тему интерфейса.">
-          <ChoiceRow label="Тема" value={theme} options={[{ value: "dark", label: "Тёмная" }, { value: "light", label: "Светлая" }]} onChange={(value) => { setTheme(value); saveSettings({ theme: value }); }} />
+          <ChoiceRow label="Тема" value={theme} options={[{ value: "dark", label: "Тёмная" }, { value: "light", label: "Светлая" }]} onChange={(value: {value: TThemeType, label: string}) => { setTheme(value.value); saveSettings({ theme: value.value }); }} />
         </SettingsSection>
       )}
       {activeTab === "privacy" && (
@@ -151,7 +154,7 @@ export function SettingsDetailPage({ activeTab, searchQuery, t }) {
       )}
       {activeTab === "language" && (
         <SettingsSection title="Язык" description="Язык интерфейса CraneApp.">
-          <ChoiceRow label="Язык приложения" value={lang} options={[{ value: "ru", label: "Русский" }, { value: "en", label: "English" }]} onChange={(value) => { changeLanguage(value); saveSettings({ language: value }); }} />
+          <ChoiceRow label="Язык приложения" value={language} options={[{ value: "ru", label: "Русский" }, { value: "en", label: "English" }]} onChange={(value: {value: 'ru' | "en", label: string}) => { setLanguage(value.value); saveSettings({ language: value.value }); }} />
         </SettingsSection>
       )}
       {activeTab === "about" && (
@@ -271,7 +274,7 @@ function TwoFASettings({ enabled, saving, setSaving, onEnabledChange, onBack, sh
 function SessionsSettings({ sessions, onLogoutAll, onBack }) {
   return <AccountSubpage title="Активные сеансы" description="Устройства, на которых выполнен вход в аккаунт." onBack={onBack}>
     <div className="settings-sessions-card">
-      {sessions.length ? sessions.map((session, index) => <div className="settings-session-row" key={session.id}>
+      {sessions.length > 0 ? sessions.map((session, index) => <div className="settings-session-row" key={session.id}>
         <span className="settings-session-device">{session.deviceType === "mobile" ? "▯" : "▱"}</span>
         <div><strong>{session.deviceName || "Устройство"}</strong><span>{session.deviceType || "unknown"} · {formatDate(session.lastActive)}</span></div>
         {index === 0 && <b>Текущий</b>}

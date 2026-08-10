@@ -68,3 +68,21 @@ export interface IChatContext {
   peerPublicKey: string | null;
   [key: string]: unknown;
 }
+
+export interface IMemberDto {
+  id: string;
+  username: string;
+  firstName: string;
+  lastName: string;
+  avatarUrl: string;
+  role: string;
+  permissions: Record<string, unknown>;
+  mutedUntil?: string;
+  joinedAt: string;
+}
+
+export type TMembersList = IMemberDto[];
+
+export interface IMembersListResponse {
+  members: TMembersList;
+}

@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useToasts } from "../hooks/useToasts.js";
-import services from "../services/serviceContainer.js";
 import { translateText } from "../services/translatorApi.js";
 import { useChatStore } from "../store/chat.js";
 import { useTranslation } from "react-i18next";
 import { sortMessagesChronologically } from "../utils/sortMessagesChronologically.js";
+import { services } from "@/services/serviceContainer.js";
 
 export const useMessageActions = ({
   currentUser,

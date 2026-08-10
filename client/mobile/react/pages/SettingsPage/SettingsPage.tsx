@@ -7,7 +7,7 @@ import { SettingsSidebar } from "./SettingsSidebar.js";
 
 export function SettingsPage() {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState("account");
+  const [activeTab, setActiveTab] = useState<string>("account");
   const [searchQuery, setSearchQuery] = useState("");
 
   const handleSearchChange = (query) => {
@@ -36,7 +36,6 @@ export function SettingsPage() {
         <SettingsDetailPage
           activeTab={activeTab}
           searchQuery={searchQuery}
-          t={t}
         />
       </div>
     </div>

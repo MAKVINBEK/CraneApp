@@ -6,6 +6,7 @@ import { MessageActionsPopover } from "../../components/components/Modals/Messag
 import { ThreadSkeleton } from "../../components/ui/Skeletons/ThreadSkeleton";
 import { ThreadState } from "../../components/ui/ThreadState";
 import { useChatStore } from "../../store/chat";
+import type { IPinnedDto } from "@/types";
 
 export const PinnedMessagesPage = forwardRef(
   (
@@ -28,7 +29,6 @@ export const PinnedMessagesPage = forwardRef(
   ) => {
     const { chatId } = useParams();
     const chat = useChatStore((state) => state.chat);
-    const setSelectedMessages = useChatStore((state) => state.setSelectedMessages);
     const { t } = useTranslation();
     const { translations } = useChatStore();
 
@@ -41,7 +41,7 @@ export const PinnedMessagesPage = forwardRef(
 
     const selectedActionMessage = actionMenu
       ? pinnedMessages.find(
-          (message) => message.messageId === actionMenu.messageId,
+          (message: IPinnedDto) => message.messageId === actionMenu.messageId,
         )
       : null;
     console.log(selectedActionMessage)
@@ -50,7 +50,7 @@ export const PinnedMessagesPage = forwardRef(
         <header className="thread-header">
           <button
             aria-label={t("back", "Назад")}
-            className="pinned-thread-back"
+            className="thread-back"
             onClick={onClose}
           >
             <svg
@@ -67,7 +67,7 @@ export const PinnedMessagesPage = forwardRef(
             </svg>
           </button>
 
-          <div className="thread-header-card pinned-thread-header-info p-3">
+          <div className="thread-header-card thread-header-info">
             {t("pinnedMessagesTitle", "Закрепленные сообщения")}
           </div>
         </header>

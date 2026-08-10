@@ -6,8 +6,8 @@ import { useDebounce } from "../../hooks/useDebounce";
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useClickOutside } from "../../hooks/useClickOutside";
-import services from "../../services/serviceContainer";
 import { Identicon } from "../ui/Identicon";
+import { services } from "@/services";
 
 const XIcon = ({ className }) => {
   return (

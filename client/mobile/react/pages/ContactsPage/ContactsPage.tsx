@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { Identicon } from "../../components/ui/Identicon.js";
 import { useToasts } from "../../hooks/useToasts.js";
-import services from "../../services/serviceContainer.js";
+import { services } from "@/services/serviceContainer.js";
 
 export function ContactsPage() {
   const { t } = useTranslation();

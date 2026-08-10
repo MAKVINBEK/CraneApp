@@ -8,8 +8,6 @@ import { REACT_ROUTES } from "../consts/routes";
 import { services } from "../services/serviceContainer.js";
 import { clearAuthSession } from "../utils/clearAuthSession.js";
 
-// TODO: после регистрации перенаправлять откуда был редирект
-// РЕФАКТОР этого лоадера, излишний запрос данных
 async function requireSession({ request }: { request: Request }) {
   const token = useProfileStore.getState().token;
   if (!token) {
@@ -130,13 +128,13 @@ export const router = createBrowserRouter([
                     Component: m.ContactsPage,
                   })),
               },
-              // {
-              //   path: REACT_ROUTES.SETTINGS,
-              //   lazy: () =>
-              //     import("../pages/SettingsPage/SettingsPage.js").then((m) => ({
-              //       Component: m.SettingsPage,
-              //     })),
-              // },
+              {
+                path: REACT_ROUTES.SETTINGS,
+                lazy: () =>
+                  import("../pages/SettingsPage/SettingsPage.js").then((m) => ({
+                    Component: m.SettingsPage,
+                  })),
+              },
               {
                 path: REACT_ROUTES.CREATE_GROUP,
                 lazy: () =>

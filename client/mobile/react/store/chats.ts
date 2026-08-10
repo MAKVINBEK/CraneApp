@@ -1,33 +1,53 @@
 import { create } from "zustand";
-import services from "../services/serviceContainer";
 import type { TChats } from "@/types";
+import { services } from "@/services";
 
-interface InitialState {
-	chats: TChats;
-	setChats: (chats: TChats | ((prev: TChats) => TChats)) => void;
-	deleteChat: (chatId: string) => Promise<IDeleteChatResponse>;
+interface IChatsState {
+  chats: TChats;
 }
+
+interface IChatsActions {
+  setChats: (chats: TChats | ((prev: TChats) => TChats)) => void;
+  deleteChat: (chatId: string) => Promise<IDeleteChatResponse>;
+}
+
+type InitialState = IChatsState & IChatsActions;
 
 interface IDeleteChatResponse {
-	success: boolean;
+  success: boolean;
 }
 
-export const useChatsStore = create<InitialState>((set, get) => ({
-	chats: [],
-	setChats: (chats) =>
-		set((state) => ({
-			chats: typeof chats === "function" ? chats(state.chats) : chats,
-		})),
-	deleteChat: async (chatId) => {
-		const result: IDeleteChatResponse = await services.chatService.deleteChat(chatId);
+export const useChatsStore = create<InitialState>((set, get) => {
+  const withUpdater =
+    <K extends keyof IChatsState>(key: K) =>
+    (updater: IChatsState[K] | ((prev: IChatsState[K]) => IChatsState[K])) =>
+      set(
+        (state) =>
+          ({
+            [key]:
+              typeof updater === "function"
+                ? (updater as (prev: IChatsState[K]) => IChatsState[K])(
+                    state[key],
+                  )
+                : updater,
+          }) as Pick<IChatsState, K>,
+      );
 
-		if (result.success) {
-			const chats = get().chats;
-			const updatedChatsList = chats.filter((chat) => chat.id !== chatId);
+  return {
+    chats: [],
+    setChats: withUpdater("chats"),
+    deleteChat: async (chatId) => {
+      const result =
+        await services.chatService.deleteChat<IDeleteChatResponse>(chatId);
 
-			set({ chats: updatedChatsList });
-		}
+      if (result.success) {
+        const chats = get().chats;
+        const updatedChatsList = chats.filter((chat) => chat.id !== chatId);
 
-		return result;
-	},
-}));
+        set({ chats: updatedChatsList });
+      }
+
+      return result;
+    },
+  };
+});

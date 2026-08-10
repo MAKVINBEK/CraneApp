@@ -13,7 +13,7 @@ interface Props {
 export function ChatListItem({ chat }: Props) {
 	const { t } = useTranslation();
 	const title = chat.title || t("untitledChat", "Без названия");
-	const lastMessage = chat.typingUserId
+	const lastMessage = chat.isTyping
 		? t("typing", "печатает...")
 		: getLastMessageText(chat, t);
 
@@ -47,7 +47,7 @@ export function ChatListItem({ chat }: Props) {
 					<span className="chat-title">{title}</span>
 					<span className="chat-time">
 						{formatChatTime(
-							chat.lastMessage?.createdAt ||
+							chat.updatedAt ||
 								chat.lastMessageAt ||
 								chat.createdAt,
 						)}
@@ -68,8 +68,6 @@ function getLastMessageText(chat: TChat, t: TFunction) {
   if (typeof chat.lastMessage === "string")
     return chat.lastMessage || t("noMessages", "Нет сообщений");
   if (chat.lastMessage?.content) return chat.lastMessage.content;
-  if (chat.lastMessageEncrypted)
-    return t("encryptedMessage", "Зашифрованное сообщение");
   return t("noMessages", "Нет сообщений");
 }
 

@@ -1,7 +1,9 @@
-export const hasMessageMedia = (msg) =>
+import type { IMessageDto, TMessagesList } from "@/types";
+
+export const hasMessageMedia = (msg: IMessageDto) =>
   !!(msg.mediaUrl || msg.mediaUnavailable);
 
-export const formatMessageTime = (value) => {
+export const formatMessageTime = (value: Date | string) => {
   if (!value) return "";
   const date = value instanceof Date ? value : new Date(value);
   return Number.isNaN(date.getTime())
@@ -12,17 +14,17 @@ export const formatMessageTime = (value) => {
       }).format(date);
 };
 
-export function getMessagePreview(message) {
+export function getMessagePreview(message: IMessageDto) {
   if (!message) return "";
   return String(message.content || "").slice(0, 64);
 }
 
-export function appendUniqueMessage(items, nextMessage) {
+export function appendUniqueMessage(items: TMessagesList, nextMessage: IMessageDto) {
   if (items.some((message) => message.id === nextMessage.id)) return items;
   return [...items, nextMessage];
 }
 
-export function updateMessage(items, messageId, patch) {
+export function updateMessage(items: TMessagesList, messageId: string, patch: Partial<Omit<IMessageDto, "id">>) {
   return items.map((message) =>
     message.id === messageId ? { ...message, ...patch } : message,
   );

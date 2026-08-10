@@ -1,5 +1,7 @@
+import type { TChatType } from "@/types";
+
 export type TCallKind = "audio" | "video";
-export type TCallRoomType = "p2p" | "group";
+export type TCallRoomType = TChatType;
 
 export interface ICall {
 	roomId: string;

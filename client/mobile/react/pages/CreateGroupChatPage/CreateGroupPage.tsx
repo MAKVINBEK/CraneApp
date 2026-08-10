@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import { ROUTES } from "../../consts/routes.js";
 import { useToasts } from "../../hooks/useToasts.js";
-import services from "../../services/serviceContainer.js";
+import { services } from "@/services/serviceContainer.js";
 
 export function CreateGroupPage() {
   const navigate = useNavigate();

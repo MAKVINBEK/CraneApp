@@ -1,43 +1,60 @@
-
-import { useRealtimeSocket } from "@/hooks";
-import { services } from "@/services";
-import { useChatStore } from "@/store";
+import {
+  ForwardChatMessagesModal,
+  GroupInfoModal,
+  MessageActionsPopover,
+  MessageBubble,
+  PhotoEditorModal,
+  PinnedMessages,
+  UserProfileModal,
+} from "@/components/components";
+import { Icon, Identicon, ThreadSkeleton, ThreadState } from "@/components/ui/";
+import {
+  useCall,
+  useIsMobile,
+  useMessageActions,
+  useRealtimeSocket,
+} from "@/hooks";
+import { getMessages, services } from "@/services";
+import { useChatStore, useProfileStore } from "@/store";
+import "@/styles/ChatThreadPage.css";
 import {
   Link,
   useLoaderData,
   useOutletContext,
   useParams,
 } from "react-router-dom";
-import { ForwardChatMessagesModal } from "../../components/components/ForwardChatMessagesModal";
-import { GroupInfoModal } from "../../components/components/GroupInfoModal";
-import { MessageBubble } from "../../components/components/MessageBubble/MessageBubble";
-import { MessageActionsPopover } from "../../components/components/Modals/MessageActionsPopover";
-import { PinnedMessages } from "../../components/components/PinnedMessages";
-import { PhotoEditorModal } from "../../components/components/media-editor/PhotoEditorModal";
-import { Identicon } from "../../components/ui/Identicon";
-import { ThreadSkeleton } from "../../components/ui/Skeletons/ThreadSkeleton";
-import "../../styles/ChatThreadPage.css";
 
-import { STORAGE_KEYS } from "@/consts";
-import { useCall, useIsMobile, useLocalStorage, useMessageActions } from "@/hooks";
-import { getMessages } from "@/services";
-import { formatFileSize, getAttachmentIcon, getChatSubtitle } from "@/utils";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { UserProfileModal } from "../../components/components/Modals/UserProfileModal";
-import { Icon } from "../../components/ui/Icon";
-import { ThreadState } from "../../components/ui/ThreadState";
+import { WS_EVENTS } from "@/consts";
+import { PinnedMessagesPage } from "@/pages";
+import type {
+  IMessageDto,
+  ITypingEvent,
+  IUserDto,
+  TMediaMessageType,
+  TMessagesList,
+} from "@/types";
 import {
   appendUniqueMessage,
+  formatFileSize,
+  getAttachmentIcon,
+  getChatSubtitle,
   getMediaMessageType,
   getMessagePreview,
   updateMessage,
   updatePinnedMessage,
-} from "../../utils/message.js";
-import { PinnedMessagesPage } from "../PinnedMessagesPage/PinnedMessagesPage.js";
+} from "@/utils";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type SubmitEvent,
+} from "react";
+import { useTranslation } from "react-i18next";
 
 export function ChatThreadPage() {
-  const { chatId } = useParams();
+  const { chatId = "" } = useParams<{ chatId: string }>();
   const { onProfileStateChange, profileCloseToken, profileMode } =
     useOutletContext();
   const { t } = useTranslation();
@@ -67,12 +84,20 @@ export function ChatThreadPage() {
   } = useChatStore();
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
-  const [pendingAttachment, setPendingAttachment] = useState(null);
-  const [photoEditorFile, setPhotoEditorFile] = useState(null);
+  const [pendingAttachment, setPendingAttachment] = useState<{
+    file: File;
+    type: TMediaMessageType;
+  } | null>(null);
+  const [photoEditorFile, setPhotoEditorFile] = useState<File | null>(null);
   const [isGroupInfoOpen, setIsGroupInfoOpen] = useState(false);
-  const [openedImage, setOpenedImage] = useState(null);
-  const [typingUserId, setTypingUserId] = useState(null);
-  const [profileModal, setProfileModal] = useState({
+  const [openedImage, setOpenedImage] = useState<string | null>(null);
+  const [typingUserId, setTypingUserId] = useState<string | null>(null);
+  const [profileModal, setProfileModal] = useState<{
+    isOpen: boolean;
+    isLoading: boolean;
+    error: string;
+    user: IUserDto | null; // нужно уточнить реальное имя типа
+  }>({
     isOpen: false,
     isLoading: false,
     error: "",
@@ -84,22 +109,22 @@ export function ChatThreadPage() {
   const [hasMore, setHasMore] = useState(true);
   const [isForwardModalOpen, setIsForwardModalOpen] = useState(false);
   const [showCallMenu, setShowCallMenu] = useState(false);
-  const [currentUser] = useLocalStorage(STORAGE_KEYS.USER, null);
-  const bottomRef = useRef(null);
-  const attachmentInputRef = useRef(null);
+  const currentUser = useProfileStore((state) => state.user);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
   const lastTypingSentAtRef = useRef(0);
-  const typingTimeoutRef = useRef(null);
-  const draftRef = useRef(null);
-  const timerRef = useRef(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftRef = useRef<HTMLInputElement>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLongPress = useRef(false);
-  const messagesRef = useRef(null);
+  const messagesRef = useRef<HTMLElement>(null);
   const chatIdRef = useRef(chatId);
 
   const { eventBus, socket } = useRealtimeSocket(Boolean(chatId));
   const { initiateCall } = useCall();
   const { loadedChat, loadedMessages, loadedPinnedMessages } = useLoaderData();
   const isMobile = useIsMobile();
-  console.log(chat)
+
   const {
     handleCancelSelection,
     runMessageAction,
@@ -107,7 +132,7 @@ export function ChatThreadPage() {
     handleDelete,
     handleForward,
     handleCloseForwardModal,
-    handleUnpinMessage
+    handleUnpinMessage,
   } = useMessageActions({
     currentUser,
     chatId,
@@ -130,22 +155,15 @@ export function ChatThreadPage() {
     if (timerRef.current) clearTimeout(timerRef.current);
   };
 
-  const handleCallClick = () => {
-    if (isLongPress.current) return;
-    if (showCallMenu) {
-      setShowCallMenu(false);
-      return;
-    }
-    initiateCall(chatId, chat?.type, title, "audio");
-  };
-
   const loadMoreMessages = useCallback(async () => {
     const requestChatId = chatId;
     if (isLoadingMore || !hasMore) return;
 
+    const container = messagesRef.current;
+    if (!container) return;
+
     setIsLoadingMore(true);
 
-    const container = messagesRef.current;
     const prevHeight = container.scrollHeight;
 
     const nextOffset = offset + 50;
@@ -207,7 +225,7 @@ export function ChatThreadPage() {
 
   useEffect(() => {
     if (!selectionMode) return;
-    const closeOnEscape = (event) => {
+    const closeOnEscape = (event: { key: string }) => {
       if (event.key === "Escape") handleCancelSelection();
     };
 
@@ -222,7 +240,7 @@ export function ChatThreadPage() {
     if (!actionMenu) return undefined;
 
     const closeActionMenu = () => setActionMenu(null);
-    const closeOnEscape = (event) => {
+    const closeOnEscape = (event: { key: string }) => {
       if (event.key === "Escape") closeActionMenu();
     };
 
@@ -237,7 +255,7 @@ export function ChatThreadPage() {
 
   useEffect(() => {
     if (!openedImage) return undefined;
-    const closeOnEscape = (event) => {
+    const closeOnEscape = (event: { key: string }) => {
       if (event.key === "Escape") setOpenedImage(null);
     };
     window.addEventListener("keydown", closeOnEscape);
@@ -257,7 +275,7 @@ export function ChatThreadPage() {
     setPinnedMessages(loadedPinnedMessages);
     markMessagesAsRead(chatId, loadedMessages);
     setIsLoading(false);
-  }, [loadedChat, loadedMessages, loadedPinnedMessages]);
+  }, [loadedChat, loadedMessages, loadedPinnedMessages, chatId]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -271,15 +289,16 @@ export function ChatThreadPage() {
   }, [chatId, isLoading]);
 
   useEffect(() => {
-    const unsubscribeNew = eventBus.on("new_message", async (event) => {
+    const unsubscribeNew = eventBus.on(WS_EVENTS.MESSAGE.NEW, async (event) => {
+      console.log(event, "event");
       if (event.chatId !== chatId || !event.message) return;
       const nextMessage =
-        typeof services.messageService.processMessageForDisplay === "function"
-          ? await services.messageService.processMessageForDisplay(
-              chatId,
-              event.message,
-            )
-          : Message.fromAPI(event.message);
+        await services.messageService.processMessageForDisplay(
+          chatId,
+          event.message,
+        );
+
+      if (chatIdRef.current !== chatId) return;
       services.messageService.addMessageToCache(chatId, nextMessage);
       setMessages((items) => appendUniqueMessage(items, nextMessage));
       markMessagesAsRead(chatId, [nextMessage]);
@@ -292,7 +311,7 @@ export function ChatThreadPage() {
             ? {
                 ...message,
                 content: event.content,
-                editedAt: event.editedAt,
+                editedAt: event.updatedAt,
                 isEdited: true,
               }
             : message,
@@ -301,7 +320,7 @@ export function ChatThreadPage() {
       setPinnedMessages((items) =>
         updatePinnedMessage(items, event.messageId, {
           content: event.content,
-          editedAt: event.editedAt,
+          editedAt: event.updatedAt,
           isEdited: true,
         }),
       );
@@ -314,38 +333,39 @@ export function ChatThreadPage() {
       );
     });
 
-    const handleTyping = (event) => {
+    const handleTyping = (event: ITypingEvent) => {
       if (event.chatId !== chatId) return;
-      const userId = event.userId || event.senderId || event.from;
+      const userId = event.userId || event.senderId;
       if (!userId || userId === currentUser?.id) return;
 
       setTypingUserId(userId);
-      setChat((currentChat) =>
-        currentChat?.type === "private"
-          ? { ...currentChat, peerIsOnline: true }
-          : currentChat,
-      );
-      window.clearTimeout(typingTimeoutRef.current);
+
+      const currentChat = chat?.type === "private" ? { ...chat } : chat;
+      setChat(currentChat);
+      window.clearTimeout(typingTimeoutRef.current || undefined);
       typingTimeoutRef.current = window.setTimeout(() => {
         setTypingUserId(null);
       }, 3000);
     };
     const unsubscribeTyping = eventBus.on("typing", handleTyping);
-    const unsubscribeUserTyping = eventBus.on("user_typing", handleTyping);
+    // const unsubscribeUserTyping = eventBus.on("user_typing", handleTyping);
     const unsubscribePinned = eventBus.on("message_pinned", async (event) => {
-			if (event.chatId && event.chatId !== chatId) return;
+      if (event.chatId && event.chatId !== chatId) return;
 
-			const message = await services.messageService.processMessageForDisplay(chatId, event.pin.message)
-			const pinned = { ...event.pin, message }
-			setPinnedMessages((prev) => [...prev, pinned]);
-			services.messageService.addPinnedMessageToCache(chatId, pinned)
+      const message = await services.messageService.processMessageForDisplay(
+        chatId,
+        event.pin.message,
+      );
+      const pinned = { ...event.pin, message };
+      setPinnedMessages((prev) => [...prev, pinned]);
+      services.messageService.addPinnedMessageToCache(chatId, pinned);
     });
     const unsubscribeUnpinned = eventBus.on("message_unpinned", (event) => {
       if (event.chatId && event.chatId !== chatId) return;
       setPinnedMessages((items) =>
         items.filter((item) => item.messageId !== event.messageId),
-			);
-      services.messageService.removePinnedMessageFromCache(event.messageId)
+      );
+      services.messageService.removePinnedMessageFromCache(event.messageId);
     });
 
     return () => {
@@ -353,22 +373,55 @@ export function ChatThreadPage() {
       unsubscribeEdited();
       unsubscribeDeleted();
       unsubscribeTyping();
-      unsubscribeUserTyping();
+      // unsubscribeUserTyping();
       unsubscribePinned();
       unsubscribeUnpinned();
-      window.clearTimeout(typingTimeoutRef.current);
+      window.clearTimeout(typingTimeoutRef.current || undefined);
     };
   }, [chatId, currentUser?.id, eventBus]);
 
+  const composerStateRef = useRef({
+    draft,
+    editingMessage,
+    replyToMessage,
+    messages,
+    currentUserId: currentUser?.id,
+  });
   useEffect(() => {
-    window.addEventListener("keydown", handleComposerKeyDown);
+    composerStateRef.current = {
+      draft,
+      editingMessage,
+      replyToMessage,
+      messages,
+      currentUserId: currentUser?.id,
+    };
+  }, []);
+
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) =>
+      handleComposerKeyDown(event, composerStateRef.current);
+    window.addEventListener("keydown", handler);
 
     return () => {
-      window.removeEventListener("keydown", handleComposerKeyDown);
+      window.removeEventListener("keydown", handler);
     };
-  }, [draft, editingMessage, replyToMessage, messages, currentUser?.id]);
+  }, []);
 
-  function markMessagesAsRead(targetChatId, nextMessages) {
+  if (!currentUser || !chat) return null;
+
+  const handleCallClick = () => {
+    if (isLongPress.current) return;
+    if (showCallMenu) {
+      setShowCallMenu(false);
+      return;
+    }
+    initiateCall(chatId, chat.type, title, "audio");
+  };
+
+  function markMessagesAsRead(
+    targetChatId: string,
+    nextMessages: TMessagesList,
+  ) {
     const messageIds = nextMessages
       .filter((message) => message?.id && message.senderId !== currentUser?.id)
       .map((message) => message.id);
@@ -384,7 +437,7 @@ export function ChatThreadPage() {
       });
   }
 
-  async function handleSubmit(event) {
+  async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (selectionMode) return;
     const content = draft.trim();
@@ -455,7 +508,7 @@ export function ChatThreadPage() {
     }
   }
 
-  function handleAttachmentChange(event) {
+  function handleAttachmentChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -493,7 +546,7 @@ export function ChatThreadPage() {
     }
   }
 
-  function handlePhotoEditorSave(file) {
+  function handlePhotoEditorSave(file: File) {
     setPendingAttachment({
       file,
       type: "image",
@@ -513,12 +566,12 @@ export function ChatThreadPage() {
     if (attachmentInputRef.current) attachmentInputRef.current.value = "";
   }
 
-  function handleDraftChange(event) {
+  function handleDraftChange(event: ChangeEvent<HTMLInputElement>) {
     setDraft(event.target.value);
     sendTyping();
   }
 
-  function handleComposerKeyDown(event) {
+  function handleComposerKeyDown(event: KeyboardEvent, state: ComposerState) {
     if (event.key === "Escape" && (editingMessage || replyToMessage)) {
       event.preventDefault();
       cancelComposerMode();
@@ -597,7 +650,7 @@ export function ChatThreadPage() {
     }
   }
 
-  function toggleMessageSelection(message) {
+  function toggleMessageSelection(message: IMessageDto) {
     setSelectedMessages((messages) => {
       const isMessageSelected = messages.find(({ id }) => id === message.id);
 
@@ -615,7 +668,7 @@ export function ChatThreadPage() {
     });
   }
 
-  const title = chat?.name || chat?.title || t("chat", "Чат");
+  const title = chat?.title || t("chat", "Чат");
   const subtitle = getChatSubtitle(chat, typingUserId, t);
   const isPeerOnline = Boolean(chat?.type === "private" && chat?.peerIsOnline);
   const peerAvatarUrl = chat?.avatarUrl || "";
@@ -640,7 +693,7 @@ export function ChatThreadPage() {
           isLoading={isLoading}
           error={error}
           openedImage={openedImage}
-          onOpenImage={(url) => setOpenedImage(url)}
+          onOpenImage={(url: string) => setOpenedImage(url)}
           onSelection={toggleMessageSelection}
           actionMenu={actionMenu}
           currentUser={currentUser}
@@ -806,7 +859,7 @@ export function ChatThreadPage() {
                   </svg>
                 </button>
 
-                {showCallMenu ? (
+                {showCallMenu && (
                   <div className="thread-call-menu">
                     <button
                       onClick={() => {
@@ -856,7 +909,7 @@ export function ChatThreadPage() {
                       {t("videoCall", "Видео")}
                     </button>
                   </div>
-                ) : null}
+                )}
               </div>
             </div>
           </header>
@@ -889,11 +942,11 @@ export function ChatThreadPage() {
             )}
             {messages.map((message) => (
               <MessageBubble
-                currentUserId={currentUser?.id}
+                currentUserId={currentUser.id}
                 key={message.id}
                 message={message}
                 translations={translations}
-                onOpenImage={(url) => setOpenedImage(url)}
+                onOpenImage={(url: string) => setOpenedImage(url)}
                 onSelection={toggleMessageSelection}
               />
             ))}
@@ -1046,7 +1099,6 @@ export function ChatThreadPage() {
                     aria-label={t("message", "Сообщение")}
                     className="thread-composer-input"
                     onChange={handleDraftChange}
-                    onKeyDown={handleComposerKeyDown}
                     placeholder={t("messagePlaceholder", "Сообщение...")}
                     value={draft}
                   />

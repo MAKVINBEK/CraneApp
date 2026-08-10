@@ -1,13 +1,15 @@
-import { useRef, useEffect, useCallback } from "react";
+import type { IActionMenu } from "@/store";
+import type { IMessageDto } from "@/types";
+import { useCallback, useEffect, useRef } from "react";
 import { calculateMenuPosition } from "../utils/calculateMenuPosition";
 
-export const useMessageLongPress = (messageId, selectionMode, onSelection, actionMenu, setActionMenu, message) => {
-    const longPressTimerRef = useRef(null);
-    const longPressPointRef = useRef(null);
+export const useMessageLongPress = (messageId: string, selectionMode: boolean, onSelection: (message: IMessageDto) => void, actionMenu: IActionMenu | null, setActionMenu: (actionMenu: IActionMenu | null) => void, message: IMessageDto) => {
+    const longPressTimerRef = useRef<number>(null);
+    const longPressPointRef = useRef<{x: number, y: number}>(null);
     const suppressNextClickRef = useRef(false);
 
     // Очистка таймера при размонтировании
-    useEffect(() => () => window.clearTimeout(longPressTimerRef.current), []);
+    useEffect(() => () => window.clearTimeout(longPressTimerRef.current || undefined), []);
 
     const clearLongPress = useCallback(() => {
         if (longPressTimerRef.current) {
@@ -16,7 +18,7 @@ export const useMessageLongPress = (messageId, selectionMode, onSelection, actio
         }
     }, []);
 
-    const openMessageActions = useCallback((clientX, clientY) => {
+    const openMessageActions = useCallback((clientX: number, clientY: number) => {
         const { x, y } = calculateMenuPosition(clientX, clientY);
         setActionMenu({ messageId, x, y });
     }, [messageId, setActionMenu]);
@@ -63,7 +65,6 @@ export const useMessageLongPress = (messageId, selectionMode, onSelection, actio
         if (deltaX > 8 || deltaY > 8) clearLongPress();
     }, [clearLongPress]);
 
-    // Возвращаем хэндлеры для привязки к HTML-элементу
     return {
         onClickCapture: handleClickCapture,
         onContextMenu: handleContextMenu,

@@ -4,6 +4,7 @@ import type {
   IActiveCall,
   ICallInviteResponsePayload,
   IIncomingCall,
+  IMemberDto,
   TCallKind,
   TCallRoomType,
 } from "@/types";
@@ -27,7 +28,7 @@ interface CallStore {
   rejectCall: () => void;
   initiateCall: (
     chatId: string,
-    type: TCallRoomType | "private",
+    type: TCallRoomType,
     title: string,
     kind: TCallKind,
     peerId?: string | null,
@@ -122,7 +123,7 @@ export const useCallStore = create<CallStore>((set, get) => ({
     set({
       activeCall: {
         roomId: incomingCall.roomId,
-        type: incomingCall.callType || "p2p",
+        type: incomingCall.callType || "private",
         kind: incomingCall.kind,
         title: incomingCall.title || incomingCall.fromName || "",
       },
@@ -153,7 +154,7 @@ export const useCallStore = create<CallStore>((set, get) => ({
     if (activeCall || incomingCall) return;
 
     try {
-      const callType: TCallRoomType = type === "group" ? "group" : "p2p";
+      const callType: TCallRoomType = type === "group" ? "group" : "private";
       const room = await services.callService.createRoom({
         type: callType,
         chatId,
@@ -172,7 +173,7 @@ export const useCallStore = create<CallStore>((set, get) => ({
         } else {
           const members = await services.chatService.getMembers(chatId);
           targets = members
-            .map((m: { id: string }) => m.id)
+            .map((m: IMemberDto) => m.id)
             .filter((id: string) => id && id !== user.id);
         }
 

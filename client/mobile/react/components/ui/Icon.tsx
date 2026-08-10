@@ -7,8 +7,8 @@ const FILLED_ICONS = ["reply", "edit", "trash", "phone", "video", "copy"];
 
 interface Props extends SVGProps<SVGSVGElement> {
 	name: "forward" | "reply" | "edit" | "trash" | "phone" | "video" | "copy";
-	className: string;
-	size: number;
+	className?: string;
+	size?: number;
 }
 
 export const Icon = ({ name, size = 24, className = "", ...props }: Props) => {

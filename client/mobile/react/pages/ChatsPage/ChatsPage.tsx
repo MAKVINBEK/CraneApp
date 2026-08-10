@@ -1,26 +1,28 @@
+import {
+  EmptyChatListPlaceholder,
+  ErrorChatListPlaceholder,
+  UserProfilePanel,
+} from "@/components/components";
+import { ChatListItem, ChatsSkeleton } from "@/components/ui";
+import { WS_EVENTS } from "@/consts";
+import { useIsMobile, useRealtimeSocket } from "@/hooks";
+import { services } from "@/services";
+import { useChatsStore, useChatStore, useProfileStore } from "@/store";
+import type {
+  TChat,
+} from "@/types";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, Outlet, useNavigate, useParams } from "react-router-dom";
-import { EmptyChatListPlaceholder } from "../../components/components/EmptyChatsListPlaceholder.js";
-import { ChatsSkeleton } from "../../components/ui/Skeletons/ChatSkeleton.js";
-import { STORAGE_KEYS } from "../../consts/storageKeys.js";
-import { useIsMobile } from "../../hooks/useIsMobile.js";
-import { useLocalStorage } from "../../hooks/useLocalStorage.js";
-import { useRealtimeSocket } from "../../hooks/useRealtimeSocket.js";
-import services from "../../services/serviceContainer.js";
-import { useChatsStore } from "../../store/chats.js";
-import { ErrorChatListPlaceholder, UserProfilePanel } from "@/components/components";
-import { ChatListItem } from "@/components/ui";
+import { Link, Outlet, useParams } from "react-router-dom";
 
 export function ChatsPage() {
   const chats = useChatsStore((state) => state.chats);
   const setChats = useChatsStore((state) => state.setChats);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [currentUser] = useLocalStorage(STORAGE_KEYS.USER, null);
+  const currentUser = useProfileStore((state) => state.user);
   const typingTimeoutsRef = useRef(new Map());
   const { eventBus } = useRealtimeSocket(true);
-  const navigate = useNavigate();
   const { chatId } = useParams();
   const isMobile = useIsMobile();
   const [sidebarWidth, setSidebarWidth] = useState(360);
@@ -61,11 +63,11 @@ export function ChatsPage() {
     return () => {
       isMounted = false;
     };
-  }, [t]);
-
+  }, []);
+  console.log(chats)
   useEffect(() => {
     const updatePreview = async (payload) => {
-      const incomingMessage = payload?.message ?? payload;
+      const incomingMessage = payload?.message
       const chatId = payload?.chatId ?? incomingMessage?.chatId;
       if (!chatId || !incomingMessage) return;
 
@@ -101,9 +103,9 @@ export function ChatsPage() {
       });
     };
 
-    const handleTyping = (event) => {
-      const chatId = event?.chatId;
-      const userId = event?.userId || event?.senderId || event?.from;
+    const handleTyping = (event: ITypingEvent) => {
+      const chatId = event.chatId;
+      const userId = event.userId || event.senderId;
       if (!chatId || !userId || userId === currentUser?.id) return;
 
       setChats((items) =>
@@ -133,28 +135,37 @@ export function ChatsPage() {
       );
     };
 
-    const unsubscribeNew = eventBus.on("new_message", updatePreview);
-    const unsubscribeEdited = eventBus.on("message:edited", updatePreview);
-    const unsubscribeMessageEdited = eventBus.on("message_edited", updatePreview);
-    const unsubscribeSent = eventBus.on("message:sent", updatePreview);
-    const unsubscribeTyping = eventBus.on("typing", handleTyping);
-    const unsubscribeUserTyping = eventBus.on("user_typing", handleTyping);
-    const unsubscribeRead = eventBus.on("messages:read", ({ chatId }) => {
-      setChats((items) =>
-        items.map((chat) =>
-          chat.id === chatId ? { ...chat, unreadCount: 0 } : chat,
-        ),
-      );
-    });
+    const unsubscribeNewMessage = eventBus.on(
+      WS_EVENTS.MESSAGE.NEW,
+      updatePreview,
+    );
+    // const unsubscribeEdited = eventBus.on("message:edited", updatePreview);
+    const unsubscribeMessageEdited = eventBus.on(
+      WS_EVENTS.MESSAGE.EDITED,
+      updatePreview,
+    );
+    // const unsubscribeSent = eventBus.on("message:sent", updatePreview);
+    const unsubscribeUserTyping = eventBus.on(
+      WS_EVENTS.USER.TYPING,
+      handleTyping,
+    );
+    // const unsubscribeUserTyping = eventBus.on("user_typing", handleTyping);
+    // const unsubscribeMessagesRead = eventBus.on(WS_EVENTS.MESSAGE.MESSAGE_READ, ({ chatId }) => {
+    //   setChats((items) =>
+    //     items.map((chat) =>
+    //       chat.id === chatId ? { ...chat, unreadCount: 0 } : chat,
+    //     ),
+    //   );
+    // });
 
     return () => {
-      unsubscribeNew();
-      unsubscribeEdited();
+      unsubscribeNewMessage();
+      // unsubscribeEdited();
       unsubscribeMessageEdited();
-      unsubscribeSent();
-      unsubscribeTyping();
+      // unsubscribeSent();
       unsubscribeUserTyping();
-      unsubscribeRead();
+      // unsubscribeUserTyping();
+      // unsubscribeMessagesRead();
       typingTimeoutsRef.current.forEach((timeoutId) =>
         window.clearTimeout(timeoutId),
       );
@@ -304,9 +315,7 @@ export function ChatsPage() {
   );
 }
 
-
-
-async function decryptChatPreview(chat) {
+async function decryptChatPreview(chat: TChat): Promise<TChat> {
   if (!chat?.id || !chat.lastMessage || typeof chat.lastMessage === "string") {
     return chat;
   }
@@ -322,19 +331,13 @@ async function decryptChatPreview(chat) {
   }
 
   try {
-    const message = await services.messageService.processMessageForDisplay(
+    const message = await services.messageService.processLastMessageForDisplay(
       chat.id,
-      {
-        ...chat.lastMessage,
-        chatId: chat.lastMessage.chatId ?? chat.id,
-      },
+      chat.lastMessage,
     );
     return {
       ...chat,
-      lastMessage: {
-        ...chat.lastMessage,
-        content: message.content,
-      },
+      lastMessage: message,
     };
   } catch (error) {
     console.warn("Failed to decrypt chat preview", error);
@@ -342,7 +345,7 @@ async function decryptChatPreview(chat) {
   }
 }
 
-function formatCallPreview(content) {
+function formatCallPreview(content: string | null) {
   if (!content || typeof content !== "string") return "Звонок завершен";
   try {
     const parsed = JSON.parse(content);
@@ -350,13 +353,11 @@ function formatCallPreview(content) {
     if (duration > 0) {
       return `Звонок завершен · ${formatCallDuration(duration)}`;
     }
-  } catch (_) {
-    // Ignore malformed legacy payloads and show a friendly fallback.
-  }
+  } catch {}
   return "Звонок завершен";
 }
 
-function formatCallDuration(seconds) {
+function formatCallDuration(seconds: number) {
   const total = Number(seconds) || 0;
   const minutes = Math.floor(total / 60);
   const rest = total % 60;

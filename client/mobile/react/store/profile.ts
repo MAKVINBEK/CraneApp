@@ -15,11 +15,31 @@ interface InitialState {
   clearProfile: () => void;
 }
 
+function readStoredUser(): IUserDto | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.USER);
+    return raw ? (JSON.parse(raw) as IUserDto) : null;
+  } catch {
+    return null;
+  }
+}
+
+function readStoredSettings(): ISettingsDto {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+    return raw ? (JSON.parse(raw) as ISettingsDto) : DEFAULT_PROFILE_SETTINGS;
+  } catch {
+    return DEFAULT_PROFILE_SETTINGS;
+  }
+}
+
+const storedUser = readStoredUser();
+
 export const useProfileStore = create<InitialState>((set, get) => ({
   token: localStorage.getItem(STORAGE_KEYS.TOKEN) || "",
-  user: null,
-  settings: DEFAULT_PROFILE_SETTINGS,
-  isAuth: false,
+  user: storedUser,
+  settings: readStoredSettings(),
+  isAuth: !!storedUser,
   isLoading: false,
   setUser: (user) => {
     localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
