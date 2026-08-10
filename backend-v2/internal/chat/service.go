@@ -12,14 +12,15 @@ import (
 )
 
 var (
-	ErrNotFound        = errors.New("chat not found")
-	ErrForbidden       = errors.New("access denied")
-	ErrInvalidInput    = errors.New("invalid input")
-	ErrUserNotFound    = errors.New("user not found")
-	ErrBlockedByUser   = errors.New("blocked by user")
-	ErrInvalidChatType = errors.New("invalid chat type")
-	ErrAlreadyMember   = errors.New("user already in group")
-	ErrUserBanned      = errors.New("user is banned")
+	ErrNotFound                  = errors.New("chat not found")
+	ErrForbidden                 = errors.New("access denied")
+	ErrInvalidInput              = errors.New("invalid input")
+	ErrUserNotFound              = errors.New("user not found")
+	ErrBlockedByUser             = errors.New("blocked by user")
+	ErrInvalidChatType           = errors.New("invalid chat type")
+	ErrAlreadyMember             = errors.New("user already in group")
+	ErrUserBanned                = errors.New("user is banned")
+	ErrOwnershipTransferRequired = errors.New("ownership transfer required")
 )
 
 type Chat struct {
@@ -1739,4 +1740,46 @@ func (s *Service) GetMlsState(ctx context.Context, chatID string) (int64, string
 		return 0, "", nil
 	}
 	return epoch, treeState.String, err
+}
+
+type leaveChatInput struct {
+	ChatID string `validate:"required,uuid"`
+}
+
+func (s *Service) LeaveChat(ctx context.Context, userID, chatID string) error {
+	input := leaveChatInput{ChatID: chatID}
+	if err := validate.Struct(input); err != nil {
+		return ErrInvalidInput
+	}
+
+	role, err := s.memberRole(ctx, userID, chatID)
+	if err != nil {
+		return err
+	}
+	if role == "owner" {
+		return ErrOwnershipTransferRequired
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM crypto.chat_encryption_keys WHERE chat_id = $1 AND user_id = $2`, chatID, userID); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM chats.user_chat_settings WHERE user_id = $1 AND chat_id = $2`, userID, chatID); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	res, err := tx.ExecContext(ctx, `DELETE FROM chats.members WHERE chat_id=$1 AND user_id=$2 AND role<>'owner'`, chatID, userID)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		_ = tx.Rollback()
+		return ErrForbidden
+	}
+	return tx.Commit()
 }
