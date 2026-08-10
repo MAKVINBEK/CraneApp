@@ -69,7 +69,7 @@ export interface IMessageDto {
   replyToMessageId: string | null;
   replySenderName: string | null;
   replyToSenderName: string | null;
-  metadata: IForwardedMetadata | IMediaMetadata;
+  metadata?: IForwardedMetadata | IMediaMetadata;
   forwardedSenderName: string;
   reactions: TReactionsList;
 }

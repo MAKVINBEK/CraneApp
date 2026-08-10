@@ -7,7 +7,7 @@ import { ChatListItem, ChatsSkeleton } from "@/components/ui";
 import { WS_EVENTS } from "@/consts";
 import { useIsMobile, useRealtimeSocket } from "@/hooks";
 import { services } from "@/services";
-import { useChatsStore, useChatStore, useProfileStore } from "@/store";
+import { useChatsStore, useProfileStore } from "@/store";
 import type {
   TChat,
 } from "@/types";
@@ -64,7 +64,6 @@ export function ChatsPage() {
       isMounted = false;
     };
   }, []);
-  console.log(chats)
   useEffect(() => {
     const updatePreview = async (payload) => {
       const incomingMessage = payload?.message
