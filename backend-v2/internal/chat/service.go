@@ -1807,3 +1807,73 @@ func (s *Service) LeaveChat(ctx context.Context, userID, chatID string) error {
 	}
 	return tx.Commit()
 }
+
+type transferOwnershipInput struct {
+	ChatID string `validate:"required,uuid"`
+	UserID string `validate:"required,uuid"`
+}
+
+func (s *Service) TransferOwnership(ctx context.Context, actorID, chatID, targetUserID string) error {
+	// 1. Валидация UUID
+	input := transferOwnershipInput{ChatID: chatID, UserID: targetUserID}
+	if err := validate.Struct(input); err != nil {
+		return ErrInvalidInput
+	}
+
+	// 2. Цель ≠ actor
+	if targetUserID == actorID {
+		return ErrInvalidInput
+	}
+
+	// 3. Проверка: actor — owner чата
+	actorRole, err := s.memberRole(ctx, actorID, chatID)
+	if err != nil {
+		return err
+	}
+	if actorRole != "owner" {
+		return ErrForbidden
+	}
+
+	// 4. Проверка: target — член чата
+	targetRole, err := s.memberRole(ctx, targetUserID, chatID)
+	if err != nil {
+		return ErrNotMember
+	}
+	if targetRole == "" {
+		return ErrNotMember
+	}
+
+	// 5. Транзакционно обновляем owner_id и роли обеих сторон
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	// 5.1. Обновить chats.chats.owner_id
+	_, err = tx.ExecContext(ctx,
+		`UPDATE chats.chats SET owner_id = $1, updated_at = NOW() WHERE id = $2`,
+		targetUserID, chatID)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	// 5.2. Новый owner в members
+	_, err = tx.ExecContext(ctx,
+		`UPDATE chats.members SET role = 'owner' WHERE chat_id = $1 AND user_id = $2`,
+		chatID, targetUserID)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	// 5.3. Прежний owner в member
+	_, err = tx.ExecContext(ctx,
+		`UPDATE chats.members SET role = 'member' WHERE chat_id = $1 AND user_id = $2`,
+		chatID, actorID)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
