@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestLeaveChat_Success_memberLeaves проверяет успешный выход участника с ролью member:
+// транзакционно удаляются ключи шифрования, персональные настройки и членство.
 func TestLeaveChat_Success_memberLeaves(t *testing.T) {
 	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 	if err != nil {
@@ -42,6 +44,8 @@ func TestLeaveChat_Success_memberLeaves(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestLeaveChat_OwnerCannotLeave проверяет, что владелец не может покинуть группу
+// без передачи владения — возвращается ErrOwnershipTransferRequired, SQL-операций нет.
 func TestLeaveChat_OwnerCannotLeave(t *testing.T) {
 	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 	if err != nil {
@@ -62,6 +66,8 @@ func TestLeaveChat_OwnerCannotLeave(t *testing.T) {
 	require.ErrorIs(t, err, chat.ErrOwnershipTransferRequired)
 }
 
+// TestLeaveChat_NotMember проверяет выход не-участника (включая повторный выход):
+// членство не найдено — возвращается ErrForbidden, транзакция не открывается.
 func TestLeaveChat_NotMember(t *testing.T) {
 	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 	if err != nil {
@@ -82,6 +88,8 @@ func TestLeaveChat_NotMember(t *testing.T) {
 	require.ErrorIs(t, err, chat.ErrForbidden)
 }
 
+// TestLeaveChat_InvalidChatID проверяет отказ при невалидном UUID:
+// возвращается ErrInvalidInput, обращений к БД нет.
 func TestLeaveChat_InvalidUUID(t *testing.T) {
 	db, _, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 	if err != nil {
@@ -97,6 +105,8 @@ func TestLeaveChat_InvalidUUID(t *testing.T) {
 	require.ErrorIs(t, err, chat.ErrInvalidInput)
 }
 
+// TestLeaveChat_RollbackOnSettingsDeleteError проверяет откат транзакции:
+// ошибка при удалении user_chat_settings → ROLLBACK, исходная ошибка возвращается наружу.
 func TestLeaveChat_RollbackOnSettingsDeleteError(t *testing.T) {
 	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 	if err != nil {
@@ -129,6 +139,8 @@ func TestLeaveChat_RollbackOnSettingsDeleteError(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+// TestLeaveChat_RaceMemberDeleted проверяет гонку: членство удалено другим запросом
+// между проверкой роли и DELETE (RowsAffected=0) → ROLLBACK и ErrForbidden.
 func TestLeaveChat_RaceMemberDeleted(t *testing.T) {
 	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 	if err != nil {

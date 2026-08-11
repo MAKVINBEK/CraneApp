@@ -21,6 +21,7 @@ var (
 	ErrAlreadyMember             = errors.New("user already in group")
 	ErrUserBanned                = errors.New("user is banned")
 	ErrOwnershipTransferRequired = errors.New("ownership transfer required")
+	ErrNotMember                 = errors.New("user is not a member")
 )
 
 type Chat struct {
