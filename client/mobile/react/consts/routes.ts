@@ -20,7 +20,7 @@ class Routes {
 
   LOGIN = "/login";
   REGISTER = "/register";
-
+  MENU = "/menu";
   CHANNELS = "/channels";
   COMMUNITIES = "/communities";
   MEETINGS = "/meetings";

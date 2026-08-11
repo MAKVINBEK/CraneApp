@@ -308,7 +308,7 @@
    ========================================== */
 :root, [data-theme="dark"] {
   --bg-primary: #0e0f12;
-  --bg-card: linear-gradient(180deg, rgba(14, 14, 14, 0.86) 0%, rgba(134, 133, 133, 0.15) 100%);
+  --bg-card: #19191c;
   --text-primary: #ffffff;
   --text-secondary: rgba(255, 255, 255, 0.6);
   --border-color: rgba(255, 255, 255, 0.18);

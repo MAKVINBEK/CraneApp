@@ -133,3 +133,28 @@
     flex: 0 0 auto;
   }
 }
+
+.settings-left-pane {
+  display: flex;
+  flex-direction: column;
+  width: 340px;
+  flex: 0 0 340px;
+  min-height: 100vh;
+  overflow: hidden;
+  border-right: 1px solid var(--border-color);
+  background: rgba(12, 12, 15, 0.82);
+
+  /* Добавляем мягкий выезд слева */
+  animation: settingsSidebarIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes settingsSidebarIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
