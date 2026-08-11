@@ -12,6 +12,7 @@
     "start": "bash scripts/start.sh",
     "dev": "vite --host 127.0.0.1 --port 3000",
     "build:react": "vite build",
+    "typecheck": "tsc --noEmit",
     "test:react": "vitest run",
     "test": "node scripts/checkArchitecture.js",
     "check:architecture": "node scripts/checkArchitecture.js"
