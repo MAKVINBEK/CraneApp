@@ -230,3 +230,119 @@ func TestHandler_LeaveChat(t *testing.T) {
 		})
 	}
 }
+
+func TestHandler_TransferOwnership(t *testing.T) {
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	svc := NewService(db, nil)
+	h := NewHandler(svc)
+
+	actorID := "550e8400-e29b-41d4-a716-446655440001"
+	chatID := "550e8400-e29b-41d4-a716-446655440002"
+	targetID := "550e8400-e29b-41d4-a716-446655440003"
+
+	tests := []struct {
+		name           string
+		userIDInBody   string // что положить в {"userId": ...}
+		setupMock      func()
+		expectedStatus int
+		expectedCode   string
+	}{
+		{
+			"Success",
+			targetID,
+			func() {
+				mock.ExpectQuery(`SELECT role FROM chats.members WHERE user_id = $1 AND chat_id = $2`).
+					WithArgs(actorID, chatID).
+					WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow("owner"))
+				mock.ExpectQuery(`SELECT role FROM chats.members WHERE user_id = $1 AND chat_id = $2`).
+					WithArgs(targetID, chatID).
+					WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow("member"))
+				mock.ExpectBegin()
+				mock.ExpectExec(`UPDATE chats.chats SET owner_id = $1, updated_at = NOW() WHERE id = $2`).
+					WithArgs(targetID, chatID).WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectExec(`UPDATE chats.members SET role = 'owner' WHERE chat_id = $1 AND user_id = $2`).
+					WithArgs(chatID, targetID).WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectExec(`UPDATE chats.members SET role = 'member' WHERE chat_id = $1 AND user_id = $2`).
+					WithArgs(chatID, actorID).WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectCommit()
+			},
+			http.StatusOK,
+			"",
+		},
+		{
+			"ActorNotOwner_403",
+			targetID,
+			func() {
+				mock.ExpectQuery(`SELECT role FROM chats.members WHERE user_id = $1 AND chat_id = $2`).
+					WithArgs(actorID, chatID).
+					WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow("member"))
+			},
+			http.StatusForbidden,
+			"access_denied",
+		},
+		{
+			"TargetNotMember_400",
+			targetID,
+			func() {
+				mock.ExpectQuery(`SELECT role FROM chats.members WHERE user_id = $1 AND chat_id = $2`).
+					WithArgs(actorID, chatID).
+					WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow("owner"))
+				mock.ExpectQuery(`SELECT role FROM chats.members WHERE user_id = $1 AND chat_id = $2`).
+					WithArgs(targetID, chatID).
+					WillReturnError(sql.ErrNoRows)
+			},
+			http.StatusBadRequest,
+			"not_member",
+		},
+		{
+			"SelfTransfer_400",
+			actorID,   // цель = актор
+			func() {}, // SQL-ожиданий нет — сервис отвергнет раньше
+			http.StatusBadRequest,
+			"validation_failed",
+		},
+		{
+			"InvalidUUID_400",
+			"not-a-uuid",
+			func() {},
+			http.StatusBadRequest,
+			"validation_failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.setupMock()
+
+			body, _ := json.Marshal(map[string]string{"userId": tt.userIDInBody})
+			req := httptest.NewRequest(http.MethodPost, "/api/v2/chats/"+chatID+"/transfer-ownership", bytes.NewReader(body))
+
+			ctx := authctx.WithUser(req.Context(), authctx.User{ID: actorID})
+			req = req.WithContext(ctx)
+
+			rr := httptest.NewRecorder()
+			h.Chat(rr, req)
+
+			if rr.Code != tt.expectedStatus {
+				t.Errorf("expected status %d, got %d, body %s", tt.expectedStatus, rr.Code, rr.Body.String())
+			}
+			if tt.expectedCode != "" {
+				var resp struct {
+					Code string `json:"code"`
+				}
+				_ = json.Unmarshal(rr.Body.Bytes(), &resp)
+				if resp.Code != tt.expectedCode {
+					t.Errorf("expected code %q, got %q; body %s", tt.expectedCode, resp.Code, rr.Body.String())
+				}
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatalf("mock expectations: %v", err)
+			}
+		})
+	}
+}

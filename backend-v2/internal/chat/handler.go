@@ -214,6 +214,26 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 		default:
 			httpx.JSON(w, http.StatusOK, map[string]any{"success": true})
 		}
+	case suffix == "/transfer-ownership" && r.Method == http.MethodPost:
+		var input struct {
+			UserID string `json:"userId"`
+		}
+		if !decode(w, r, &input) {
+			return
+		}
+		err := h.service.TransferOwnership(r.Context(), current.ID, chatID, input.UserID)
+		switch {
+		case errors.Is(err, ErrInvalidInput):
+			httpx.ErrorJSON(w, r, http.StatusBadRequest, "validation_failed", err.Error())
+		case errors.Is(err, ErrForbidden):
+			httpx.ErrorJSON(w, r, http.StatusForbidden, "access_denied", err.Error())
+		case errors.Is(err, ErrNotMember):
+			httpx.ErrorJSON(w, r, http.StatusBadRequest, "not_member", err.Error())
+		case err != nil:
+			httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", "transfer ownership failed")
+		default:
+			httpx.JSON(w, http.StatusOK, map[string]any{"success": true})
+		}
 	case strings.HasPrefix(suffix, "/members/"):
 		memberID, action := parseMemberAction(suffix)
 		if memberID == "" {
