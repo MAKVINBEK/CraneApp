@@ -22,6 +22,8 @@ var (
 	ErrInvalidChatType = errors.New("invalid chat type")
 	ErrAlreadyMember   = errors.New("user already in group")
 	ErrUserBanned      = errors.New("user is banned")
+	ErrMemberNotFound  = errors.New("member not found")
+	ErrStateUnchanged  = errors.New("state unchanged")
 )
 
 type Chat struct {
@@ -94,7 +96,13 @@ type Message struct {
 
 type Service struct {
 	db *sql.DB
-	ws *WSServer
+	ws realtimeServer
+}
+
+type realtimeServer interface {
+	CallRooms() *CallRoomManager
+	IsUserConnected(userID string) bool
+	BroadcastToChat(chatID string, message []byte, excludeUserID string)
 }
 
 const (
@@ -157,7 +165,7 @@ func (s *Service) ValidateMediaMetadata(ctx context.Context, mediaURL, fileName 
 	return fileName, sizeBytes, nil
 }
 
-func NewService(db *sql.DB, ws *WSServer) *Service {
+func NewService(db *sql.DB, ws realtimeServer) *Service {
 	return &Service{db: db, ws: ws}
 }
 
@@ -697,45 +705,134 @@ func (s *Service) SetMemberRole(ctx context.Context, actorID, chatID, memberID, 
 	if role != "admin" && role != "member" {
 		return ErrInvalidInput
 	}
-	actorRole, err := s.memberRole(ctx, actorID, chatID)
+	if actorID == memberID {
+		return ErrForbidden
+	}
+	chatType, actorRole, err := s.getChatInfo(ctx, actorID, chatID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrForbidden
+	}
 	if err != nil {
 		return err
+	}
+	if chatType != "group" {
+		return ErrInvalidChatType
 	}
 	if actorRole != "owner" {
 		return ErrForbidden
 	}
-	result, err := s.db.ExecContext(ctx, `
-		UPDATE chats.members SET role = $1
-		WHERE chat_id = $2 AND user_id = $3 AND role <> 'owner'
-	`, role, chatID, memberID)
+
+	var memberRole string
+	err = s.db.QueryRowContext(ctx, `
+		SELECT role FROM chats.members
+		WHERE chat_id = $1 AND user_id = $2
+	`, chatID, memberID).Scan(&memberRole)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrMemberNotFound
+	}
 	if err != nil {
 		return err
 	}
-	affected, _ := result.RowsAffected()
-	if affected == 0 {
+	if memberRole == "owner" {
 		return ErrForbidden
+	}
+	if memberRole == role {
+		return nil
+	}
+
+	result, err := s.db.ExecContext(ctx, `
+		UPDATE chats.members SET role = $1
+		WHERE chat_id = $2 AND user_id = $3 AND role = $4
+	`, role, chatID, memberID, memberRole)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected != 1 {
+		return ErrStateUnchanged
+	}
+
+	if s.ws != nil {
+		payload, err := json.Marshal(MemberRoleUpdatedEvent{
+			Type:   "chat_member_role_updated",
+			ChatID: chatID,
+			UserID: memberID,
+			Role:   role,
+		})
+		if err != nil {
+			slog.Error("failed to marshal member role event", "err", err, "chatID", chatID, "userID", memberID)
+		} else {
+			s.ws.BroadcastToChat(chatID, payload, "")
+		}
 	}
 	return nil
 }
 
 func (s *Service) RemoveMember(ctx context.Context, actorID, chatID, memberID string) error {
-	actorRole, err := s.memberRole(ctx, actorID, chatID)
+	if actorID == memberID {
+		return ErrForbidden
+	}
+	chatType, actorRole, err := s.getChatInfo(ctx, actorID, chatID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrForbidden
+	}
 	if err != nil {
 		return err
+	}
+	if chatType != "group" {
+		return ErrInvalidChatType
 	}
 	if actorRole != "owner" && actorRole != "admin" {
 		return ErrForbidden
 	}
-	result, err := s.db.ExecContext(ctx, `
-		DELETE FROM chats.members
-		WHERE chat_id = $1 AND user_id = $2 AND role <> 'owner'
-	`, chatID, memberID)
+
+	var memberRole string
+	err = s.db.QueryRowContext(ctx, `
+		SELECT role FROM chats.members
+		WHERE chat_id = $1 AND user_id = $2
+	`, chatID, memberID).Scan(&memberRole)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrMemberNotFound
+	}
 	if err != nil {
 		return err
 	}
-	affected, _ := result.RowsAffected()
-	if affected == 0 {
+	if memberRole == "owner" {
 		return ErrForbidden
+	}
+	if actorRole == "admin" && memberRole != "member" {
+		return ErrForbidden
+	}
+
+	result, err := s.db.ExecContext(ctx, `
+		DELETE FROM chats.members
+		WHERE chat_id = $1 AND user_id = $2 AND role = $3
+	`, chatID, memberID, memberRole)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected != 1 {
+		return ErrStateUnchanged
+	}
+
+	if s.ws != nil {
+		payload, err := json.Marshal(MemberRemovedEvent{
+			Type:   "chat_member_removed",
+			ChatID: chatID,
+			UserID: memberID,
+		})
+		if err != nil {
+			slog.Error("failed to marshal member removed event", "err", err, "chatID", chatID, "userID", memberID)
+		} else {
+			s.ws.BroadcastToChat(chatID, payload, "")
+		}
 	}
 	return nil
 }
@@ -791,6 +888,19 @@ type MemberAddedEvent struct {
 	Type   string  `json:"type"`
 	ChatID string  `json:"chatId"`
 	Member *Member `json:"member"`
+}
+
+type MemberRoleUpdatedEvent struct {
+	Type   string `json:"type"`
+	ChatID string `json:"chatId"`
+	UserID string `json:"userId"`
+	Role   string `json:"role"`
+}
+
+type MemberRemovedEvent struct {
+	Type   string `json:"type"`
+	ChatID string `json:"chatId"`
+	UserID string `json:"userId"`
 }
 
 type addMemberInput struct {
