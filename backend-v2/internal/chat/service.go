@@ -9,6 +9,8 @@ import (
 	"path"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/lib/pq"
 )
 
 var (
@@ -48,10 +50,12 @@ type Chat struct {
 }
 
 type LastMessagePreview struct {
-	Content    string `json:"content"`
-	Type       string `json:"type"`
-	SenderID   string `json:"senderId,omitempty"`
-	SenderName string `json:"senderName"`
+	ID         string     `json:"id"`
+	Content    string     `json:"content"`
+	Type       string     `json:"type"`
+	SenderID   string     `json:"senderId,omitempty"`
+	SenderName string     `json:"senderName"`
+	Reactions  []Reaction `json:"reactions"`
 }
 
 type Member struct {
@@ -79,6 +83,7 @@ type Message struct {
 	ReplyToMessageID    *string        `json:"replyToMessageId,omitempty"`
 	ReplySenderName     string         `json:"replySenderName,omitempty"`
 	ReplyToSenderName   string         `json:"replyToSenderName,omitempty"`
+	Reactions           []Reaction     `json:"reactions"`
 	Metadata            map[string]any `json:"metadata,omitempty"`
 	IsForwarded         bool           `json:"isForwarded"`
 	ForwardedSenderName string         `json:"forwardedSenderName,omitempty"`
@@ -205,6 +210,102 @@ func (s *Service) hydrateMessagesFields(ctx context.Context, messages []Message)
 	return nil
 }
 
+func (s *Service) loadReactionsByMessageIDs(ctx context.Context, userID string, messageIDs []string) (map[string][]Reaction, error) {
+	reactionsByMessageID := make(map[string][]Reaction, len(messageIDs))
+
+	if len(messageIDs) == 0 {
+		return reactionsByMessageID, nil
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT message_id::text,
+		       emoji,
+		       COUNT(*) AS cnt,
+		       BOOL_OR(user_id = $2) AS my_reaction
+		FROM messages.reactions
+		WHERE message_id = ANY($1::uuid[])
+		GROUP BY message_id, emoji
+		ORDER BY message_id, cnt DESC, emoji
+	`, pq.Array(messageIDs), userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var messageID string
+		var reaction Reaction
+
+		if err := rows.Scan(
+			&messageID,
+			&reaction.Emoji,
+			&reaction.Count,
+			&reaction.MyReaction,
+		); err != nil {
+			return nil, err
+		}
+
+		reactionsByMessageID[messageID] = append(reactionsByMessageID[messageID], reaction)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return reactionsByMessageID, nil
+}
+
+func (s *Service) hydrateMessagesReactions(ctx context.Context, userID string, messages []Message) error {
+	messageIDs := make([]string, 0, len(messages))
+
+	for i := range messages {
+		messages[i].Reactions = []Reaction{}
+		messageIDs = append(messageIDs, messages[i].ID)
+	}
+
+	reactionsByMessageID, err := s.loadReactionsByMessageIDs(ctx, userID, messageIDs)
+	if err != nil {
+		return err
+	}
+
+	for i := range messages {
+		reactions, ok := reactionsByMessageID[messages[i].ID]
+		if ok {
+			messages[i].Reactions = reactions
+		}
+	}
+
+	return nil
+}
+
+func (s *Service) hydrateChatsLastMessageReactions(ctx context.Context, userID string, chats []Chat) error {
+	messageIDs := make([]string, 0, len(chats))
+
+	for i := range chats {
+		lastMessage := chats[i].LastMessage
+		if lastMessage != nil && lastMessage.ID != "" {
+			lastMessage.Reactions = []Reaction{}
+			messageIDs = append(messageIDs, lastMessage.ID)
+		}
+	}
+
+	reactionsByMessageID, err := s.loadReactionsByMessageIDs(ctx, userID, messageIDs)
+	if err != nil {
+		return err
+	}
+
+	for i := range chats {
+		lastMessage := chats[i].LastMessage
+		if lastMessage != nil && lastMessage.ID != "" {
+			reactions, ok := reactionsByMessageID[lastMessage.ID]
+			if ok {
+				lastMessage.Reactions = reactions
+			}
+		}
+	}
+	return nil
+}
+
 func (s *Service) CallRooms() *CallRoomManager {
 	return s.ws.CallRooms()
 }
@@ -231,7 +332,7 @@ func (s *Service) List(ctx context.Context, userID string, archived bool) ([]Cha
 			         WHERE (cs.last_read_at IS NULL OR m.created_at > cs.last_read_at)
 			           AND (m.sender_id IS NULL OR m.sender_id <> $1)
 		       )::int,
-		       COALESCE(lm.sender_id::text, ''), lm.content, lm.type, COALESCE(lm_up.first_name, lm_au.first_name, lm_au.username, '')
+		       COALESCE(lm.id::text, ''), COALESCE(lm.sender_id::text, ''), lm.content, lm.type, COALESCE(lm_up.first_name, lm_au.first_name, lm_au.username, '')
 		FROM chats.chats c
 		JOIN chats.members cm ON cm.chat_id = c.id AND cm.user_id = $1
 		LEFT JOIN chats.user_chat_settings cs ON cs.chat_id = c.id AND cs.user_id = $1
@@ -252,7 +353,7 @@ func (s *Service) List(ctx context.Context, userID string, archived bool) ([]Cha
 		  LIMIT 1
 		) peer ON c.type = 'private'
 		LEFT JOIN LATERAL (
-		  SELECT sender_id, content, type
+		  SELECT id, sender_id, content, type
 		  FROM messages.messages
 		  WHERE chat_id = c.id AND deleted_at IS NULL
 		  ORDER BY created_at DESC
@@ -264,7 +365,7 @@ func (s *Service) List(ctx context.Context, userID string, archived bool) ([]Cha
 			GROUP BY c.id, cm.role, cs.is_pinned, cs.is_archived, cs.last_read_at,
 			         peer.peer_id, peer.first_name, peer.last_name, peer.avatar_url, peer.display_username,
 			         peer.is_online, peer.last_seen,
-			         lm.sender_id, lm.content, lm.type, lm_up.first_name, lm_au.first_name, lm_au.username
+			         lm.id, lm.sender_id, lm.content, lm.type, lm_up.first_name, lm_au.first_name, lm_au.username
 		ORDER BY COALESCE(cs.is_pinned, FALSE) DESC, MAX(m.created_at) DESC NULLS LAST, c.updated_at DESC
 	`, userID, archived)
 	if err != nil {
@@ -273,6 +374,9 @@ func (s *Service) List(ctx context.Context, userID string, archived bool) ([]Cha
 	defer rows.Close()
 	chats, err := scanChats(rows)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.hydrateChatsLastMessageReactions(ctx, userID, chats); err != nil {
 		return nil, err
 	}
 	s.hydrateRealtimePresence(chats)
@@ -301,7 +405,7 @@ func (s *Service) Get(ctx context.Context, userID, chatID string) (Chat, error) 
 			         WHERE (cs.last_read_at IS NULL OR m.created_at > cs.last_read_at)
 			           AND (m.sender_id IS NULL OR m.sender_id <> $1)
 		       )::int,
-		       COALESCE(lm.sender_id::text, ''), lm.content, lm.type, COALESCE(lm_up.first_name, lm_au.first_name, lm_au.username, '')
+		       COALESCE(lm.id::text, ''), COALESCE(lm.sender_id::text, ''), lm.content, lm.type, COALESCE(lm_up.first_name, lm_au.first_name, lm_au.username, '')
 		FROM chats.chats c
 		JOIN chats.members cm ON cm.chat_id = c.id AND cm.user_id = $1
 		LEFT JOIN chats.user_chat_settings cs ON cs.chat_id = c.id AND cs.user_id = $1
@@ -322,7 +426,7 @@ func (s *Service) Get(ctx context.Context, userID, chatID string) (Chat, error) 
 		  LIMIT 1
 		) peer ON c.type = 'private'
 		LEFT JOIN LATERAL (
-		  SELECT sender_id, content, type
+		  SELECT id, sender_id, content, type
 		  FROM messages.messages
 		  WHERE chat_id = c.id AND deleted_at IS NULL
 		  ORDER BY created_at DESC
@@ -334,7 +438,7 @@ func (s *Service) Get(ctx context.Context, userID, chatID string) (Chat, error) 
 			GROUP BY c.id, cm.role, cs.is_pinned, cs.is_archived, cs.last_read_at,
 			         peer.peer_id, peer.first_name, peer.last_name, peer.avatar_url, peer.display_username,
 			         peer.is_online, peer.last_seen,
-			         lm.sender_id, lm.content, lm.type, lm_up.first_name, lm_au.first_name, lm_au.username
+			         lm.id, lm.sender_id, lm.content, lm.type, lm_up.first_name, lm_au.first_name, lm_au.username
 	`, userID, chatID)
 	if err != nil {
 		return Chat{}, err
@@ -346,6 +450,9 @@ func (s *Service) Get(ctx context.Context, userID, chatID string) (Chat, error) 
 	}
 	if len(chats) == 0 {
 		return Chat{}, ErrNotFound
+	}
+	if err := s.hydrateChatsLastMessageReactions(ctx, userID, chats); err != nil {
+		return Chat{}, err
 	}
 	chat := chats[0]
 	if chat.Type == "private" {
@@ -982,19 +1089,20 @@ func scanChats(rows *sql.Rows) ([]Chat, error) {
 	for rows.Next() {
 		var chat Chat
 		var unreadCount int
-		var lmSenderID, lmContent, lmType, lmSender sql.NullString
+		var lmID, lmSenderID, lmContent, lmType, lmSender sql.NullString
 		if err := rows.Scan(
 			&chat.ID, &chat.Type, &chat.Title, &chat.Description, &chat.AvatarURL,
 			&chat.OwnerID, &chat.Role, &chat.IsPinned, &chat.IsArchived, &chat.LastReadAt,
 			&chat.CreatedAt, &chat.UpdatedAt, &chat.MemberCount, &chat.LastMessageAt,
 			&chat.PeerID, &chat.PeerIsOnline, &chat.PeerLastSeen,
-			&unreadCount, &lmSenderID, &lmContent, &lmType, &lmSender,
+			&unreadCount, &lmID, &lmSenderID, &lmContent, &lmType, &lmSender,
 		); err != nil {
 			return nil, err
 		}
 		chat.UnreadCount = unreadCount
 		if lmContent.Valid || lmType.Valid {
 			chat.LastMessage = &LastMessagePreview{
+				ID:         lmID.String,
 				Content:    lmContent.String,
 				Type:       lmType.String,
 				SenderID:   lmSenderID.String,
@@ -1037,6 +1145,9 @@ func (s *Service) ListMessages(ctx context.Context, userID, chatID string, limit
 	defer rows.Close()
 	messages, err := scanMessages(rows)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.hydrateMessagesReactions(ctx, userID, messages); err != nil {
 		return nil, err
 	}
 	if err := s.hydrateMessagesFields(ctx, messages); err != nil {
@@ -1577,10 +1688,30 @@ func (s *Service) PinMessage(ctx context.Context, userID, chatID, messageID stri
 	}
 
 	if s.ws != nil {
-		payload, _ := json.Marshal(map[string]any{"type": "message_pinned", "chatId": chatID, "messageId": messageID})
-		s.ws.BroadcastToChat(chatID, payload, "")
+		pins, err := s.ListPins(ctx, userID, chatID)
+		if err == nil {
+			for _, pin := range pins {
+				if pin.MessageID != messageID {
+					continue
+				}
+				payload, marshalErr := messagePinnedPayload(pin)
+				if marshalErr == nil {
+					s.ws.BroadcastToChat(chatID, payload, "")
+				}
+				break
+			}
+		}
 	}
 	return nil
+}
+
+func messagePinnedPayload(pin Pin) ([]byte, error) {
+	return json.Marshal(map[string]any{
+		"type":      "message_pinned",
+		"chatId":    pin.ChatID,
+		"messageId": pin.MessageID,
+		"pin":       pin,
+	})
 }
 
 func (s *Service) UnpinMessage(ctx context.Context, userID, chatID, messageID string) error {
