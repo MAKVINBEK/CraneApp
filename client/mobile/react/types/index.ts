@@ -7,22 +7,21 @@ export type {
   IRingtone,
   TCallKind,
   TCallRoomType,
-} from "./call.types";
+} from './call.types';
 export type {
   IChatContext,
   IChatResponse,
   IChatsResponse,
-  IGroupChatDto,
   ILastMessageDto,
-  IPrivateChatDto,
-  TChat,
   TChatRole,
-  TChats,
   TChatType,
   IMemberDto,
   IMembersListResponse,
   TMembersList,
-} from "./chat.types";
+  TChatsList,
+  IChatDto,
+  IPendingAttachment
+} from './chat.types';
 export type {
   IMediaDisplayPatch,
   IMediaEncryption,
@@ -44,14 +43,14 @@ export type {
   IReaction,
   IReactionsResponse,
   TReactionsList,
-} from "./message.types";
+} from './message.types';
 export type {
   ISettingsDto,
   IUserDto,
   ISearchUserDto,
   ISearchUsersList,
   ISearchUsersResponse,
-} from "./user.types";
+} from './user.types';
 export type {
   IMessageDeletedEvent,
   IMessagePinEvent,
@@ -77,4 +76,4 @@ export type {
   IPongEvent,
   IReactionUpdatedEvent,
   ITypingEvent,
-} from "./wsEvents.types";
+} from './wsEvents.types';

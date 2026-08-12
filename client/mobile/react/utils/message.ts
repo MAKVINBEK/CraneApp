@@ -1,22 +1,21 @@
-import type { IMessageDto, TMessagesList } from "@/types";
+import type { IMessageDto, IPinnedMessageDto, TMessagesList, TPinnedList } from '@/types';
 
-export const hasMessageMedia = (msg: IMessageDto) =>
-  !!(msg.mediaUrl || msg.mediaUnavailable);
+export const hasMessageMedia = (msg: IMessageDto) => !!(msg.mediaUrl || msg.mediaUnavailable);
 
 export const formatMessageTime = (value: Date | string) => {
-  if (!value) return "";
+  if (!value) return '';
   const date = value instanceof Date ? value : new Date(value);
   return Number.isNaN(date.getTime())
-    ? ""
+    ? ''
     : new Intl.DateTimeFormat(undefined, {
-        hour: "2-digit",
-        minute: "2-digit",
+        hour: '2-digit',
+        minute: '2-digit',
       }).format(date);
 };
 
-export function getMessagePreview(message: IMessageDto) {
-  if (!message) return "";
-  return String(message.content || "").slice(0, 64);
+export function getMessagePreview(message: IMessageDto | null) {
+  if (!message) return '';
+  return String(message.content || '').slice(0, 64);
 }
 
 export function appendUniqueMessage(items: TMessagesList, nextMessage: IMessageDto) {
@@ -24,13 +23,19 @@ export function appendUniqueMessage(items: TMessagesList, nextMessage: IMessageD
   return [...items, nextMessage];
 }
 
-export function updateMessage(items: TMessagesList, messageId: string, patch: Partial<Omit<IMessageDto, "id">>) {
-  return items.map((message) =>
-    message.id === messageId ? { ...message, ...patch } : message,
-  );
+export function updateMessage(
+  items: TMessagesList,
+  messageId: string,
+  patch: Partial<Omit<IMessageDto, 'id'>>
+) {
+  return items.map((message) => (message.id === messageId ? { ...message, ...patch } : message));
 }
 
-export function updatePinnedMessage(items, messageId, patch) {
+export function updatePinnedMessage(
+  items: TPinnedList,
+  messageId: string,
+  patch: Partial<Omit<IPinnedMessageDto, 'id'>>
+) {
   return items.map((item) =>
     item.message.id === messageId
       ? {
@@ -40,13 +45,13 @@ export function updatePinnedMessage(items, messageId, patch) {
             ...patch,
           },
         }
-      : item,
+      : item
   );
 }
 
-export function getMediaMessageType(mimeType = "") {
-  if (mimeType.startsWith("image/")) return "image";
-  if (mimeType.startsWith("video/")) return "video";
-  if (mimeType.startsWith("audio/")) return "audio";
-  return "file";
+export function getMediaMessageType(mimeType = '') {
+  if (mimeType.startsWith('image/')) return 'image';
+  if (mimeType.startsWith('video/')) return 'video';
+  if (mimeType.startsWith('audio/')) return 'audio';
+  return 'file';
 }

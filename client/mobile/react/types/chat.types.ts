@@ -1,8 +1,8 @@
-import type { TMessageType } from "@/types";
+import type { TMediaMessageType, TMessageType } from '@/types';
 
-export type TChatType = "private" | "group";
+export type TChatType = 'private' | 'group';
 
-export type TChatRole = "member" | "admin" | "owner";
+export type TChatRole = 'member' | 'admin' | 'owner';
 
 export interface ILastMessageDto {
   content: string;
@@ -11,14 +11,14 @@ export interface ILastMessageDto {
   senderName: string;
 }
 
-export interface IPrivateChatDto {
+export interface IChatDto {
   id: string;
   type: TChatType;
   title: string;
   description: string;
   avatarUrl: string;
-  peerPublicKey: string;
-  peerId: string;
+  peerPublicKey?: string;
+  peerId?: string;
   ownerId: string;
   role: TChatRole;
   isPinned: boolean;
@@ -32,35 +32,14 @@ export interface IPrivateChatDto {
   lastMessage: ILastMessageDto;
 }
 
-export interface IGroupChatDto {
-  id: string;
-  type: TChatType;
-  title: string;
-  description: string;
-  avatarUrl: string;
-  ownerId: string;
-  role: TChatRole;
-  isPinned: boolean;
-  isArchived: boolean;
-  lastSeenAt: Date;
-  createdAt: Date;
-  updatedAt: Date;
-  memberCount: number;
-  lastMessageAt: Date;
-  unreadCount: number;
-  lastMessage: ILastMessageDto;
-}
-
-export type TChats = (IPrivateChatDto | IGroupChatDto)[];
-
-export type TChat = IPrivateChatDto | IGroupChatDto;
+export type TChatsList = IChatDto[];
 
 export interface IChatResponse {
-  chat: TChat;
+  chat: IChatDto;
 }
 
 export interface IChatsResponse {
-  chats: TChats;
+  chats: TChatsList;
 }
 
 export interface IChatContext {
@@ -85,4 +64,9 @@ export type TMembersList = IMemberDto[];
 
 export interface IMembersListResponse {
   members: TMembersList;
+}
+
+export interface IPendingAttachment {
+  file: File;
+  type: TMediaMessageType;
 }

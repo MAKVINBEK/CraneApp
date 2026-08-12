@@ -1,6 +1,6 @@
-import { services } from "@/services";
-import type { IMessageDto, IPinnedDto, TChat, TMessagesList } from "@/types";
-import { create } from "zustand";
+import { services } from '@/services';
+import type { IChatDto, IMessageDto, IPinnedDto, TMessagesList } from '@/types';
+import { create } from 'zustand';
 
 export interface IActionMenu {
   messageId: string;
@@ -11,7 +11,7 @@ export interface IActionMenu {
 type TTranslations = Record<string, string>;
 
 interface IChatState {
-  chat: TChat | null;
+  chat: IChatDto | null;
   messages: TMessagesList;
   error: string;
   editingMessage: IMessageDto | null;
@@ -27,7 +27,7 @@ interface IChatState {
 type Updater<T> = (updater: T | ((prev: T) => T)) => void;
 
 interface IChatActions {
-  setChat: (chat: TChat | null) => void;
+  setChat: (chat: IChatDto | null) => void;
   setMessages: Updater<TMessagesList>;
   setError: (error: string) => void;
   setEditingMessage: (message: IMessageDto | null) => void;
@@ -39,15 +39,16 @@ interface IChatActions {
   setTranslations: Updater<TTranslations>;
   setActionMenu: (menu: IActionMenu | null) => void;
   resetChatState: () => void;
-  updateChat: (data: Partial<TChat>) => Promise<void>;
+  updateChat: (data: Partial<IChatDto>) => Promise<void>;
+  markAsRead: (messageId: string) => void;
 }
 
 const initialChatState: IChatState = {
   chat: null,
   messages: [],
-  error: "",
+  error: '',
   editingMessage: null,
-  draft: "",
+  draft: '',
   replyToMessage: null,
   selectedMessages: [],
   pinnedMessages: [],
@@ -66,26 +67,24 @@ export const useChatStore = create<InitialState>((set, get) => {
         (state) =>
           ({
             [key]:
-              typeof updater === "function"
-                ? (updater as (prev: IChatState[K]) => IChatState[K])(
-                    state[key],
-                  )
+              typeof updater === 'function'
+                ? (updater as (prev: IChatState[K]) => IChatState[K])(state[key])
                 : updater,
-          }) as Pick<IChatState, K>,
+          }) as Pick<IChatState, K>
       );
 
   return {
     ...initialChatState,
     setChat: (chat) => set({ chat }),
-    setMessages: withUpdater("messages"),
+    setMessages: withUpdater('messages'),
     setError: (error) => set({ error }),
     setEditingMessage: (editingMessage) => set({ editingMessage }),
     setDraft: (draft) => set({ draft }),
     setReplyToMessage: (replyToMessage) => set({ replyToMessage }),
-    setSelectedMessages: withUpdater("selectedMessages"),
-    setPinnedMessages: withUpdater("pinnedMessages"),
+    setSelectedMessages: withUpdater('selectedMessages'),
+    setPinnedMessages: withUpdater('pinnedMessages'),
     setSelectionMode: (selectionMode) => set({ selectionMode }),
-    setTranslations: withUpdater("translations"),
+    setTranslations: withUpdater('translations'),
     setActionMenu: (actionMenu) => set({ actionMenu }),
     resetChatState: () => set(initialChatState),
     updateChat: async (data) => {
@@ -93,6 +92,23 @@ export const useChatStore = create<InitialState>((set, get) => {
       if (!chat) return;
       await services.chatService.updateChat(chat.id, data);
       set({ chat: { ...chat, ...data } });
+    },
+    markAsRead: (messageId: string) => {
+      const messages = get().messages;
+      const messageIndex = messages.findIndex((message) => message.id === messageId);
+
+      if (!messageIndex) return;
+
+      const message = messages[messageIndex];
+      const readMessage = {
+        ...message,
+        isRead: true,
+        status: 'read',
+      };
+
+      messages[messageIndex] = readMessage;
+
+      set({ messages });
     },
   };
 });

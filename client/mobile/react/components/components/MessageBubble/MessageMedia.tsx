@@ -1,46 +1,24 @@
-import React from "react";
-import { useTranslation } from "react-i18next";
-import { formatCallDuration, parseCallContent } from "../../../utils/call";
-import { formatFileSize } from "../../../utils/formatFileSize";
-import { Icon } from "../../ui/Icon";
+import type { IMessageDto } from '@/types';
+import { formatFileSize } from '@/utils';
+import React, { type Dispatch, type SetStateAction } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Icon } from '../../ui/Icon';
 
-export const CallMessageContent = ({ message }) => {
-  const { t } = useTranslation();
-  const duration = formatCallDuration(
-    parseCallContent(message.content).duration,
-  );
-  return (
-    <div className="message-call-content">
-      <div className="message-call-icon" aria-hidden="true">
-        <Icon name="phone" />
-      </div>
-      <div className="message-call-copy">
-        <strong>{t("callEnded", "Звонок завершен")}</strong>
-        {duration ? <span>{duration}</span> : null}
-      </div>
-    </div>
-  );
-};
+interface Props {
+  message: IMessageDto;
+  onOpenImage: Dispatch<SetStateAction<string | null>>;
+}
 
-export const MessageMedia = ({ message, onOpenImage }) => {
+export const MessageMedia = ({ message, onOpenImage }: Props) => {
   const { t } = useTranslation();
-  const {
-    mediaUnavailable,
-    mediaUnavailableReason,
-    mediaUrl,
-    mediaType,
-    type,
-    mediaEncryption,
-  } = message;
+  const { mediaUnavailable, mediaUnavailableReason, mediaUrl, mediaType, type, mediaEncryption } =
+    message;
 
   if (mediaUnavailable) {
     return (
       <div className="message-media-unavailable">
         {mediaUnavailableReason ??
-          t(
-            "mediaUnavailableUnencrypted",
-            "Медиа недоступно: файл не зашифрован",
-          )}
+          t('mediaUnavailableUnencrypted', 'Медиа недоступно: файл не зашифрован')}
       </div>
     );
   }
@@ -49,43 +27,37 @@ export const MessageMedia = ({ message, onOpenImage }) => {
 
   const actualType = mediaType || type;
 
-  if (["image", "gif", "sticker"].includes(actualType)) {
+  if (['image', 'gif', 'sticker'].includes(actualType)) {
     return (
       <button
-        aria-label={t("openImage", "Открыть изображение")}
+        aria-label={t('openImage', 'Открыть изображение')}
         className="message-media-open"
         onClick={() => onOpenImage(mediaUrl)}
         type="button"
       >
-        <img
-          alt=""
-          className={`message-media message-media-${actualType}`}
-          src={mediaUrl}
-        />
+        <img alt="" className={`message-media message-media-${actualType}`} src={mediaUrl} />
       </button>
     );
   }
 
-  if (["video", "audio"].includes(actualType)) {
+  if (['video', 'audio'].includes(actualType)) {
     return React.createElement(actualType, {
-      className: "message-media",
+      className: 'message-media',
       controls: true,
       src: mediaUrl,
     });
   }
-  if (actualType === "voice") {
+  if (actualType === 'voice') {
     return <audio className="message-media" controls src={mediaUrl} />;
   }
 
-  if (actualType === "file") {
+  if (actualType === 'file') {
     return (
-      <a className="message-media-file" download href={mediaUrl}>
-        <Icon name="media-file" />
-        <div className="message-media-file__content">
-          <span className="message-media-file__title">
-            {mediaEncryption.fileName}
-          </span>
-          <span className="message-media-file__size">
+      <a className="message-media-file flex gap-x-1" download href={mediaUrl}>
+        <Icon name="media-file" className='size-9' />
+        <div className="flex flex-col">
+          <span className="text-sm">{mediaEncryption.fileName}</span>
+          <span className="text-xs text-[rgba(255,255,255,0.58)]">
             {formatFileSize(mediaEncryption.sizeBytes)}
           </span>
         </div>

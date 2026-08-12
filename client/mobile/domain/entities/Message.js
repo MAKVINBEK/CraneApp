@@ -114,7 +114,7 @@ class Message {
     };
   }
 
-  markAsRead() {
+  w() {
     this.isRead = true;
     this.status = 'read';
     return this;

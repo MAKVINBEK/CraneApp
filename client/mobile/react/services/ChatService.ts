@@ -1,11 +1,11 @@
 import { API_ENDPOINTS, ApiClient } from "@/api";
 import { getRawChat, invalidateChat } from "@/core";
 import type {
+  IChatDto,
   IChatResponse,
   IChatsResponse,
   IMembersListResponse,
   ISearchUsersResponse,
-  TChat,
   TChatRole,
   TChatType,
 } from "@/types";
@@ -82,7 +82,7 @@ export class ChatService {
   async updateChat(
     chatId: string,
     data: { title?: string; description?: string },
-  ): Promise<TChat> {
+  ): Promise<IChatDto> {
     const response = await this.apiClient.put<IChatResponse>(
       API_ENDPOINTS.CHAT_BY_ID(chatId),
       data,

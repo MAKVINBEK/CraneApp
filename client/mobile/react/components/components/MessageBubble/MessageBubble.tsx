@@ -3,16 +3,17 @@ import { useMessageLongPress } from "@/hooks";
 import { useChatStore } from "@/store";
 import type { IMessageDto } from "@/types";
 import { formatMessageTime, hasMessageMedia } from "@/utils";
-import { memo } from "react";
+import { memo, type Dispatch, type SetStateAction } from "react";
 import { useTranslation } from "react-i18next";
 import { MessageContentRenderer } from "./MessageContent";
-import { CallMessageContent, MessageMedia } from "./MessageMedia";
+import { MessageMedia } from "./MessageMedia";
+import { CallMessageContent } from "./CallMessageContent";
 
 interface Props {
   currentUserId: string;
   message: IMessageDto;
   translations: Record<string, string>;
-  onOpenImage: (url: string) => void;
+  onOpenImage: Dispatch<SetStateAction<string | null>>
   onSelection: (message: IMessageDto) => void;
 }
 

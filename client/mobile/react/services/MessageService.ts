@@ -17,8 +17,9 @@ import type {
   TMessageType,
   TPinnedList,
 } from "@/types";
-import type { CryptoService } from "@/services";
+import type { CryptoService } from "./CryptoService";
 import { STORAGE_KEYS, WS_EVENTS } from "@/consts";
+import { useChatStore } from "@/store";
 
 const MEDIA_MESSAGE_TYPES = new Set([
   "image",
@@ -116,7 +117,7 @@ export class MessageService {
       );
     }
 
-    const response = await this.apiClient.post<IMessageDto>(
+    const response = await this.apiClient.post<IMessageResponse>(
       API_ENDPOINTS.MESSAGE_SEND(chatId),
       {
         content: encryptedContent,
@@ -125,7 +126,7 @@ export class MessageService {
       },
     );
 
-    const messageObj = response.data;
+    const messageObj = response.data.message;
     const message: IMessageDto = { ...messageObj, content: content.trim() };
 
     this.addMessageToCache(chatId, message);
@@ -423,7 +424,7 @@ export class MessageService {
 
     this.messages.get(chatId)?.forEach((message) => {
       if (messageIds.includes(message.id)) {
-        message.markAsRead();
+        useChatStore.getState().markAsRead(message.id)
       }
     });
 

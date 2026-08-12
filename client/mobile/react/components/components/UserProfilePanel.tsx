@@ -1,18 +1,30 @@
+import { useCall, useProfileEdit } from "@/hooks";
+import type { IProfileState } from "@/pages";
+import { useProfileStore } from "@/store";
+import type { TCallKind } from "@/types";
+import { getChatSubtitle } from "@/utils";
 import { memo, useMemo } from "react";
-import { STORAGE_KEYS } from "../../consts/storageKeys";
-import { useCall } from "../../hooks/useCall";
-import { useLocalStorage } from "../../hooks/useLocalStorage";
-import { useProfileEdit } from "../../hooks/useProfileEdit";
-import { getChatSubtitle } from "../../utils/getChatSubtitle";
+import { useTranslation } from "react-i18next";
 import { Icon } from "../ui/Icon";
 import { Identicon } from "../ui/Identicon";
-import { useTranslation } from "react-i18next";
+
+interface Props {
+  profileState: IProfileState,
+  onClose: () => void
+}
+
+interface IField {
+  firstName: string
+  bio: string
+}
+
+const fields: (keyof IField)[] = ["firstName", "bio"]
 
 export const UserProfilePanel = memo(
-  ({ profileState, onClose, stopPropagation = false }) => {
+  ({ profileState, onClose}: Props) => {
     const { t } = useTranslation();
     const { initiateCall } = useCall();
-    const [currentUser] = useLocalStorage(STORAGE_KEYS.USER, null);
+    const currentUser = useProfileStore(state => state.user)
 
     const baseUser = profileState.user;
 
@@ -20,13 +32,14 @@ export const UserProfilePanel = memo(
       return (
         [baseUser?.firstName, baseUser?.lastName].filter(Boolean).join(" ") ||
         baseUser?.username ||
-        profileState.chat?.name ||
         profileState.chat?.title ||
         t("user", "Пользователь")
       );
     }, [baseUser, profileState.chat, t]);
 
-    const edit = useProfileEdit(baseUser, displayName, t);
+    if (!currentUser) return;
+
+    const edit = useProfileEdit(baseUser, displayName);
     const profileUser = edit.editableUser || baseUser;
 
     const isOwnProfile = useMemo(() => {
@@ -54,10 +67,10 @@ export const UserProfilePanel = memo(
       profileUser?.avatarUrl || profileState.chat?.avatarUrl || "";
     const canCall = !!profileState.chat?.id;
 
-    const copyText = (val) =>
+    const copyText = (val: string) =>
       val && navigator?.clipboard?.writeText(val).catch(() => {});
 
-    const startCall = (type) => () => {
+    const startCall = (type: TCallKind) => () => {
       if (canCall && profileState.chat) {
         initiateCall(
           profileState.chat.id,
@@ -94,7 +107,6 @@ export const UserProfilePanel = memo(
       <section
         aria-label={t("profile", "Профиль")}
         className="user-profile-card"
-        onClick={stopPropagation ? (e) => e.stopPropagation() : undefined}
       >
         <header className="user-profile-header">
           <button className="user-profile-back" onClick={onClose} type="button">
@@ -103,7 +115,6 @@ export const UserProfilePanel = memo(
           </button>
           <strong>{t("information", "Информация")}</strong>
           {isOwnProfile ? (
-            // ИСПРАВЛЕНО: Прямой вызов функций из хука edit
             <button
               className="user-profile-edit"
               onClick={
@@ -171,7 +182,7 @@ export const UserProfilePanel = memo(
                 className="user-profile-edit-form"
                 onSubmit={edit.saveProfileEdit}
               >
-                {["firstName", "bio"].map((field) => {
+                {fields.map((field) => {
                   const isBio = field === "bio";
                   return (
                     <label key={field}>
