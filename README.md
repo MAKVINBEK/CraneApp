@@ -1,5 +1,7 @@
 # CraneApp
 
+[![Go Tests](https://github.com/mikle89609199136-ui/CraneApp/actions/workflows/go-tests.yml/badge.svg)](https://github.com/mikle89609199136-ui/CraneApp/actions/workflows/go-tests.yml)
+
 CraneApp is a secure messenger project with chats, groups, media sharing,
 WebSocket realtime updates, WebRTC calls, and an official support bot.
 
