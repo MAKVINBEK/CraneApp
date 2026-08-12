@@ -2027,7 +2027,13 @@ func (s *Service) TransferOwnership(ctx context.Context, actorID, chatID, target
 		_ = tx.Rollback()
 		return err
 	}
-	if n, _ := res.RowsAffected(); n != 1 {
+
+	n, err := res.RowsAffected()
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if n != 1 {
 		_ = tx.Rollback()
 		return ErrNotFound
 	}
@@ -2040,7 +2046,13 @@ func (s *Service) TransferOwnership(ctx context.Context, actorID, chatID, target
 		_ = tx.Rollback()
 		return err
 	}
-	if n, _ := res.RowsAffected(); n != 1 {
+
+	n, err = res.RowsAffected()
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if n != 1 {
 		_ = tx.Rollback()
 		return ErrNotMember
 	}
@@ -2053,9 +2065,16 @@ func (s *Service) TransferOwnership(ctx context.Context, actorID, chatID, target
 		_ = tx.Rollback()
 		return err
 	}
-	if n, _ := res.RowsAffected(); n != 1 {
+
+	n, err = res.RowsAffected()
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if n != 1 {
 		_ = tx.Rollback()
 		return ErrOwnershipConflict
 	}
+
 	return tx.Commit()
 }
