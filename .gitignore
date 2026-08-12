@@ -63,4 +63,5 @@ AGENTS.md
 .serena
 .agents
 .kimi-code
-docs
+docs/*
+!docs/SETUP.md

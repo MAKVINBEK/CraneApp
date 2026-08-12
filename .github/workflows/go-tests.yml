@@ -1,0 +1,27 @@
+name: Go Tests
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend-v2/go.mod
+          cache-dependency-path: backend-v2/go.sum
+
+      - name: Run Go tests
+        run: go test ./...
+        working-directory: backend-v2
