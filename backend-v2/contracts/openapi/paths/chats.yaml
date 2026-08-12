@@ -21,9 +21,9 @@ x-secure: &secure [{ bearerAuth: [] }]
 /chats/{chatId}/bans:
   get: { tags: [Chats], summary: List chat bans, operationId: listChatBans, security: *secure, parameters: [*chatId], responses: { '200': { description: Bans } } }
 /chats/{chatId}/members/{userId}:
-  delete: { tags: [Chats], summary: Remove a chat member, operationId: removeChatMember, security: *secure, parameters: [*chatId, *userId], responses: { '200': { description: Removed } } }
+  delete: { tags: [Chats], summary: Remove a chat member, operationId: removeChatMember, security: *secure, parameters: [*chatId, *userId], responses: { '200': { description: Removed }, '403': { $ref: '../components/responses.yaml#/Error' }, '404': { $ref: '../components/responses.yaml#/Error' }, '409': { $ref: '../components/responses.yaml#/Error' } } }
 /chats/{chatId}/members/{userId}/role:
-  post: { tags: [Chats], summary: Set a member role, operationId: setChatMemberRole, security: *secure, parameters: [*chatId, *userId], requestBody: { required: true, content: { application/json: { schema: { type: object, required: [role], properties: { role: { type: string, enum: [owner, admin, member] } } } } } }, responses: { '200': { description: Role updated } } }
+  post: { tags: [Chats], summary: Set a member role, operationId: setChatMemberRole, security: *secure, parameters: [*chatId, *userId], requestBody: { required: true, content: { application/json: { schema: { type: object, required: [role], properties: { role: { type: string, enum: [admin, member] } } } } } }, responses: { '200': { description: Role updated or already set }, '400': { $ref: '../components/responses.yaml#/Error' }, '403': { $ref: '../components/responses.yaml#/Error' }, '404': { $ref: '../components/responses.yaml#/Error' }, '409': { $ref: '../components/responses.yaml#/Error' } } }
 /chats/{chatId}/members/{userId}/ban:
   post: { tags: [Chats], summary: Ban a member, operationId: banChatMember, security: *secure, parameters: [*chatId, *userId], requestBody: { content: { application/json: { schema: { type: object, properties: { reason: { type: string } } } } } }, responses: { '200': { description: Banned } } }
 /chats/{chatId}/members/{userId}/unban:
