@@ -9,11 +9,13 @@ import { useIsMobile, useRealtimeSocket } from "@/hooks";
 import { services } from "@/services";
 import { useChatsStore, useProfileStore } from "@/store";
 import type {
-  TChat,
+  IChatDto,
+  ITypingEvent,
 } from "@/types";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, Outlet, useParams } from "react-router-dom";
+import type { IProfileState } from "..";
 
 export function ChatsPage() {
   const chats = useChatsStore((state) => state.chats);
@@ -26,13 +28,14 @@ export function ChatsPage() {
   const { chatId } = useParams();
   const isMobile = useIsMobile();
   const [sidebarWidth, setSidebarWidth] = useState(360);
-  const [profileWidth, setProfileWidth] = useState(null);
-  const [profileState, setProfileState] = useState({
+  const [profileWidth, setProfileWidth] = useState<number | null>(null);
+  const [profileState, setProfileState] = useState<IProfileState>({
     isOpen: false,
     isLoading: false,
     error: "",
     user: null,
     chat: null,
+    messages: []
   });
   const [profileCloseToken, setProfileCloseToken] = useState(0);
   const { t } = useTranslation();
@@ -173,14 +176,14 @@ export function ChatsPage() {
   }, [currentUser?.id, eventBus]);
 
   // --- новое: ресайз, перенесён из ChatLayout без изменений ---
-  function startResize(kind, event) {
+  function startResize(kind: string, event: PointerEvent) {
     event.preventDefault();
     const startX = event.clientX;
     const startSidebarWidth = sidebarWidth;
     const startProfileWidth =
       profileWidth || Math.round(window.innerWidth * 0.25);
 
-    function handleMove(moveEvent) {
+    function handleMove(moveEvent: PointerEvent) {
       if (kind === "sidebar") {
         const nextWidth = Math.min(
           Math.max(startSidebarWidth + moveEvent.clientX - startX, 280),
@@ -219,7 +222,7 @@ export function ChatsPage() {
         </Link>
       </section>
 
-      <section className="chats-list" aria-busy={isLoading}>
+      <section className="chats-list styled-scrollbar" aria-busy={isLoading}>
         {isLoading ? <ChatsSkeleton /> : null}
         {!isLoading && error && (
           <ErrorChatListPlaceholder
@@ -268,7 +271,7 @@ export function ChatsPage() {
       <div
         aria-label="Изменить ширину списка чатов"
         className="app-pane-resizer app-pane-resizer-sidebar"
-        onPointerDown={(event) => startResize("sidebar", event)}
+        onPointerDown={(event) => startResize("sidebar", event.nativeEvent)}
         role="separator"
       />
 
@@ -287,7 +290,7 @@ export function ChatsPage() {
           <div
             aria-label="Изменить ширину профиля"
             className="app-pane-resizer app-pane-resizer-profile"
-            onPointerDown={(event) => startResize("profile", event)}
+            onPointerDown={(event) => startResize("profile", event.nativeEvent)}
             role="separator"
           />
           <div
@@ -302,6 +305,7 @@ export function ChatsPage() {
                   error: "",
                   user: null,
                   chat: null,
+                  messages: []
                 });
                 setProfileCloseToken((value) => value + 1);
               }}
@@ -314,7 +318,7 @@ export function ChatsPage() {
   );
 }
 
-async function decryptChatPreview(chat: TChat): Promise<TChat> {
+async function decryptChatPreview(chat: IChatDto): Promise<IChatDto> {
   if (!chat?.id || !chat.lastMessage || typeof chat.lastMessage === "string") {
     return chat;
   }

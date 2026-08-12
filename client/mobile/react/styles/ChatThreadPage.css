@@ -287,6 +287,31 @@
 	display: none;
 }
 
+.pinned-thread-back {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		color: #ffffff;
+		text-decoration: none;
+		
+		background: linear-gradient(
+			180deg, 
+			rgba(14, 14, 14, 0.86) 0%, 
+			rgba(134, 133, 133, 0.15) 100%
+		);
+		backdrop-filter: blur(12px);
+		-webkit-backdrop-filter: blur(12px);
+		
+		border-radius: 50%;
+		border: 1px solid rgba(255, 255, 255, 0.18);
+		box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25), 
+		            inset 0 1px 0 rgba(255, 255, 255, 0.2);
+		
+		flex-shrink: 0;
+		transition: transform 0.15s, border-color 0.2s, background-color 0.2s;
+		-webkit-tap-highlight-color: transparent;
+}
+
 @media (max-width: 768px) {
 	.thread-back {
 		display: inline-flex;

@@ -3,11 +3,11 @@ import { cn } from "@/utils";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { Identicon } from "@/components/ui";
-import type { TChat } from "@/types";
+import type { IChatDto } from "@/types";
 import type { TFunction } from "i18next";
 
 interface Props {
-	chat: TChat
+	chat: IChatDto
 }
 
 export function ChatListItem({ chat }: Props) {
@@ -64,7 +64,7 @@ export function ChatListItem({ chat }: Props) {
 	);
 }
 
-function getLastMessageText(chat: TChat, t: TFunction) {
+function getLastMessageText(chat: IChatDto, t: TFunction) {
   if (typeof chat.lastMessage === "string")
     return chat.lastMessage || t("noMessages", "Нет сообщений");
   if (chat.lastMessage?.content) return chat.lastMessage.content;

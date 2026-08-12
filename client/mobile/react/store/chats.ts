@@ -1,13 +1,13 @@
-import { create } from "zustand";
-import type { TChats } from "@/types";
 import { services } from "@/services";
+import type { TChatsList } from "@/types";
+import { create } from "zustand";
 
 interface IChatsState {
-  chats: TChats;
+  chats: TChatsList;
 }
 
 interface IChatsActions {
-  setChats: (chats: TChats | ((prev: TChats) => TChats)) => void;
+  setChats: (chats: TChatsList | ((prev: TChatsList) => TChatsList)) => void;
   deleteChat: (chatId: string) => Promise<IDeleteChatResponse>;
 }
 
