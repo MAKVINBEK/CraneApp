@@ -20,7 +20,7 @@ export type {
   TMembersList,
   TChatsList,
   IChatDto,
-  IPendingAttachment
+  IPendingAttachment,
 } from './chat.types';
 export type {
   IMediaDisplayPatch,

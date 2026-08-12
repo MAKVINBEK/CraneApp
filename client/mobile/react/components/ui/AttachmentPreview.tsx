@@ -17,7 +17,9 @@ export const AttachmentPreview = ({ attachment, onRemove }: Props) => {
       <div className="flex flex-start items-center gap-x-1">
         <span aria-hidden="true">{getAttachmentIcon(attachment.type)}</span>
         <span title={attachment.file.name}>{attachment.file.name}</span>
-        <span className='flex items-center text-xs text-[rgba(255,255,255,0.5)] text-nowrap'>{formatFileSize(attachment.file.size)}</span>
+        <span className="flex items-center text-xs text-[rgba(255,255,255,0.5)] text-nowrap">
+          {formatFileSize(attachment.file.size)}
+        </span>
       </div>
       <button
         aria-label={t('removeAttachment', 'Убрать вложение')}

@@ -2,25 +2,22 @@ import {
   EmptyChatListPlaceholder,
   ErrorChatListPlaceholder,
   UserProfilePanel,
-} from "@/components/components";
-import { ChatListItem, ChatsSkeleton } from "@/components/ui";
-import { WS_EVENTS } from "@/consts";
-import { useIsMobile, useRealtimeSocket } from "@/hooks";
-import { services } from "@/services";
-import { useChatsStore, useProfileStore } from "@/store";
-import type {
-  IChatDto,
-  ITypingEvent,
-} from "@/types";
-import { useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { Link, Outlet, useParams } from "react-router-dom";
-import type { IProfileState } from "..";
+} from '@/components/components';
+import { ChatListItem, ChatsSkeleton } from '@/components/ui';
+import { WS_EVENTS } from '@/consts';
+import { useIsMobile, useRealtimeSocket } from '@/hooks';
+import { services } from '@/services';
+import { useChatsStore, useProfileStore } from '@/store';
+import type { IChatDto, ITypingEvent } from '@/types';
+import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Link, Outlet, useParams } from 'react-router-dom';
+import type { IProfileState } from '..';
 
 export function ChatsPage() {
   const chats = useChatsStore((state) => state.chats);
   const setChats = useChatsStore((state) => state.setChats);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const currentUser = useProfileStore((state) => state.user);
   const typingTimeoutsRef = useRef(new Map());
@@ -32,10 +29,10 @@ export function ChatsPage() {
   const [profileState, setProfileState] = useState<IProfileState>({
     isOpen: false,
     isLoading: false,
-    error: "",
+    error: '',
     user: null,
     chat: null,
-    messages: []
+    messages: [],
   });
   const [profileCloseToken, setProfileCloseToken] = useState(0);
   const { t } = useTranslation();
@@ -45,19 +42,15 @@ export function ChatsPage() {
 
     services.chatService
       .getChats()
-      .then((items) =>
-        Promise.all(items.map((chat) => decryptChatPreview(chat))),
-      )
+      .then((items) => Promise.all(items.map((chat) => decryptChatPreview(chat))))
       .then((items) => {
         if (!isMounted) return;
         setChats(items);
-        setError("");
+        setError('');
       })
       .catch((err) => {
         if (!isMounted) return;
-        setError(
-          err.message || t("chatsLoadError", "Не удалось загрузить чаты"),
-        );
+        setError(err.message || t('chatsLoadError', 'Не удалось загрузить чаты'));
       })
       .finally(() => {
         if (isMounted) setIsLoading(false);
@@ -69,7 +62,7 @@ export function ChatsPage() {
   }, []);
   useEffect(() => {
     const updatePreview = async (payload) => {
-      const incomingMessage = payload?.message
+      const incomingMessage = payload?.message;
       const chatId = payload?.chatId ?? incomingMessage?.chatId;
       if (!chatId || !incomingMessage) return;
 
@@ -90,17 +83,11 @@ export function ChatsPage() {
           typingUserId: null,
           lastMessage: previewChat.lastMessage,
           lastMessageAt:
-            incomingMessage.createdAt ||
-            incomingMessage.timestamp ||
-            new Date().toISOString(),
+            incomingMessage.createdAt || incomingMessage.timestamp || new Date().toISOString(),
         };
         window.clearTimeout(typingTimeoutsRef.current.get(chatId));
         typingTimeoutsRef.current.delete(chatId);
-        const nextItems = [
-          nextChat,
-          ...items.slice(0, index),
-          ...items.slice(index + 1),
-        ];
+        const nextItems = [nextChat, ...items.slice(0, index), ...items.slice(index + 1)];
         return nextItems;
       });
     };
@@ -116,11 +103,10 @@ export function ChatsPage() {
             ? {
                 ...chat,
                 typingUserId: userId,
-                peerIsOnline:
-                  chat.type === "private" ? true : chat.peerIsOnline,
+                peerIsOnline: chat.type === 'private' ? true : chat.peerIsOnline,
               }
-            : chat,
-        ),
+            : chat
+        )
       );
 
       window.clearTimeout(typingTimeoutsRef.current.get(chatId));
@@ -128,29 +114,18 @@ export function ChatsPage() {
         chatId,
         window.setTimeout(() => {
           setChats((items) =>
-            items.map((chat) =>
-              chat.id === chatId ? { ...chat, typingUserId: null } : chat,
-            ),
+            items.map((chat) => (chat.id === chatId ? { ...chat, typingUserId: null } : chat))
           );
           typingTimeoutsRef.current.delete(chatId);
-        }, 3000),
+        }, 3000)
       );
     };
 
-    const unsubscribeNewMessage = eventBus.on(
-      WS_EVENTS.MESSAGE.NEW,
-      updatePreview,
-    );
+    const unsubscribeNewMessage = eventBus.on(WS_EVENTS.MESSAGE.NEW, updatePreview);
     // const unsubscribeEdited = eventBus.on("message:edited", updatePreview);
-    const unsubscribeMessageEdited = eventBus.on(
-      WS_EVENTS.MESSAGE.EDITED,
-      updatePreview,
-    );
+    const unsubscribeMessageEdited = eventBus.on(WS_EVENTS.MESSAGE.EDITED, updatePreview);
     // const unsubscribeSent = eventBus.on("message:sent", updatePreview);
-    const unsubscribeUserTyping = eventBus.on(
-      WS_EVENTS.USER.TYPING,
-      handleTyping,
-    );
+    const unsubscribeUserTyping = eventBus.on(WS_EVENTS.USER.TYPING, handleTyping);
     // const unsubscribeUserTyping = eventBus.on("user_typing", handleTyping);
     // const unsubscribeMessagesRead = eventBus.on(WS_EVENTS.MESSAGE.MESSAGE_READ, ({ chatId }) => {
     //   setChats((items) =>
@@ -168,9 +143,7 @@ export function ChatsPage() {
       unsubscribeUserTyping();
       // unsubscribeUserTyping();
       // unsubscribeMessagesRead();
-      typingTimeoutsRef.current.forEach((timeoutId) =>
-        window.clearTimeout(timeoutId),
-      );
+      typingTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
       typingTimeoutsRef.current.clear();
     };
   }, [currentUser?.id, eventBus]);
@@ -180,32 +153,31 @@ export function ChatsPage() {
     event.preventDefault();
     const startX = event.clientX;
     const startSidebarWidth = sidebarWidth;
-    const startProfileWidth =
-      profileWidth || Math.round(window.innerWidth * 0.25);
+    const startProfileWidth = profileWidth || Math.round(window.innerWidth * 0.25);
 
     function handleMove(moveEvent: PointerEvent) {
-      if (kind === "sidebar") {
+      if (kind === 'sidebar') {
         const nextWidth = Math.min(
           Math.max(startSidebarWidth + moveEvent.clientX - startX, 280),
-          520,
+          520
         );
         setSidebarWidth(nextWidth);
       } else {
         const nextWidth = Math.min(
           Math.max(startProfileWidth - (moveEvent.clientX - startX), 300),
-          560,
+          560
         );
         setProfileWidth(nextWidth);
       }
     }
 
     function handleUp() {
-      window.removeEventListener("pointermove", handleMove);
-      window.removeEventListener("pointerup", handleUp);
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
     }
 
-    window.addEventListener("pointermove", handleMove);
-    window.addEventListener("pointerup", handleUp);
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
   }
 
   const listContent = (
@@ -214,28 +186,19 @@ export function ChatsPage() {
         <Link
           className="chats-search"
           to="/contacts"
-          aria-label={t("search", "Поиск чатов и людей...")}
+          aria-label={t('search', 'Поиск чатов и людей...')}
         >
-          <span className="chats-search-placeholder">
-            {t("search", "Поиск чатов и людей...")}
-          </span>
+          <span className="chats-search-placeholder">{t('search', 'Поиск чатов и людей...')}</span>
         </Link>
       </section>
 
       <section className="chats-list styled-scrollbar" aria-busy={isLoading}>
         {isLoading ? <ChatsSkeleton /> : null}
         {!isLoading && error && (
-          <ErrorChatListPlaceholder
-            message={error}
-            onRetry={() => window.location.reload()}
-          />
+          <ErrorChatListPlaceholder message={error} onRetry={() => window.location.reload()} />
         )}
-        {!isLoading && !error && chats.length === 0 && (
-          <EmptyChatListPlaceholder />
-        )}
-        {!isLoading &&
-          !error &&
-          chats.map((chat) => <ChatListItem chat={chat} key={chat.id} />)}
+        {!isLoading && !error && chats.length === 0 && <EmptyChatListPlaceholder />}
+        {!isLoading && !error && chats.map((chat) => <ChatListItem chat={chat} key={chat.id} />)}
       </section>
     </>
   );
@@ -250,7 +213,7 @@ export function ChatsPage() {
           context={{
             onProfileStateChange: setProfileState,
             profileCloseToken,
-            profileMode: "modal",
+            profileMode: 'modal',
           }}
         />
       );
@@ -261,9 +224,7 @@ export function ChatsPage() {
   // Десктоп: список слева (ресайзабельный) + Outlet справа (тред или заглушка) +
   // опциональная панель профиля, которую открывает сам ChatThreadPage через context.
   return (
-    <div
-      className={`chat-workspace ${profileState.isOpen ? "has-profile" : ""}`}
-    >
+    <div className={`chat-workspace ${profileState.isOpen ? 'has-profile' : ''}`}>
       <div className="app-sidebar-pane" style={{ flexBasis: sidebarWidth }}>
         <main className="chats-page">{listContent}</main>
       </div>
@@ -271,7 +232,7 @@ export function ChatsPage() {
       <div
         aria-label="Изменить ширину списка чатов"
         className="app-pane-resizer app-pane-resizer-sidebar"
-        onPointerDown={(event) => startResize("sidebar", event.nativeEvent)}
+        onPointerDown={(event) => startResize('sidebar', event.nativeEvent)}
         role="separator"
       />
 
@@ -280,7 +241,7 @@ export function ChatsPage() {
           context={{
             onProfileStateChange: setProfileState,
             profileCloseToken,
-            profileMode: "panel",
+            profileMode: 'panel',
           }}
         />
       </div>
@@ -290,7 +251,7 @@ export function ChatsPage() {
           <div
             aria-label="Изменить ширину профиля"
             className="app-pane-resizer app-pane-resizer-profile"
-            onPointerDown={(event) => startResize("profile", event.nativeEvent)}
+            onPointerDown={(event) => startResize('profile', event.nativeEvent)}
             role="separator"
           />
           <div
@@ -302,10 +263,10 @@ export function ChatsPage() {
                 setProfileState({
                   isOpen: false,
                   isLoading: false,
-                  error: "",
+                  error: '',
                   user: null,
                   chat: null,
-                  messages: []
+                  messages: [],
                 });
                 setProfileCloseToken((value) => value + 1);
               }}
@@ -319,11 +280,11 @@ export function ChatsPage() {
 }
 
 async function decryptChatPreview(chat: IChatDto): Promise<IChatDto> {
-  if (!chat?.id || !chat.lastMessage || typeof chat.lastMessage === "string") {
+  if (!chat?.id || !chat.lastMessage || typeof chat.lastMessage === 'string') {
     return chat;
   }
 
-  if (chat.lastMessage.type === "call") {
+  if (chat.lastMessage.type === 'call') {
     return {
       ...chat,
       lastMessage: {
@@ -336,20 +297,20 @@ async function decryptChatPreview(chat: IChatDto): Promise<IChatDto> {
   try {
     const message = await services.messageService.processLastMessageForDisplay(
       chat.id,
-      chat.lastMessage,
+      chat.lastMessage
     );
     return {
       ...chat,
       lastMessage: message,
     };
   } catch (error) {
-    console.warn("Failed to decrypt chat preview", error);
+    console.warn('Failed to decrypt chat preview', error);
     return chat;
   }
 }
 
 function formatCallPreview(content: string | null) {
-  if (!content || typeof content !== "string") return "Звонок завершен";
+  if (!content || typeof content !== 'string') return 'Звонок завершен';
   try {
     const parsed = JSON.parse(content);
     const duration = Number(parsed?.duration) || 0;
@@ -357,7 +318,7 @@ function formatCallPreview(content: string | null) {
       return `Звонок завершен · ${formatCallDuration(duration)}`;
     }
   } catch {}
-  return "Звонок завершен";
+  return 'Звонок завершен';
 }
 
 function formatCallDuration(seconds: number) {
@@ -365,5 +326,5 @@ function formatCallDuration(seconds: number) {
   const minutes = Math.floor(total / 60);
   const rest = total % 60;
   if (!minutes) return `${rest} сек`;
-  return `${minutes}:${String(rest).padStart(2, "0")}`;
+  return `${minutes}:${String(rest).padStart(2, '0')}`;
 }

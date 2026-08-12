@@ -471,6 +471,18 @@ func respondSuccess(w http.ResponseWriter, r *http.Request, err error) {
 		httpx.ErrorJSON(w, r, http.StatusForbidden, "access_denied", "access denied")
 		return
 	}
+	if errors.Is(err, ErrInvalidChatType) {
+		httpx.ErrorJSON(w, r, http.StatusBadRequest, "invalid_chat_type", "invalid chat type")
+		return
+	}
+	if errors.Is(err, ErrMemberNotFound) {
+		httpx.ErrorJSON(w, r, http.StatusNotFound, "member_not_found", "member not found")
+		return
+	}
+	if errors.Is(err, ErrStateUnchanged) {
+		httpx.ErrorJSON(w, r, http.StatusConflict, "state_not_changed", "state was not changed")
+		return
+	}
 	if errors.Is(err, ErrNotFound) {
 		httpx.ErrorJSON(w, r, http.StatusNotFound, "not_found", "resource not found")
 		return

@@ -8,7 +8,13 @@ import { WebSocketClient } from '@/services';
 import { useChatStore } from '@/store';
 import type { IPendingAttachment } from '@/types';
 import { cn } from '@/utils';
-import { useRef, type ChangeEvent, type Dispatch, type RefObject, type SetStateAction } from 'react';
+import {
+  useRef,
+  type ChangeEvent,
+  type Dispatch,
+  type RefObject,
+  type SetStateAction,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   AttachmentControl,
@@ -43,7 +49,7 @@ export const ChatThreadComposer = ({
   const draft = useChatStore((state) => state.draft);
   const setDraft = useChatStore((state) => state.setDraft);
 
-	const formRef = useRef<HTMLFormElement | null>(null);
+  const formRef = useRef<HTMLFormElement | null>(null);
 
   const sendTyping = useTypingIndicator();
   const { cancelComposerMode } = useComposerShortcuts(draftRef, formRef);

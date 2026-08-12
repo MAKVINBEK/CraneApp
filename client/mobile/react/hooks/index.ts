@@ -14,8 +14,7 @@ export { useProfileEdit } from './useProfileEdit';
 export {
   disconnectRealtimeSocket,
   resetRealtimeSocketForTests,
-  useRealtimeSocket
+  useRealtimeSocket,
 } from './useRealtimeSocket';
 export { useToasts } from './useToasts';
 export { useTypingIndicator } from './useTypingIndicator';
-

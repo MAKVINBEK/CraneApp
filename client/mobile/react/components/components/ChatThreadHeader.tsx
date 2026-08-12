@@ -11,7 +11,7 @@ import { Identicon } from '../ui';
 interface Props {
   typingUserId?: string | null;
   setIsGroupInfoOpen?: Dispatch<SetStateAction<boolean>>;
-  profileModal: IProfileModal
+  profileModal: IProfileModal;
   setProfileModal?: Dispatch<SetStateAction<IProfileModal>>;
   locationPage?: 'pinned-messages' | 'chat-thread';
   onClosePinnedMessagePage?: () => void;

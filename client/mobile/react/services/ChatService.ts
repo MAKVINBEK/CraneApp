@@ -1,5 +1,5 @@
-import { API_ENDPOINTS, ApiClient } from "@/api";
-import { getRawChat, invalidateChat } from "@/core";
+import { API_ENDPOINTS, ApiClient } from '@/api';
+import { getRawChat, invalidateChat } from '@/core';
 import type {
   IChatDto,
   IChatResponse,
@@ -8,7 +8,7 @@ import type {
   ISearchUsersResponse,
   TChatRole,
   TChatType,
-} from "@/types";
+} from '@/types';
 
 export class ChatService {
   private apiClient: ApiClient;
@@ -17,9 +17,7 @@ export class ChatService {
   }
 
   async getChats() {
-    const response = await this.apiClient.get<IChatsResponse>(
-      API_ENDPOINTS.CHATS,
-    );
+    const response = await this.apiClient.get<IChatsResponse>(API_ENDPOINTS.CHATS);
 
     return response.data.chats;
   }
@@ -29,8 +27,8 @@ export class ChatService {
     return raw;
   }
 
-  async createChat(type: TChatType, participants: string[], title = "") {
-    if (type === "private") {
+  async createChat(type: TChatType, participants: string[], title = '') {
+    if (type === 'private') {
       return this.apiClient
         .post(API_ENDPOINTS.CHAT_PRIVATE, { userId: participants[0] })
         .then((response) => response.data);
@@ -43,7 +41,7 @@ export class ChatService {
 
   async createGroup({
     title,
-    description = "",
+    description = '',
     members = [],
   }: {
     title: string;
@@ -81,29 +79,24 @@ export class ChatService {
 
   async updateChat(
     chatId: string,
-    data: { title?: string; description?: string },
+    data: { title?: string; description?: string }
   ): Promise<IChatDto> {
     const response = await this.apiClient.put<IChatResponse>(
       API_ENDPOINTS.CHAT_BY_ID(chatId),
-      data,
+      data
     );
     invalidateChat(chatId);
     return response.data.chat;
   }
 
   async deleteChat<T>(chatId: string): Promise<T> {
-    const response = await this.apiClient.delete<T>(
-      API_ENDPOINTS.CHAT_BY_ID(chatId),
-    );
+    const response = await this.apiClient.delete<T>(API_ENDPOINTS.CHAT_BY_ID(chatId));
     invalidateChat(chatId);
     return response.data;
   }
 
   async muteChat(chatId: string, duration: number) {
-    const response = await this.apiClient.post(
-      API_ENDPOINTS.CHAT_MUTE(chatId),
-      { duration },
-    );
+    const response = await this.apiClient.post(API_ENDPOINTS.CHAT_MUTE(chatId), { duration });
     invalidateChat(chatId);
     return response.data;
   }
@@ -115,9 +108,7 @@ export class ChatService {
   }
 
   async archiveChat(chatId: string) {
-    const response = await this.apiClient.post(
-      API_ENDPOINTS.CHAT_ARCHIVE(chatId),
-    );
+    const response = await this.apiClient.post(API_ENDPOINTS.CHAT_ARCHIVE(chatId));
     invalidateChat(chatId);
     return response.data;
   }
