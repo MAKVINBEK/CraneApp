@@ -26,7 +26,7 @@
 3. Установите зависимости:
 
    ```bash
-   npm install
+   npm ci
    ```
 
 4. Создайте локальный файл окружения:
@@ -49,16 +49,22 @@
    `CRYPTO_SIGNING_SECRET` и `CRYPTO_ENCRYPTION_SECRET` должны быть не короче
    32 символов.
 
-6. Запустите проект:
+6. Запустите бэкенд:
 
    ```bash
-   docker compose -f infrastructure/docker/docker-compose.v2.yml up --build
+   docker compose --env-file .env -f infrastructure/docker/docker-compose.v2.yml up -d --build
    ```
 
-7. Откройте приложение:
+7. Запустите фронтенд:
+
+   ```bash
+   npm exec vite -- --host 127.0.0.1 --port 3000
+   ```
+
+8. Откройте приложение:
 
    ```text
-   http://localhost:8080
+   http://localhost:3000
    ```
 
 ## Проверки
