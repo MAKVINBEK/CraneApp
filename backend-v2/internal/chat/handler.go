@@ -229,6 +229,10 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 			httpx.ErrorJSON(w, r, http.StatusForbidden, "access_denied", err.Error())
 		case errors.Is(err, ErrNotMember):
 			httpx.ErrorJSON(w, r, http.StatusBadRequest, "not_member", err.Error())
+		case errors.Is(err, ErrNotFound):
+			httpx.ErrorJSON(w, r, http.StatusNotFound, "chat_not_found", err.Error())
+		case errors.Is(err, ErrOwnershipConflict):
+			httpx.ErrorJSON(w, r, http.StatusConflict, "ownership_conflict", err.Error())
 		case err != nil:
 			httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", "transfer ownership failed")
 		default:

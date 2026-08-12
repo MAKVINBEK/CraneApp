@@ -30,6 +30,9 @@ func TestLeaveChat_Success_memberLeaves(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow("member"))
 
 	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT user_id FROM chats.members WHERE chat_id = $1`).
+		WithArgs(chatID).
+		WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(userID).AddRow("550e8400-e29b-41d4-a716-446655440004"))
 	mock.ExpectExec(`DELETE FROM crypto.chat_encryption_keys WHERE chat_id = $1 AND user_id = $2`).
 		WithArgs(chatID, userID).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`DELETE FROM chats.user_chat_settings WHERE user_id = $1 AND chat_id = $2`).
@@ -125,6 +128,9 @@ func TestLeaveChat_RollbackOnSettingsDeleteError(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow("member"))
 
 	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT user_id FROM chats.members WHERE chat_id = $1`).
+		WithArgs(chatID).
+		WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(userID))
 	mock.ExpectExec(`DELETE FROM crypto.chat_encryption_keys WHERE chat_id = $1 AND user_id = $2`).
 		WithArgs(chatID, userID).
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -159,6 +165,9 @@ func TestLeaveChat_RaceMemberDeleted(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow("member"))
 
 	mock.ExpectBegin()
+	mock.ExpectQuery(`SELECT user_id FROM chats.members WHERE chat_id = $1`).
+		WithArgs(chatID).
+		WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(userID))
 	mock.ExpectExec(`DELETE FROM crypto.chat_encryption_keys WHERE chat_id = $1 AND user_id = $2`).
 		WithArgs(chatID, userID).
 		WillReturnResult(sqlmock.NewResult(0, 1))

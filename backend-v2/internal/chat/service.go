@@ -24,6 +24,7 @@ var (
 	ErrUserBanned                = errors.New("user is banned")
 	ErrOwnershipTransferRequired = errors.New("ownership transfer required")
 	ErrNotMember                 = errors.New("user is not a member")
+	ErrOwnershipConflict         = errors.New("ownership changed concurrently")
 )
 
 type Chat struct {
@@ -1899,25 +1900,32 @@ func (s *Service) LeaveChat(ctx context.Context, userID, chatID string) error {
 		return ErrOwnershipTransferRequired
 	}
 
-	if s.ws != nil {
-		event := MemberRemovedEvent{
-			Type:   "chat_member_removed",
-			ChatID: chatID,
-			UserID: userID,
-			Reason: "left",
-		}
-		payload, err := json.Marshal(event)
-		if err != nil {
-			slog.Error("failed to marshal member_removed event", "err", err, "chatID", chatID, "userID", userID)
-		} else {
-			s.ws.BroadcastToChat(chatID, payload, "")
-		}
-	}
-
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
+
+	rows, err := tx.QueryContext(ctx, `SELECT user_id FROM chats.members WHERE chat_id = $1`, chatID)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	var recipients []string
+	for rows.Next() {
+		var memberID string
+		if err := rows.Scan(&memberID); err != nil {
+			_ = rows.Close()
+			_ = tx.Rollback()
+			return err
+		}
+		recipients = append(recipients, memberID)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		_ = tx.Rollback()
+		return err
+	}
+	_ = rows.Close()
 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM crypto.chat_encryption_keys WHERE chat_id = $1 AND user_id = $2`, chatID, userID); err != nil {
 		_ = tx.Rollback()
@@ -1936,7 +1944,25 @@ func (s *Service) LeaveChat(ctx context.Context, userID, chatID string) error {
 		_ = tx.Rollback()
 		return ErrForbidden
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	if s.ws != nil {
+		event := MemberRemovedEvent{
+			Type:   "chat_member_removed",
+			ChatID: chatID,
+			UserID: userID,
+			Reason: "left",
+		}
+		payload, err := json.Marshal(event)
+		if err != nil {
+			slog.Error("failed to marshal member_removed event", "err", err, "chatID", chatID, "userID", userID)
+		} else {
+			s.ws.BroadcastToUsers(recipients, payload)
+		}
+	}
+	return nil
 }
 
 type transferOwnershipInput struct {
@@ -1956,55 +1982,80 @@ func (s *Service) TransferOwnership(ctx context.Context, actorID, chatID, target
 		return ErrInvalidInput
 	}
 
-	// 3. Проверка: actor — owner чата
-	actorRole, err := s.memberRole(ctx, actorID, chatID)
-	if err != nil {
-		return err
-	}
-	if actorRole != "owner" {
-		return ErrForbidden
-	}
-
-	// 4. Проверка: target — член чата
-	targetRole, err := s.memberRole(ctx, targetUserID, chatID)
-	if err != nil {
-		return ErrNotMember
-	}
-	if targetRole == "" {
-		return ErrNotMember
-	}
-
-	// 5. Транзакционно обновляем owner_id и роли обеих сторон
+	// 3. Транзакция: блокируем чат и membership-строку target,
+	// проверяем актуального владельца и членство target, обновляем роли.
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 
-	// 5.1. Обновить chats.chats.owner_id
-	_, err = tx.ExecContext(ctx,
+	var currentOwnerID string
+	err = tx.QueryRowContext(ctx,
+		`SELECT owner_id FROM chats.chats WHERE id = $1 FOR UPDATE`,
+		chatID).Scan(&currentOwnerID)
+	if err == sql.ErrNoRows {
+		_ = tx.Rollback()
+		return ErrNotFound
+	}
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if currentOwnerID != actorID {
+		_ = tx.Rollback()
+		return ErrOwnershipConflict
+	}
+
+	var targetRole string
+	err = tx.QueryRowContext(ctx,
+		`SELECT role FROM chats.members WHERE chat_id = $1 AND user_id = $2 FOR UPDATE`,
+		chatID, targetUserID).Scan(&targetRole)
+	if err == sql.ErrNoRows {
+		_ = tx.Rollback()
+		return ErrNotMember
+	}
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	// 4.1. Обновить chats.chats.owner_id
+	res, err := tx.ExecContext(ctx,
 		`UPDATE chats.chats SET owner_id = $1, updated_at = NOW() WHERE id = $2`,
 		targetUserID, chatID)
 	if err != nil {
 		_ = tx.Rollback()
 		return err
 	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		_ = tx.Rollback()
+		return ErrNotFound
+	}
 
-	// 5.2. Новый owner в members
-	_, err = tx.ExecContext(ctx,
+	// 4.2. Новый owner в members
+	res, err = tx.ExecContext(ctx,
 		`UPDATE chats.members SET role = 'owner' WHERE chat_id = $1 AND user_id = $2`,
 		chatID, targetUserID)
 	if err != nil {
 		_ = tx.Rollback()
 		return err
 	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		_ = tx.Rollback()
+		return ErrNotMember
+	}
 
-	// 5.3. Прежний owner в member
-	_, err = tx.ExecContext(ctx,
+	// 4.3. Прежний owner в member
+	res, err = tx.ExecContext(ctx,
 		`UPDATE chats.members SET role = 'member' WHERE chat_id = $1 AND user_id = $2`,
 		chatID, actorID)
 	if err != nil {
 		_ = tx.Rollback()
 		return err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		_ = tx.Rollback()
+		return ErrOwnershipConflict
 	}
 	return tx.Commit()
 }

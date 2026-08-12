@@ -10,9 +10,36 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	transferOwnerIDQuery = `SELECT owner_id FROM chats.chats WHERE id = $1 FOR UPDATE`
+	transferTargetQuery  = `SELECT role FROM chats.members WHERE chat_id = $1 AND user_id = $2 FOR UPDATE`
+	transferChatUpdate   = `UPDATE chats.chats SET owner_id = $1, updated_at = NOW() WHERE id = $2`
+	transferTargetUpdate = `UPDATE chats.members SET role = 'owner' WHERE chat_id = $1 AND user_id = $2`
+	transferActorUpdate  = `UPDATE chats.members SET role = 'member' WHERE chat_id = $1 AND user_id = $2`
+	transferActorID      = "550e8400-e29b-41d4-a716-446655440001" // прежний владелец
+	transferChatID       = "550e8400-e29b-41d4-a716-446655440002"
+	transferTargetID     = "550e8400-e29b-41d4-a716-446655440003" // новый владелец
+	transferOtherOwnerID = "550e8400-e29b-41d4-a716-446655440009" // владелец, подменивший актора
+)
+
+// expectOwnerLock мокирует SELECT ... FOR UPDATE по chats.chats с заданным owner_id.
+func expectOwnerLock(mock sqlmock.Sqlmock, ownerID string) {
+	mock.ExpectQuery(transferOwnerIDQuery).
+		WithArgs(transferChatID).
+		WillReturnRows(sqlmock.NewRows([]string{"owner_id"}).AddRow(ownerID))
+}
+
+// expectTargetLock мокирует SELECT ... FOR UPDATE по membership-строке target.
+func expectTargetLock(mock sqlmock.Sqlmock) {
+	mock.ExpectQuery(transferTargetQuery).
+		WithArgs(transferChatID, transferTargetID).
+		WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow("member"))
+}
+
 // TestTransferOwnership_Success_ownerTransfers проверяет транзакционную передачу владения:
-// обновляются owner_id в chats.chats и роли обеих сторон в chats.members в одной транзакции,
-// прежний владелец становится member.
+// внутри одной транзакции блокируются чат и membership target (FOR UPDATE),
+// затем обновляются owner_id в chats.chats и роли обеих сторон,
+// каждый UPDATE затрагивает ровно одну строку.
 func TestTransferOwnership_Success_ownerTransfers(t *testing.T) {
 	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 	if err != nil {
@@ -22,49 +49,29 @@ func TestTransferOwnership_Success_ownerTransfers(t *testing.T) {
 
 	svc := chat.NewService(db, nil)
 
-	actorID := "550e8400-e29b-41d4-a716-446655440001" // прежний владельц
-	chatID := "550e8400-e29b-41d4-a716-446655440002"
-	targetID := "550e8400-e29b-41d4-a716-446655440003" // новый владельц
-
-	// 1. Проверка роли актора — должен быть owner
-	mock.ExpectQuery(`SELECT role FROM chats.members WHERE user_id = $1 AND chat_id = $2`).
-		WithArgs(actorID, chatID).
-		WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow("owner"))
-
-	// 2. Проверка роли цели — должен быть членом (не-owner)
-	mock.ExpectQuery(`SELECT role FROM chats.members WHERE user_id = $1 AND chat_id = $2`).
-		WithArgs(targetID, chatID).
-		WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow("member"))
-
-	// 3. Транзакция передачи владения
 	mock.ExpectBegin()
-
-	// 3.1. Новый владельц в chats.chats
-	mock.ExpectExec(`UPDATE chats.chats SET owner_id = $1, updated_at = NOW() WHERE id = $2`).
-		WithArgs(targetID, chatID).
+	expectOwnerLock(mock, transferActorID)
+	expectTargetLock(mock)
+	mock.ExpectExec(transferChatUpdate).
+		WithArgs(transferTargetID, transferChatID).
 		WillReturnResult(sqlmock.NewResult(0, 1))
-
-	// 3.2. Новый владельц становится 'owner' в chats.members
-	mock.ExpectExec(`UPDATE chats.members SET role = 'owner' WHERE chat_id = $1 AND user_id = $2`).
-		WithArgs(chatID, targetID).
+	mock.ExpectExec(transferTargetUpdate).
+		WithArgs(transferChatID, transferTargetID).
 		WillReturnResult(sqlmock.NewResult(0, 1))
-
-	// 3.3. Прежний владельц становится 'member'
-	mock.ExpectExec(`UPDATE chats.members SET role = 'member' WHERE chat_id = $1 AND user_id = $2`).
-		WithArgs(chatID, actorID).
+	mock.ExpectExec(transferActorUpdate).
+		WithArgs(transferChatID, transferActorID).
 		WillReturnResult(sqlmock.NewResult(0, 1))
-
 	mock.ExpectCommit()
 
-	// Act
-	err = svc.TransferOwnership(context.Background(), actorID, chatID, targetID)
+	err = svc.TransferOwnership(context.Background(), transferActorID, transferChatID, transferTargetID)
 	require.NoError(t, err)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-// TestTransferOwnership_NotOwner проверяет, что не-владелец (admin/member) не может
-// передать владение: отказ с ErrForbidden до любых UPDATE-операций.
-func TestTransferOwnership_NotOwner(t *testing.T) {
+// TestTransferOwnership_OwnershipConflict проверяет гонку: на момент SELECT ... FOR UPDATE
+// владельцем чата уже является другой пользователь — ROLLBACK и ErrOwnershipConflict,
+// UPDATE-операции не выполняются.
+func TestTransferOwnership_OwnershipConflict(t *testing.T) {
 	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 	if err != nil {
 		t.Fatal(err)
@@ -73,22 +80,40 @@ func TestTransferOwnership_NotOwner(t *testing.T) {
 
 	svc := chat.NewService(db, nil)
 
-	actorID := "550e8400-e29b-41d4-a716-446655440001" // прежний владельц
-	chatID := "550e8400-e29b-41d4-a716-446655440002"
-	targetID := "550e8400-e29b-41d4-a716-446655440003" // новый владельц
+	mock.ExpectBegin()
+	expectOwnerLock(mock, transferOtherOwnerID)
+	mock.ExpectRollback()
 
-	// 1. Проверка роли актора — не owner
-	mock.ExpectQuery(`SELECT role FROM chats.members WHERE user_id = $1 AND chat_id = $2`).
-		WithArgs(actorID, chatID).
-		WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow("member"))
+	err = svc.TransferOwnership(context.Background(), transferActorID, transferChatID, transferTargetID)
+	require.ErrorIs(t, err, chat.ErrOwnershipConflict)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
 
-	// Act
-	err = svc.TransferOwnership(context.Background(), actorID, chatID, targetID)
-	require.ErrorIs(t, err, chat.ErrForbidden)
+// TestTransferOwnership_ChatNotFound проверяет: чат не найден на этапе
+// SELECT ... FOR UPDATE — ROLLBACK и ErrNotFound.
+func TestTransferOwnership_ChatNotFound(t *testing.T) {
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	svc := chat.NewService(db, nil)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(transferOwnerIDQuery).
+		WithArgs(transferChatID).
+		WillReturnError(sql.ErrNoRows)
+	mock.ExpectRollback()
+
+	err = svc.TransferOwnership(context.Background(), transferActorID, transferChatID, transferTargetID)
+	require.ErrorIs(t, err, chat.ErrNotFound)
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 // TestTransferOwnership_TargetNotMember проверяет, что нельзя передать владение
-// пользователю, не состоящему в чате: возвращается ErrNotMember, транзакция не открывается.
+// пользователю, не состоящему в чате: membership-строка target отсутствует
+// на этапе SELECT ... FOR UPDATE — ROLLBACK и ErrNotMember.
 func TestTransferOwnership_TargetNotMember(t *testing.T) {
 	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 	if err != nil {
@@ -98,23 +123,16 @@ func TestTransferOwnership_TargetNotMember(t *testing.T) {
 
 	svc := chat.NewService(db, nil)
 
-	actorID := "550e8400-e29b-41d4-a716-446655440001" // прежний владелец
-	chatID := "550e8400-e29b-41d4-a716-446655440002"
-	targetID := "550e8400-e29b-41d4-a716-446655440003" // новый владелец
-
-	// 1. Проверка роли актора — должен быть owner
-	mock.ExpectQuery(`SELECT role FROM chats.members WHERE user_id = $1 AND chat_id = $2`).
-		WithArgs(actorID, chatID).
-		WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow("owner"))
-
-	// 2. Проверка роли цели — не член (не-member)
-	mock.ExpectQuery(`SELECT role FROM chats.members WHERE user_id = $1 AND chat_id = $2`).
-		WithArgs(targetID, chatID).
+	mock.ExpectBegin()
+	expectOwnerLock(mock, transferActorID)
+	mock.ExpectQuery(transferTargetQuery).
+		WithArgs(transferChatID, transferTargetID).
 		WillReturnError(sql.ErrNoRows)
+	mock.ExpectRollback()
 
-	// Act
-	err = svc.TransferOwnership(context.Background(), actorID, chatID, targetID)
+	err = svc.TransferOwnership(context.Background(), transferActorID, transferChatID, transferTargetID)
 	require.ErrorIs(t, err, chat.ErrNotMember)
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 // TestTransferOwnership_SelfTransfer проверяет запрет передачи самому себе:
@@ -128,12 +146,7 @@ func TestTransferOwnership_SelfTransfer(t *testing.T) {
 
 	svc := chat.NewService(db, nil)
 
-	actorID := "550e8400-e29b-41d4-a716-446655440001" // прежний владелец
-	chatID := "550e8400-e29b-41d4-a716-446655440002"
-	targetID := "550e8400-e29b-41d4-a716-446655440001" // новый владельц = прежний владелец
-
-	// Act
-	err = svc.TransferOwnership(context.Background(), actorID, chatID, targetID)
+	err = svc.TransferOwnership(context.Background(), transferActorID, transferChatID, transferActorID)
 	require.ErrorIs(t, err, chat.ErrInvalidInput)
 }
 
@@ -146,13 +159,9 @@ func TestTransferOwnership_InvalidUUID(t *testing.T) {
 	}
 	defer func() { _ = db.Close() }()
 
-	// Инициализируем сервис. WSServer пока nil.
 	svc := chat.NewService(db, nil)
-	actorID := "550e8400-e29b-41d4-a716-446655440001" // прежний владелец
-	chatID := "550e8400-e29b-41d4-a716-446655440002"
-	targetID := "not-a-uuid"
 
-	err = svc.TransferOwnership(context.Background(), actorID, chatID, targetID)
+	err = svc.TransferOwnership(context.Background(), transferActorID, transferChatID, "not-a-uuid")
 	require.ErrorIs(t, err, chat.ErrInvalidInput)
 }
 
@@ -166,29 +175,99 @@ func TestTransferOwnership_RollbackOnUpdateError(t *testing.T) {
 	}
 	defer func() { _ = db.Close() }()
 
-	// Инициализируем сервис. WSServer пока nil.
 	svc := chat.NewService(db, nil)
 
-	actorID := "550e8400-e29b-41d4-a716-446655440001" // прежний владелец
-	chatID := "550e8400-e29b-41d4-a716-446655440002"
-	targetID := "550e8400-e29b-41d4-a716-446655440003" // новый владелец
-
-	mock.ExpectQuery(`SELECT role FROM chats.members WHERE user_id = $1 AND chat_id = $2`).
-		WithArgs(actorID, chatID).
-		WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow("owner"))
-
-	mock.ExpectQuery(`SELECT role FROM chats.members WHERE user_id = $1 AND chat_id = $2`).
-		WithArgs(targetID, chatID).
-		WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow("member"))
-
 	mock.ExpectBegin()
-	mock.ExpectExec(`UPDATE chats.chats SET owner_id = $1, updated_at = NOW() WHERE id = $2`).
-		WithArgs(targetID, chatID).
+	expectOwnerLock(mock, transferActorID)
+	expectTargetLock(mock)
+	mock.ExpectExec(transferChatUpdate).
+		WithArgs(transferTargetID, transferChatID).
 		WillReturnError(sql.ErrConnDone)
 	mock.ExpectRollback()
 
-	err = svc.TransferOwnership(context.Background(), actorID, chatID, targetID)
+	err = svc.TransferOwnership(context.Background(), transferActorID, transferChatID, transferTargetID)
 	require.Error(t, err)
 	require.ErrorIs(t, err, sql.ErrConnDone)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestTransferOwnership_ChatDeletedMidTx проверяет гонку: чат удалён между
+// блокировкой и UPDATE chats.chats (RowsAffected=0) — ROLLBACK и ErrNotFound.
+func TestTransferOwnership_ChatDeletedMidTx(t *testing.T) {
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	svc := chat.NewService(db, nil)
+
+	mock.ExpectBegin()
+	expectOwnerLock(mock, transferActorID)
+	expectTargetLock(mock)
+	mock.ExpectExec(transferChatUpdate).
+		WithArgs(transferTargetID, transferChatID).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectRollback()
+
+	err = svc.TransferOwnership(context.Background(), transferActorID, transferChatID, transferTargetID)
+	require.ErrorIs(t, err, chat.ErrNotFound)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestTransferOwnership_TargetLeftMidTx проверяет гонку: target покинул чат
+// перед обновлением его роли (RowsAffected=0) — ROLLBACK и ErrNotMember.
+func TestTransferOwnership_TargetLeftMidTx(t *testing.T) {
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	svc := chat.NewService(db, nil)
+
+	mock.ExpectBegin()
+	expectOwnerLock(mock, transferActorID)
+	expectTargetLock(mock)
+	mock.ExpectExec(transferChatUpdate).
+		WithArgs(transferTargetID, transferChatID).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(transferTargetUpdate).
+		WithArgs(transferChatID, transferTargetID).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectRollback()
+
+	err = svc.TransferOwnership(context.Background(), transferActorID, transferChatID, transferTargetID)
+	require.ErrorIs(t, err, chat.ErrNotMember)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestTransferOwnership_ActorMembershipLostMidTx проверяет гонку: membership-строка
+// актора исчезла перед обновлением его роли (RowsAffected=0) — ROLLBACK и ErrOwnershipConflict.
+func TestTransferOwnership_ActorMembershipLostMidTx(t *testing.T) {
+	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	svc := chat.NewService(db, nil)
+
+	mock.ExpectBegin()
+	expectOwnerLock(mock, transferActorID)
+	expectTargetLock(mock)
+	mock.ExpectExec(transferChatUpdate).
+		WithArgs(transferTargetID, transferChatID).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(transferTargetUpdate).
+		WithArgs(transferChatID, transferTargetID).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(transferActorUpdate).
+		WithArgs(transferChatID, transferActorID).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectRollback()
+
+	err = svc.TransferOwnership(context.Background(), transferActorID, transferChatID, transferTargetID)
+	require.ErrorIs(t, err, chat.ErrOwnershipConflict)
 	require.NoError(t, mock.ExpectationsWereMet())
 }

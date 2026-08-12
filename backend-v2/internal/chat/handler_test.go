@@ -156,6 +156,9 @@ func TestHandler_LeaveChat(t *testing.T) {
 					WithArgs(userID, chatID).
 					WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow("member"))
 				mock.ExpectBegin()
+				mock.ExpectQuery(`SELECT user_id FROM chats.members WHERE chat_id = $1`).
+					WithArgs(chatID).
+					WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(userID))
 				mock.ExpectExec(`DELETE FROM crypto.chat_encryption_keys WHERE chat_id = $1 AND user_id = $2`).
 					WithArgs(chatID, userID).WillReturnResult(sqlmock.NewResult(0, 1))
 				mock.ExpectExec(`DELETE FROM chats.user_chat_settings WHERE user_id = $1 AND chat_id = $2`).
@@ -256,13 +259,13 @@ func TestHandler_TransferOwnership(t *testing.T) {
 			"Success",
 			targetID,
 			func() {
-				mock.ExpectQuery(`SELECT role FROM chats.members WHERE user_id = $1 AND chat_id = $2`).
-					WithArgs(actorID, chatID).
-					WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow("owner"))
-				mock.ExpectQuery(`SELECT role FROM chats.members WHERE user_id = $1 AND chat_id = $2`).
-					WithArgs(targetID, chatID).
-					WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow("member"))
 				mock.ExpectBegin()
+				mock.ExpectQuery(`SELECT owner_id FROM chats.chats WHERE id = $1 FOR UPDATE`).
+					WithArgs(chatID).
+					WillReturnRows(sqlmock.NewRows([]string{"owner_id"}).AddRow(actorID))
+				mock.ExpectQuery(`SELECT role FROM chats.members WHERE chat_id = $1 AND user_id = $2 FOR UPDATE`).
+					WithArgs(chatID, targetID).
+					WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow("member"))
 				mock.ExpectExec(`UPDATE chats.chats SET owner_id = $1, updated_at = NOW() WHERE id = $2`).
 					WithArgs(targetID, chatID).WillReturnResult(sqlmock.NewResult(0, 1))
 				mock.ExpectExec(`UPDATE chats.members SET role = 'owner' WHERE chat_id = $1 AND user_id = $2`).
@@ -275,26 +278,43 @@ func TestHandler_TransferOwnership(t *testing.T) {
 			"",
 		},
 		{
-			"ActorNotOwner_403",
+			"ActorNotOwner_409",
 			targetID,
 			func() {
-				mock.ExpectQuery(`SELECT role FROM chats.members WHERE user_id = $1 AND chat_id = $2`).
-					WithArgs(actorID, chatID).
-					WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow("member"))
+				mock.ExpectBegin()
+				mock.ExpectQuery(`SELECT owner_id FROM chats.chats WHERE id = $1 FOR UPDATE`).
+					WithArgs(chatID).
+					WillReturnRows(sqlmock.NewRows([]string{"owner_id"}).AddRow(targetID))
+				mock.ExpectRollback()
 			},
-			http.StatusForbidden,
-			"access_denied",
+			http.StatusConflict,
+			"ownership_conflict",
+		},
+		{
+			"ChatNotFound_404",
+			targetID,
+			func() {
+				mock.ExpectBegin()
+				mock.ExpectQuery(`SELECT owner_id FROM chats.chats WHERE id = $1 FOR UPDATE`).
+					WithArgs(chatID).
+					WillReturnError(sql.ErrNoRows)
+				mock.ExpectRollback()
+			},
+			http.StatusNotFound,
+			"chat_not_found",
 		},
 		{
 			"TargetNotMember_400",
 			targetID,
 			func() {
-				mock.ExpectQuery(`SELECT role FROM chats.members WHERE user_id = $1 AND chat_id = $2`).
-					WithArgs(actorID, chatID).
-					WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow("owner"))
-				mock.ExpectQuery(`SELECT role FROM chats.members WHERE user_id = $1 AND chat_id = $2`).
-					WithArgs(targetID, chatID).
+				mock.ExpectBegin()
+				mock.ExpectQuery(`SELECT owner_id FROM chats.chats WHERE id = $1 FOR UPDATE`).
+					WithArgs(chatID).
+					WillReturnRows(sqlmock.NewRows([]string{"owner_id"}).AddRow(actorID))
+				mock.ExpectQuery(`SELECT role FROM chats.members WHERE chat_id = $1 AND user_id = $2 FOR UPDATE`).
+					WithArgs(chatID, targetID).
 					WillReturnError(sql.ErrNoRows)
+				mock.ExpectRollback()
 			},
 			http.StatusBadRequest,
 			"not_member",
