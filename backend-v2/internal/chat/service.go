@@ -14,14 +14,17 @@ import (
 )
 
 var (
-	ErrNotFound        = errors.New("chat not found")
-	ErrForbidden       = errors.New("access denied")
-	ErrInvalidInput    = errors.New("invalid input")
-	ErrUserNotFound    = errors.New("user not found")
-	ErrBlockedByUser   = errors.New("blocked by user")
-	ErrInvalidChatType = errors.New("invalid chat type")
-	ErrAlreadyMember   = errors.New("user already in group")
-	ErrUserBanned      = errors.New("user is banned")
+	ErrNotFound                  = errors.New("chat not found")
+	ErrForbidden                 = errors.New("access denied")
+	ErrInvalidInput              = errors.New("invalid input")
+	ErrUserNotFound              = errors.New("user not found")
+	ErrBlockedByUser             = errors.New("blocked by user")
+	ErrInvalidChatType           = errors.New("invalid chat type")
+	ErrAlreadyMember             = errors.New("user already in group")
+	ErrUserBanned                = errors.New("user is banned")
+	ErrOwnershipTransferRequired = errors.New("ownership transfer required")
+	ErrNotMember                 = errors.New("user is not a member")
+	ErrOwnershipConflict         = errors.New("ownership changed concurrently")
 )
 
 type Chat struct {
@@ -1870,4 +1873,208 @@ func (s *Service) GetMlsState(ctx context.Context, chatID string) (int64, string
 		return 0, "", nil
 	}
 	return epoch, treeState.String, err
+}
+
+type leaveChatInput struct {
+	ChatID string `validate:"required,uuid"`
+}
+
+type MemberRemovedEvent struct {
+	Type   string `json:"type"`
+	ChatID string `json:"chatId"`
+	UserID string `json:"userId"`
+	Reason string `json:"reason"`
+}
+
+func (s *Service) LeaveChat(ctx context.Context, userID, chatID string) error {
+	input := leaveChatInput{ChatID: chatID}
+	if err := validate.Struct(input); err != nil {
+		return ErrInvalidInput
+	}
+
+	role, err := s.memberRole(ctx, userID, chatID)
+	if err != nil {
+		return err
+	}
+	if role == "owner" {
+		return ErrOwnershipTransferRequired
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	rows, err := tx.QueryContext(ctx, `SELECT user_id FROM chats.members WHERE chat_id = $1`, chatID)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	var recipients []string
+	for rows.Next() {
+		var memberID string
+		if err := rows.Scan(&memberID); err != nil {
+			_ = rows.Close()
+			_ = tx.Rollback()
+			return err
+		}
+		recipients = append(recipients, memberID)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		_ = tx.Rollback()
+		return err
+	}
+	_ = rows.Close()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM crypto.chat_encryption_keys WHERE chat_id = $1 AND user_id = $2`, chatID, userID); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM chats.user_chat_settings WHERE user_id = $1 AND chat_id = $2`, userID, chatID); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	res, err := tx.ExecContext(ctx, `DELETE FROM chats.members WHERE chat_id=$1 AND user_id=$2 AND role<>'owner'`, chatID, userID)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		_ = tx.Rollback()
+		return ErrForbidden
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	if s.ws != nil {
+		event := MemberRemovedEvent{
+			Type:   "chat_member_removed",
+			ChatID: chatID,
+			UserID: userID,
+			Reason: "left",
+		}
+		payload, err := json.Marshal(event)
+		if err != nil {
+			slog.Error("failed to marshal member_removed event", "err", err, "chatID", chatID, "userID", userID)
+		} else {
+			s.ws.BroadcastToUsers(recipients, payload)
+		}
+	}
+	return nil
+}
+
+type transferOwnershipInput struct {
+	ChatID string `validate:"required,uuid"`
+	UserID string `validate:"required,uuid"`
+}
+
+func (s *Service) TransferOwnership(ctx context.Context, actorID, chatID, targetUserID string) error {
+	// 1. Валидация UUID
+	input := transferOwnershipInput{ChatID: chatID, UserID: targetUserID}
+	if err := validate.Struct(input); err != nil {
+		return ErrInvalidInput
+	}
+
+	// 2. Цель ≠ actor
+	if targetUserID == actorID {
+		return ErrInvalidInput
+	}
+
+	// 3. Транзакция: блокируем чат и membership-строку target,
+	// проверяем актуального владельца и членство target, обновляем роли.
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	var currentOwnerID string
+	err = tx.QueryRowContext(ctx,
+		`SELECT owner_id FROM chats.chats WHERE id = $1 FOR UPDATE`,
+		chatID).Scan(&currentOwnerID)
+	if err == sql.ErrNoRows {
+		_ = tx.Rollback()
+		return ErrNotFound
+	}
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if currentOwnerID != actorID {
+		_ = tx.Rollback()
+		return ErrOwnershipConflict
+	}
+
+	var targetRole string
+	err = tx.QueryRowContext(ctx,
+		`SELECT role FROM chats.members WHERE chat_id = $1 AND user_id = $2 FOR UPDATE`,
+		chatID, targetUserID).Scan(&targetRole)
+	if err == sql.ErrNoRows {
+		_ = tx.Rollback()
+		return ErrNotMember
+	}
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	// 4.1. Обновить chats.chats.owner_id
+	res, err := tx.ExecContext(ctx,
+		`UPDATE chats.chats SET owner_id = $1, updated_at = NOW() WHERE id = $2`,
+		targetUserID, chatID)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	n, err := res.RowsAffected()
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if n != 1 {
+		_ = tx.Rollback()
+		return ErrNotFound
+	}
+
+	// 4.2. Новый owner в members
+	res, err = tx.ExecContext(ctx,
+		`UPDATE chats.members SET role = 'owner' WHERE chat_id = $1 AND user_id = $2`,
+		chatID, targetUserID)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	n, err = res.RowsAffected()
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if n != 1 {
+		_ = tx.Rollback()
+		return ErrNotMember
+	}
+
+	// 4.3. Прежний owner в member
+	res, err = tx.ExecContext(ctx,
+		`UPDATE chats.members SET role = 'member' WHERE chat_id = $1 AND user_id = $2`,
+		chatID, actorID)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	n, err = res.RowsAffected()
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if n != 1 {
+		_ = tx.Rollback()
+		return ErrOwnershipConflict
+	}
+
+	return tx.Commit()
 }
