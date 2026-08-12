@@ -15,6 +15,7 @@ import (
 	"craneapp/backend-v2/internal/platform/authctx"
 	"craneapp/backend-v2/internal/platform/config"
 	"craneapp/backend-v2/internal/platform/httpx"
+
 	"github.com/go-playground/validator/v10"
 )
 
@@ -199,6 +200,44 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 			bans = []Ban{}
 		}
 		httpx.JSON(w, http.StatusOK, map[string]any{"bans": bans})
+	case suffix == "/leave" && r.Method == http.MethodPost:
+		err := h.service.LeaveChat(r.Context(), current.ID, chatID)
+		switch {
+		case errors.Is(err, ErrInvalidInput):
+			httpx.ErrorJSON(w, r, http.StatusBadRequest, "validation_failed", err.Error())
+		case errors.Is(err, ErrForbidden):
+			httpx.ErrorJSON(w, r, http.StatusForbidden, "access_denied", err.Error())
+		case errors.Is(err, ErrOwnershipTransferRequired):
+			httpx.ErrorJSON(w, r, http.StatusConflict, "ownership_transfer_required", err.Error())
+		case err != nil:
+			httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", "failed to leave chat")
+		default:
+			httpx.JSON(w, http.StatusOK, map[string]any{"success": true})
+		}
+	case suffix == "/transfer-ownership" && r.Method == http.MethodPost:
+		var input struct {
+			UserID string `json:"userId"`
+		}
+		if !decode(w, r, &input) {
+			return
+		}
+		err := h.service.TransferOwnership(r.Context(), current.ID, chatID, input.UserID)
+		switch {
+		case errors.Is(err, ErrInvalidInput):
+			httpx.ErrorJSON(w, r, http.StatusBadRequest, "validation_failed", err.Error())
+		case errors.Is(err, ErrForbidden):
+			httpx.ErrorJSON(w, r, http.StatusForbidden, "access_denied", err.Error())
+		case errors.Is(err, ErrNotMember):
+			httpx.ErrorJSON(w, r, http.StatusBadRequest, "not_member", err.Error())
+		case errors.Is(err, ErrNotFound):
+			httpx.ErrorJSON(w, r, http.StatusNotFound, "chat_not_found", err.Error())
+		case errors.Is(err, ErrOwnershipConflict):
+			httpx.ErrorJSON(w, r, http.StatusConflict, "ownership_conflict", err.Error())
+		case err != nil:
+			httpx.ErrorJSON(w, r, http.StatusInternalServerError, "internal_error", "transfer ownership failed")
+		default:
+			httpx.JSON(w, http.StatusOK, map[string]any{"success": true})
+		}
 	case strings.HasPrefix(suffix, "/members/"):
 		memberID, action := parseMemberAction(suffix)
 		if memberID == "" {

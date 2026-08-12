@@ -1,12 +1,12 @@
-import type { WS_EVENTS } from "@/consts";
+import type { WS_EVENTS } from '@/consts';
 import type {
+  IChatDto,
   IMemberDto,
   IMessageDto,
   IPinnedDto,
-  TChat,
   TMessageType,
   TReactionsList,
-} from "@/types";
+} from '@/types';
 
 export interface IMessageNewEvent {
   type: string;
@@ -47,7 +47,7 @@ export interface IReactionUpdatedEvent {
 export interface IChatUpdatedEvent {
   type: string;
   chatId: string;
-  chat: TChat;
+  chat: IChatDto;
 }
 
 export interface IChatAddMemberEvent {
@@ -152,10 +152,10 @@ export interface ILastMessagePayloadDto {
 }
 
 export interface IPingEvent {
-  type: "ping";
+  type: 'ping';
 }
 export interface IPongEvent {
-  type: "pong";
+  type: 'pong';
 }
 
 type ValueOf<T> = T[keyof T];

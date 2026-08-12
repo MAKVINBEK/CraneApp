@@ -1,27 +1,30 @@
-import { useEffect, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
-import { STORAGE_KEYS } from "../../consts/storageKeys.js";
-import { useLocalStorage } from "../../hooks/useLocalStorage.js";
-import { useToasts } from "../../hooks/useToasts.js";
-import { useChatStore } from "../../store/chat.js";
-import { useChatsStore } from "../../store/chats.js";
-import { Identicon } from "../ui/Identicon.js";
-import { services } from "@/services/serviceContainer.js";
+import { Identicon } from '@/components/ui';
+import { useToasts } from '@/hooks';
+import { services } from '@/services';
+import { useChatsStore, useChatStore, useProfileStore } from '@/store';
+import type { IMemberDto, TChatRole, TMembersList } from '@/types';
+import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 
-export function GroupInfoModal({ isOpen, onClose }) {
+interface Props {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export function GroupInfoModal({ isOpen, onClose }: Props) {
   const { showToast } = useToasts();
-  const [members, setMembers] = useState([]);
+  const [members, setMembers] = useState<TMembersList>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState<IMemberDto | null>(null);
   const [isEditMode, setEditMode] = useState(false);
-  const [chatName, setChatName] = useState("");
+  const [chatName, setChatName] = useState('');
   const deleteChat = useChatsStore((state) => state.deleteChat);
   const chat = useChatStore((state) => state.chat);
   const updateChat = useChatStore((state) => state.updateChat);
   const setChat = useChatStore((state) => state.setChat);
   const navigate = useNavigate();
-  const [currentUserData] = useLocalStorage(STORAGE_KEYS.USER, {});
+  const currentUserData = useProfileStore((state) => state.user);
   const { t } = useTranslation();
 
   useEffect(() => {
@@ -39,41 +42,42 @@ export function GroupInfoModal({ isOpen, onClose }) {
     try {
       const nextMembers = await services.chatService.getMembers(chat.id);
       setMembers(nextMembers);
-      const myMember = nextMembers.find((m) => m.id === currentUserData.id);
+      const myMember = nextMembers.find((m) => m.id === currentUserData?.id);
 
       if (myMember) {
         setCurrentUser(myMember);
       }
     } catch (err) {
-      showToast("error", "Ошибка загрузки участников", "❌");
+      showToast('error', 'Ошибка загрузки участников', '❌');
     } finally {
       setIsLoading(false);
     }
   }
 
-  async function handleAction(action, userId, body = null) {
+  async function handleAction(
+    action: string,
+    userId: string,
+    body: { role: TChatRole } | null = null
+  ) {
+    if (!body) return;
     try {
-      if (action === "change-participant-role") {
+      if (action === 'change-participant-role') {
         await services.chatService.setMemberRole(chat.id, userId, body?.role);
         setMembers((members) =>
-          members.map((member) =>
-            member.id === userId ? { ...member, role: body?.role } : member,
-          ),
+          members.map((member) => (member.id === userId ? { ...member, role: body?.role } : member))
         );
         return;
       }
 
-      if (action === "kick-participant") {
+      if (action === 'kick-participant') {
         await services.chatService.removeMember(chat.id, userId);
-        setMembers((members) =>
-          members.filter((member) => member.id !== userId),
-        );
+        setMembers((members) => members.filter((member) => member.id !== userId));
         return;
       }
 
-      throw new Error("Unsupported group action");
-    } catch (err) {
-      showToast("error", err.message || "Ошибка выполнения действия", "❌");
+      throw new Error('Unsupported group action');
+    } catch (err: any) {
+      showToast('error', err.message || 'Ошибка выполнения действия', '❌');
     }
   }
 
@@ -98,15 +102,11 @@ export function GroupInfoModal({ isOpen, onClose }) {
     try {
       const result = await deleteChat(chat.id);
 
-      if (!result.success) throw new Error("Could not delete chat, try again");
+      if (!result.success) throw new Error('Could not delete chat, try again');
       setChat(null);
-      navigate("/chats");
-    } catch (err) {
-      showToast(
-        "error",
-        err.message || "Не удалось удалить чат, попробуйте ещё раз",
-        "❌",
-      );
+      navigate('/chats');
+    } catch (err: any) {
+      showToast('error', err.message || 'Не удалось удалить чат, попробуйте ещё раз', '❌');
     }
   };
 
@@ -124,7 +124,7 @@ export function GroupInfoModal({ isOpen, onClose }) {
               <div className="group-info-header__avatar cursor-default">
                 {chat?.avatarUrl ? (
                   <img alt="" src={chat.avatarUrl} />
-                ) : chat?.type === "private" && chat?.peerId ? (
+                ) : chat?.type === 'private' && chat?.peerId ? (
                   <Identicon size={98} userId={chat.peerId} />
                 ) : (
                   chat?.name.slice(0, 1).toUpperCase()
@@ -136,7 +136,7 @@ export function GroupInfoModal({ isOpen, onClose }) {
                 ) : (
                   <label className="group-info-header__field">
                     <span className="group-info-header__field-text">
-                      {t("chatName", "Название чата")}
+                      {t('chatName', 'Название чата')}
                     </span>
                     <input
                       className="group-info-header__field-input"
@@ -157,41 +157,26 @@ export function GroupInfoModal({ isOpen, onClose }) {
           <div className="group-info-header__actions-button-wrapper">
             {!isEditMode && (
               <>
-                <button
-                  className="action-btn w-full"
-                  onClick={handleToggleEditMode}
-                >
-                  {t("edit", "Редактировать")}
+                <button className="action-btn w-full" onClick={handleToggleEditMode}>
+                  {t('edit', 'Редактировать')}
                 </button>
-                <button
-                  className="action-btn w-full danger"
-                  onClick={handleLeaveChat}
-                >
-                  {t("leaveChat", "Покинуть чат")}
+                <button className="action-btn w-full danger" onClick={handleLeaveChat}>
+                  {t('leaveChat', 'Покинуть чат')}
                 </button>
-                {currentUser?.role === "owner" && (
-                  <button
-                    className="action-btn w-full danger"
-                    onClick={handleDeleteChat}
-                  >
-                    {t("deleteChat", "Удалить чат")}
+                {currentUser?.role === 'owner' && (
+                  <button className="action-btn w-full danger" onClick={handleDeleteChat}>
+                    {t('deleteChat', 'Удалить чат')}
                   </button>
                 )}
               </>
             )}
             {isEditMode && (
               <>
-                <button
-                  className="action-btn w-full"
-                  onClick={handleSaveEdited}
-                >
-                  {t("save", "Сохранить")}
+                <button className="action-btn w-full" onClick={handleSaveEdited}>
+                  {t('save', 'Сохранить')}
                 </button>
-                <button
-                  className="action-btn w-full danger"
-                  onClick={handleToggleEditMode}
-                >
-                  {t("cancel", "Отменить")}
+                <button className="action-btn w-full danger" onClick={handleToggleEditMode}>
+                  {t('cancel', 'Отменить')}
                 </button>
               </>
             )}
@@ -200,7 +185,7 @@ export function GroupInfoModal({ isOpen, onClose }) {
 
         <div className="group-info-body">
           {isLoading ? (
-            <div className="loading-state">{t("loading", "Загрузка...")}</div>
+            <div className="loading-state">{t('loading', 'Загрузка...')}</div>
           ) : (
             <ul className="members-list">
               {members.map((member) => {
@@ -217,43 +202,29 @@ export function GroupInfoModal({ isOpen, onClose }) {
                     </div>
                     <div className="member-details">
                       <span className="member-name">{member.username}</span>
-                      <span className={`member-role role-${member.role}`}>
-                        {member.role}
-                      </span>
+                      <span className={`member-role role-${member.role}`}>{member.role}</span>
                     </div>
 
                     {/* Moderation Controls */}
-                    {(currentUser?.role === "owner" ||
-                      currentUser?.role === "admin") &&
-                      memberId !== currentUserData.id && (
+                    {(currentUser?.role === 'owner' || currentUser?.role === 'admin') &&
+                      memberId !== currentUserData?.id && (
                         <div className="member-actions">
-                          {currentUser?.role === "owner" && (
+                          {currentUser?.role === 'owner' && (
                             <button
                               className="action-btn"
                               onClick={() =>
-                                handleAction(
-                                  "change-participant-role",
-                                  memberId,
-                                  {
-                                    role:
-                                      member.role === "admin"
-                                        ? "member"
-                                        : "admin",
-                                  },
-                                )
+                                handleAction('change-participant-role', memberId, {
+                                  role: member.role === 'admin' ? 'member' : 'admin',
+                                })
                               }
                             >
-                              {member.role === "admin"
-                                ? "Снять админа"
-                                : "Дать админа"}
+                              {member.role === 'admin' ? 'Снять админа' : 'Дать админа'}
                             </button>
                           )}
-                          {member.role !== "owner" && (
+                          {member.role !== 'owner' && (
                             <button
                               className="action-btn danger"
-                              onClick={() =>
-                                handleAction("kick-participant", memberId)
-                              }
+                              onClick={() => handleAction('kick-participant', memberId)}
                             >
                               Кикнуть
                             </button>

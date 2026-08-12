@@ -28,6 +28,17 @@ func (*recordingRealtime) IsUserConnected(string) bool { return false }
 func (r *recordingRealtime) BroadcastToChat(chatID string, payload []byte, exclude string) {
 	r.broadcasts = append(r.broadcasts, recordedBroadcast{chatID: chatID, payload: payload, exclude: exclude})
 }
+func (r *recordingRealtime) BroadcastToUsers(
+	userIDs []string,
+	payload []byte,
+) {
+	for _, userID := range userIDs {
+		r.broadcasts = append(r.broadcasts, recordedBroadcast{
+			chatID:  userID,
+			payload: payload,
+		})
+	}
+}
 
 const (
 	testActorID  = "actor-id"

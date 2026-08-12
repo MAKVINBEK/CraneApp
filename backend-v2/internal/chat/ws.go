@@ -532,6 +532,14 @@ func (ws *WSServer) BroadcastToChat(chatID string, message []byte, excludeUserID
 	}
 }
 
+func (ws *WSServer) BroadcastToUsers(userIDs []string, message []byte) {
+	ws.mu.RLock()
+	defer ws.mu.RUnlock()
+	for _, uid := range userIDs {
+		ws.sendToUserLocked(uid, message)
+	}
+}
+
 func (ws *WSServer) sendToUser(userID string, message []byte) {
 	ws.mu.RLock()
 	defer ws.mu.RUnlock()

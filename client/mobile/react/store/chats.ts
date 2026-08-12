@@ -1,13 +1,13 @@
-import { create } from "zustand";
-import type { TChats } from "@/types";
-import { services } from "@/services";
+import { services } from '@/services';
+import type { TChatsList } from '@/types';
+import { create } from 'zustand';
 
 interface IChatsState {
-  chats: TChats;
+  chats: TChatsList;
 }
 
 interface IChatsActions {
-  setChats: (chats: TChats | ((prev: TChats) => TChats)) => void;
+  setChats: (chats: TChatsList | ((prev: TChatsList) => TChatsList)) => void;
   deleteChat: (chatId: string) => Promise<IDeleteChatResponse>;
 }
 
@@ -25,20 +25,17 @@ export const useChatsStore = create<InitialState>((set, get) => {
         (state) =>
           ({
             [key]:
-              typeof updater === "function"
-                ? (updater as (prev: IChatsState[K]) => IChatsState[K])(
-                    state[key],
-                  )
+              typeof updater === 'function'
+                ? (updater as (prev: IChatsState[K]) => IChatsState[K])(state[key])
                 : updater,
-          }) as Pick<IChatsState, K>,
+          }) as Pick<IChatsState, K>
       );
 
   return {
     chats: [],
-    setChats: withUpdater("chats"),
+    setChats: withUpdater('chats'),
     deleteChat: async (chatId) => {
-      const result =
-        await services.chatService.deleteChat<IDeleteChatResponse>(chatId);
+      const result = await services.chatService.deleteChat<IDeleteChatResponse>(chatId);
 
       if (result.success) {
         const chats = get().chats;

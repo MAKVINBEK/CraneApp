@@ -1,12 +1,29 @@
-import { forwardRef } from "react";
-import { useTranslation } from "react-i18next";
-import { useParams } from "react-router-dom";
-import { MessageBubble } from "../../components/components/MessageBubble/MessageBubble";
-import { MessageActionsPopover } from "../../components/components/Modals/MessageActionsPopover";
-import { ThreadSkeleton } from "../../components/ui/Skeletons/ThreadSkeleton";
-import { ThreadState } from "../../components/ui/ThreadState";
-import { useChatStore } from "../../store/chat";
-import type { IPinnedDto } from "@/types";
+import { ChatThreadHeader, MessageActionsPopover } from '@/components/components';
+import { ComposerWrapper, MessagesList } from '@/components/ui';
+import { useMessageActions } from '@/hooks';
+import { useChatStore, useProfileStore, type IActionMenu } from '@/store';
+import type { IMessageDto, IPinnedDto, TMessagesList, TPinnedList } from '@/types';
+import { forwardRef, type Dispatch, type SetStateAction } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useParams } from 'react-router-dom';
+
+interface Props {
+  pinnedMessages: TPinnedList;
+  onClose: () => void;
+  isLoading: boolean;
+  error: string;
+  openedImage: string | null;
+  setOpenedImage: Dispatch<SetStateAction<string | null>>;
+  onSelection: (message: IMessageDto) => void;
+  actionMenu: IActionMenu | null;
+  setIsForwardModalOpen: Dispatch<SetStateAction<boolean>>;
+  updateMessage: (
+    items: TMessagesList,
+    messageId: string,
+    patch: Partial<Omit<IMessageDto, 'id'>>
+  ) => TMessagesList;
+  setPinnedMessagesOpen: Dispatch<SetStateAction<boolean>>;
+}
 
 export const PinnedMessagesPage = forwardRef(
   (
@@ -16,92 +33,51 @@ export const PinnedMessagesPage = forwardRef(
       isLoading,
       error,
       openedImage,
-      onOpenImage,
+      setOpenedImage,
       onSelection,
       actionMenu,
-      currentUser,
       setIsForwardModalOpen,
       updateMessage,
-      handleUnpinMessage,
-      setPinnedMessagesOpen
-    },
-    draftRef,
+      setPinnedMessagesOpen,
+    }: Props,
+    draftRef
   ) => {
     const { chatId } = useParams();
     const chat = useChatStore((state) => state.chat);
     const { t } = useTranslation();
-    const { translations } = useChatStore();
+    const currentUser = useProfileStore((state) => state.user);
+    const { handleUnpinMessage } = useMessageActions({
+      currentUser,
+      chatId,
+      chatRole: chat?.role,
+      chatType: chat?.type,
+      draftRef,
+      setIsForwardModalOpen,
+      updateMessage,
+    });
 
     const handleUnpinAllMessages = () => {
       for (const pinned of pinnedMessages) {
-        handleUnpinMessage(pinned.message)
+        handleUnpinMessage(pinned.message);
       }
       setPinnedMessagesOpen(false);
-    }
+    };
 
     const selectedActionMessage = actionMenu
-      ? pinnedMessages.find(
-          (message: IPinnedDto) => message.messageId === actionMenu.messageId,
-        )
+      ? pinnedMessages.find((message: IPinnedDto) => message.messageId === actionMenu.messageId)
       : null;
-    console.log(selectedActionMessage)
+    console.log(selectedActionMessage);
     return (
       <main className="thread-page">
-        <header className="thread-header">
-          <button
-            aria-label={t("back", "Назад")}
-            className="thread-back"
-            onClick={onClose}
-          >
-            <svg
-              fill="none"
-              className="size-6"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2.5"
-              viewBox="3 0 20 22"
-            >
-              <line x1="19" x2="5" y1="12" y2="12" />
-              <polyline points="12 19 5 12 12 5" />
-            </svg>
-          </button>
+        <ChatThreadHeader locationPage="pinned-messages" onClosePinnedMessagePage={onClose} />
 
-          <div className="thread-header-card thread-header-info">
-            {t("pinnedMessagesTitle", "Закрепленные сообщения")}
-          </div>
-        </header>
-
-        <section className="thread-messages">
-          {isLoading && <ThreadSkeleton />}
-          {!isLoading && error && pinnedMessages.length === 0 && (
-            <ThreadState
-              message={error}
-              title={t("loadingError", "Ошибка загрузки")}
-            />
-          )}
-          {!isLoading && !error && pinnedMessages.length === 0 && (
-            <ThreadState
-              message={t(
-                "emptyThreadDescription",
-                "Напишите первое сообщение в этом чате.",
-              )}
-              title={t("emptyThread", "Сообщений пока нет")}
-            />
-          )}
-          {pinnedMessages.map(({ message, messageId }) => {
-            return (
-              <MessageBubble
-                currentUserId={currentUser.id}
-                key={messageId}
-                message={message}
-                translations={translations}
-                onOpenImage={onOpenImage}
-                onSelection={onSelection}
-              />
-            );
-          })}
-        </section>
+        <MessagesList
+          error={error}
+          isLoading={isLoading}
+          messages={pinnedMessages.map((pinned) => pinned.message)}
+          setOpenedImage={setOpenedImage}
+          toggleMessageSelection={onSelection}
+        />
 
         {actionMenu && selectedActionMessage && (
           <>
@@ -119,48 +95,21 @@ export const PinnedMessagesPage = forwardRef(
             />
             {openedImage && (
               <div
-                aria-label={t("imageViewer", "Просмотр изображения")}
+                aria-label={t('imageViewer', 'Просмотр изображения')}
                 aria-modal="true"
                 className="image-viewer"
                 onClick={() => setOpenedImage(null)}
                 role="dialog"
               >
                 <button
-                  aria-label={t("close", "Закрыть")}
+                  aria-label={t('close', 'Закрыть')}
                   className="image-viewer-close"
                   onClick={() => setOpenedImage(null)}
                   type="button"
                 >
                   ×
                 </button>
-                <img
-                  alt=""
-                  onClick={(event) => event.stopPropagation()}
-                  src={openedImage}
-                />
-              </div>
-            )}
-            {openedImage && (
-              <div
-                aria-label={t("imageViewer", "Просмотр изображения")}
-                aria-modal="true"
-                className="image-viewer"
-                onClick={() => setOpenedImage(null)}
-                role="dialog"
-              >
-                <button
-                  aria-label={t("close", "Закрыть")}
-                  className="image-viewer-close"
-                  onClick={() => setOpenedImage(null)}
-                  type="button"
-                >
-                  ×
-                </button>
-                <img
-                  alt=""
-                  onClick={(event) => event.stopPropagation()}
-                  src={openedImage}
-                />
+                <img alt="" onClick={(event) => event.stopPropagation()} src={openedImage} />
               </div>
             )}
           </>
@@ -168,40 +117,34 @@ export const PinnedMessagesPage = forwardRef(
 
         {openedImage && (
           <div
-            aria-label={t("imageViewer", "Просмотр изображения")}
+            aria-label={t('imageViewer', 'Просмотр изображения')}
             aria-modal="true"
             className="image-viewer"
-            onClick={() => onOpenImage(null)}
+            onClick={() => setOpenedImage(null)}
             role="dialog"
           >
             <button
-              aria-label={t("close", "Закрыть")}
+              aria-label={t('close', 'Закрыть')}
               className="image-viewer-close"
-              onClick={() => onOpenImage(null)}
+              onClick={() => setOpenedImage(null)}
               type="button"
             >
               ×
             </button>
-            <img
-              alt=""
-              onClick={(event) => event.stopPropagation()}
-              src={openedImage}
-            />
+            <img alt="" onClick={(event) => event.stopPropagation()} src={openedImage} />
           </div>
         )}
 
-        <form className="thread-composer">
-          <div className="thread-composer-card">
-            <button
-              type="button"
-              onClick={handleUnpinAllMessages}
-              className="flex items-center gap-x-1 w-full px-3 bg-transparent text-[rgba(255,255,255,0.85)] font-normal hover:backdrop-blur-md rounded-4xl justify-center"
-            >
-              <span>{t("unpinAll", "Открепить всё")}</span>
-            </button>
-          </div>
-        </form>
+        <ComposerWrapper>
+          <button
+            type="button"
+            onClick={handleUnpinAllMessages}
+            className="flex items-center gap-x-1 w-full px-3 bg-transparent text-[rgba(255,255,255,0.85)] font-normal hover:backdrop-blur-md rounded-4xl justify-center"
+          >
+            <span>{t('unpinAll', 'Открепить всё')}</span>
+          </button>
+        </ComposerWrapper>
       </main>
     );
-  },
+  }
 );
