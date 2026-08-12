@@ -9,6 +9,46 @@
 Для разработки backend v2 без Docker также нужны Go и Rust/Cargo, но основной
 локальный запуск ниже рассчитан на Docker Compose.
 
+## Установка инструментов
+
+1. Установите Git с [git-scm.com](https://git-scm.com/downloads).
+
+2. Установите Node.js 20 LTS с [nodejs.org](https://nodejs.org/). Вместе с
+   Node.js устанавливается npm. Node.js 18 остаётся минимально поддерживаемой
+   версией, но в CI используется Node.js 20.
+
+3. Установите Docker Desktop с
+   [docs.docker.com](https://docs.docker.com/desktop/). Docker Compose входит в
+   состав Docker Desktop.
+
+4. Если планируете запускать и проверять backend без Docker, установите:
+
+   - Go версии из `backend-v2/go.mod` с [go.dev](https://go.dev/dl/);
+   - Rust через [rustup](https://rustup.rs/), затем toolchain, используемый в CI:
+
+     ```bash
+     rustup toolchain install 1.94.0 --profile minimal --component rustfmt,clippy
+     rustup default 1.94.0
+     ```
+
+Проверьте установку:
+
+```bash
+git --version
+node --version
+npm --version
+docker --version
+docker compose version
+```
+
+Для разработки backend без Docker также выполните:
+
+```bash
+go version
+rustc --version
+cargo --version
+```
+
 ## Шаги
 
 1. Клонируйте репозиторий:
@@ -69,18 +109,53 @@
 
 ## Проверки
 
-Go-тесты backend v2:
+Установите frontend-зависимости из lock-файла:
 
 ```bash
-cd backend-v2
-GOCACHE=/tmp/crane-go-cache go test ./...
+npm ci
 ```
 
-React-сборка:
+Запустите полный набор frontend-проверок из корня проекта:
 
 ```bash
+npm run typecheck
+npm test
+npm run test:react
 npm run build:react
 ```
+
+- `typecheck` проверяет TypeScript без создания сборки;
+- `test` запускает архитектурные и синтаксические ограничения;
+- `test:react` запускает тесты Vitest;
+- `build:react` проверяет production-сборку Vite.
+
+Проверки Go backend v2:
+
+```bash
+(
+  cd backend-v2
+  test -z "$(gofmt -l .)"
+  go vet ./...
+  go test ./...
+  go build ./...
+)
+```
+
+Проверки Rust crypto-сервиса:
+
+```bash
+(
+  cd server/crypto-rust
+  cargo fmt --check
+  cargo clippy --locked --all-targets -- -D warnings
+  cargo test --locked
+  cargo build --release --locked
+)
+```
+
+Команды соответствуют основным проверкам GitHub Actions. Выполнять все группы
+локально обязательно перед крупным pull request; при изолированном изменении
+достаточно затронутой группы, а полный набор всё равно будет запущен в CI.
 
 ## Troubleshooting
 
@@ -151,4 +226,3 @@ curl -I http://localhost:8080
 
 Если запущен только Vite dev server, frontend будет доступен, но API-запросы
 будут падать без backend gateway.
-
