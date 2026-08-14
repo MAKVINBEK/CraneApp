@@ -1,93 +1,115 @@
-import { useTranslation } from "react-i18next";
-import { useMessageActions } from "../../../hooks/useMessageActions";
-import { useChatStore } from "../../../store/chat";
-import { Icon } from "../../ui/Icon";
+import { Icon } from '@/components/ui';
+import { useMessageActions } from '@/hooks';
+import { useChatStore, useProfileStore } from '@/store';
+import type { IMessageDto, TMessagesList } from '@/types';
+import type { Dispatch, RefObject, SetStateAction } from 'react';
+import { useTranslation } from 'react-i18next';
 
-const REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
+const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
 
-export const MessageActionsPopover = (props) => {
-  const { message, onSelection, currentUser } = props;
+interface Props {
+  message: IMessageDto;
+  onSelection: (message: IMessageDto) => void;
+  draftRef?: RefObject<HTMLInputElement | null>;
+  setIsForwardModalOpen: Dispatch<SetStateAction<boolean>>;
+  updateMessage: (
+    items: TMessagesList,
+    messageId: string,
+    data: Partial<Omit<IMessageDto, 'id'>>
+  ) => TMessagesList;
+}
+
+export const MessageActionsPopover = ({
+  message,
+  onSelection,
+  draftRef,
+  setIsForwardModalOpen,
+  updateMessage,
+}: Props) => {
+  const currentUser = useProfileStore((state) => state.user);
   const { t } = useTranslation();
-  const actions = useMessageActions(props); // Передаем props целиком, чтобы не деструктурировать дважды
-  const { selectedMessages, pinnedMessages, selectionMode, actionMenu } =
-    useChatStore();
+  const actions = useMessageActions({
+    draftRef,
+    setIsForwardModalOpen,
+    updateMessage,
+  });
+  const { selectedMessages, pinnedMessages, selectionMode, actionMenu } = useChatStore();
 
   const mine = message.senderId === currentUser?.id;
   const isPinned = pinnedMessages.some((p) => p.messageId === message.id);
   const isSelected = selectedMessages.some((m) => m.id === message.id);
 
-  // Убрали флаг !selectionMode из каждой строки — теперь фильтруем его глобально для группы кнопок
   const buttons = [
     {
       show: !selectionMode,
-      icon: "reply",
-      key: "reply",
-      def: t("messageActions.reply", "Ответить"),
+      icon: 'reply',
+      key: 'reply',
+      def: t('messageActions.reply', 'Ответить'),
       action: () => actions.startReply(message),
     },
     {
       show: true,
-      icon: "copy",
-      key: "copy",
-      def: t("messageActions.copy", "Скопировать"),
+      icon: 'copy',
+      key: 'copy',
+      def: t('messageActions.copy', 'Скопировать'),
       action: () => actions.handleCopyMessage(message),
     },
     {
       show: !mine && !selectionMode,
-      icon: "language",
-      key: "translate",
-      def: t("action.translate", "Перевести"),
+      icon: 'language',
+      key: 'translate',
+      def: t('action.translate', 'Перевести'),
       action: () => actions.handleTranslateMessage(message),
     },
     {
       show: mine && !selectionMode,
-      icon: "edit",
-      key: "edit",
-      def: t("messageActions.edit", "Изменить"),
+      icon: 'edit',
+      key: 'edit',
+      def: t('messageActions.edit', 'Изменить'),
       action: () => actions.startEdit(message),
     },
     {
       show: !isPinned && !selectionMode,
-      icon: "pin",
-      key: "pin",
-			def: t("messageActions.pin", "Закрепить"),
+      icon: 'pin',
+      key: 'pin',
+      def: t('messageActions.pin', 'Закрепить'),
       action: () => actions.handlePinMessage(message),
     },
     {
       show: !isPinned && selectionMode,
-      icon: "pin",
-      key: "pin",
-      def: t("messageActions.pinAll", "Закрепить всё"),
+      icon: 'pin',
+      key: 'pin',
+      def: t('messageActions.pinAll', 'Закрепить всё'),
       action: () => actions.handlePinMessage(message),
     },
     {
       show: isPinned && !selectionMode,
-      icon: "pin",
-      key: "unpin",
-      def: t("messageActions.unpin", "Открепить"),
+      icon: 'pin',
+      key: 'unpin',
+      def: t('messageActions.unpin', 'Открепить'),
       action: () => actions.handleUnpinMessage(message),
     },
     {
       show: isPinned && selectionMode,
-      icon: "pin",
-      key: "unpin",
-      def: t("messageActions.unpinAll", "Открепить всё"),
+      icon: 'pin',
+      key: 'unpin',
+      def: t('messageActions.unpinAll', 'Открепить всё'),
       action: () => actions.handleUnpinMessage(message),
     },
     {
       show: true,
-      icon: "forward",
-      key: "forward",
-      def: t("messageActions.forward", "Переслать"),
+      icon: 'forward',
+      key: 'forward',
+      def: t('messageActions.forward', 'Переслать'),
       action: () => actions.handleForward(message),
     },
     {
       show: mine,
-      icon: "trash",
-      key: "delete",
-      def: t("messageActions.delete","Удалить"),
+      icon: 'trash',
+      key: 'delete',
+      def: t('messageActions.delete', 'Удалить'),
       action: () => actions.handleDelete(message),
-      className: "is-danger",
+      className: 'is-danger',
     },
   ];
 
@@ -97,16 +119,11 @@ export const MessageActionsPopover = (props) => {
       onClick={(e) => e.stopPropagation()}
       style={{ left: actionMenu?.x, top: actionMenu?.y }}
     >
-      {/* Реакции */}
       <div className="message-reaction-actions">
         {REACTIONS.map((emoji) => (
           <button
             key={emoji}
-            onClick={() =>
-              actions.runMessageAction(() =>
-                actions.handleReact(message, emoji),
-              )
-            }
+            onClick={() => actions.runMessageAction(() => actions.handleReact(message, emoji))}
             type="button"
             className="shrink-0"
           >
@@ -115,7 +132,6 @@ export const MessageActionsPopover = (props) => {
         ))}
       </div>
 
-      {/* Действия с текстом */}
       <div className="message-text-actions">
         {buttons
           .filter((b) => b.show)
@@ -131,22 +147,17 @@ export const MessageActionsPopover = (props) => {
             </button>
           ))}
 
-        {/* Объединили кнопку выбора в одну строку без дублирования тегов */}
         <button
           onClick={() =>
             actions.runMessageAction(() =>
-              selectionMode
-                ? onSelection(message)
-                : actions.startSelection(message),
+              selectionMode ? onSelection(message) : actions.startSelection(message)
             )
           }
           type="button"
         >
           <Icon name="check-circle" className="fill-transparent" />
           <span>
-            {isSelected
-              ? t("uncheckMessage", "Снять выбор")
-              : t("checkMessage", "Выбрать")}
+            {isSelected ? t('uncheckMessage', 'Снять выбор') : t('checkMessage', 'Выбрать')}
           </span>
         </button>
       </div>

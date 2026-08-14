@@ -4,7 +4,11 @@ export interface IUserDto {
   firstName: string;
   lastName: string;
   bio: string;
-} // TODO: дописать
+  avatarUrl: string
+  isPremium: boolean
+  isBot: boolean
+  badges: string[] // неизвестно какое dto у бэйджа
+}
 
 export interface ISettingsDto {
   language: string;

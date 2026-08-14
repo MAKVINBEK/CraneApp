@@ -1,8 +1,11 @@
-import { eventBus, getRawChat } from '@/core';
-import { sortMessagesChronologically } from '@/utils';
 import { API_ENDPOINTS, ApiClient } from '@/api';
+import { STORAGE_KEYS, WS_EVENTS } from '@/consts';
+import { eventBus, getRawChat } from '@/core';
+import { useChatStore } from '@/store';
 import type {
   IChatContext,
+  IEmojisResponse,
+  IEncryptedMedia,
   ILastMessageDto,
   IMediaItem,
   IMessageDto,
@@ -12,14 +15,14 @@ import type {
   IPinnedListResponse,
   IPinnedMessageDto,
   IReactionsResponse,
+  ISuccessResponse,
   TMediaMessageType,
   TMessagesList,
   TMessageType,
   TPinnedList,
 } from '@/types';
+import { sortMessagesChronologically } from '@/utils';
 import type { CryptoService } from './CryptoService';
-import { STORAGE_KEYS, WS_EVENTS } from '@/consts';
-import { useChatStore } from '@/store';
 
 const MEDIA_MESSAGE_TYPES = new Set(['image', 'video', 'audio', 'voice', 'file', 'gif', 'sticker']);
 const LEGACY_MEDIA_UNAVAILABLE = 'Медиа недоступно: файл не зашифрован';
@@ -176,8 +179,6 @@ export class MessageService {
     };
 
     this.addMessageToCache(chatId, message);
-    // eventBus.emit("message:sent", message);
-
     return message;
   }
 
@@ -320,7 +321,7 @@ export class MessageService {
     }
   }
 
-  mediaMetadataFromPayload(payload) {
+  mediaMetadataFromPayload(payload: IEncryptedMedia): Omit<IEncryptedMedia, 'ciphertext'> {
     const { ciphertext, ...metadata } = payload;
     return metadata;
   }
@@ -336,15 +337,25 @@ export class MessageService {
     const message = response.data;
     this.updatePinnedMessageInCache(messageId, message);
     this.updateMessageInCache(messageId, message);
-    eventBus.emit(WS_EVENTS.MESSAGE.EDITED, message);
+    eventBus.emit(WS_EVENTS.MESSAGE.EDITED, {
+      chatId: '',
+      messageId,
+      type: WS_EVENTS.MESSAGE.EDITED,
+      updatedAt: new Date(),
+      content: message.content,
+    });
 
     return message;
   }
 
-  async deleteMessage(messageId) {
+  async deleteMessage(messageId: string) {
     const response = await this.apiClient.delete(API_ENDPOINTS.MESSAGE_BY_ID(messageId));
     this.removeMessageFromCache(messageId);
-    eventBus.emit(WS_EVENTS.MESSAGE.DELETED, { messageId });
+    eventBus.emit(WS_EVENTS.MESSAGE.DELETED, {
+      messageId,
+      chatId: '',
+      type: WS_EVENTS.MESSAGE.DELETED,
+    });
     return response.data;
   }
 
@@ -360,7 +371,7 @@ export class MessageService {
       }
     });
 
-    eventBus.emit('messages:read', { chatId, messageIds });
+    // eventBus.emit('messages:read', { chatId, messageIds });
     return response.data;
   }
 
@@ -384,7 +395,7 @@ export class MessageService {
     return message;
   }
 
-  listReactions(messageId: string) {
+  async listReactions(messageId: string) {
     return this.apiClient
       .get<IReactionsResponse>(API_ENDPOINTS.MESSAGE_REACTIONS(messageId))
       .then((response) => response.data?.reactions ?? []);
@@ -418,9 +429,10 @@ export class MessageService {
   }
 
   async pinMessage(chatId: string, messageId: string) {
-    const response = await this.apiClient.post(API_ENDPOINTS.CHAT_PIN_MESSAGE(chatId, messageId));
+    const response = await this.apiClient.post<ISuccessResponse>(
+      API_ENDPOINTS.CHAT_PIN_MESSAGE(chatId, messageId)
+    );
 
-    this.addPinnedMessageToCache(chatId, response.data);
     return response.data;
   }
 
@@ -431,9 +443,9 @@ export class MessageService {
     return response.data;
   }
 
-  async reactToMessage(messageId: string, emoji: string) {
+  async reactToMessage(messageId: string, emoji: string): Promise<IEmojisResponse> {
     return this.apiClient
-      .post(API_ENDPOINTS.MESSAGE_REACT(messageId), { emoji })
+      .post<IEmojisResponse>(API_ENDPOINTS.MESSAGE_REACT(messageId), { emoji })
       .then((response) => response.data);
   }
 
@@ -465,7 +477,7 @@ export class MessageService {
     }
     this.pinnedMessages.set(
       chatId,
-      sortMessagesChronologically([...this.pinnedMessages.get(chatId), message])
+      sortMessagesChronologically([...this.getOrCreatePinnedMessages(chatId), message])
     );
   }
 
@@ -482,7 +494,10 @@ export class MessageService {
     if (!this.messages.has(chatId)) {
       this.messages.set(chatId, []);
     }
-    this.messages.set(chatId, sortMessagesChronologically([...this.messages.get(chatId), message]));
+    this.messages.set(
+      chatId,
+      sortMessagesChronologically([...this.getOrCreateMessages(chatId), message])
+    );
   }
 
   removeMessageFromCache(messageId: string) {
@@ -492,5 +507,19 @@ export class MessageService {
         messages.filter((message) => message.id !== messageId)
       );
     });
+  }
+
+  private getOrCreateMessages(chatId: string): TMessagesList {
+    if (!this.messages.has(chatId)) {
+      this.messages.set(chatId, []);
+    }
+    return this.messages.get(chatId)!;
+  }
+
+  private getOrCreatePinnedMessages(chatId: string): TPinnedList {
+    if (!this.pinnedMessages.has(chatId)) {
+      this.pinnedMessages.set(chatId, []);
+    }
+    return this.pinnedMessages.get(chatId)!;
   }
 }
