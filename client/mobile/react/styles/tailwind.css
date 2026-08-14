@@ -874,7 +874,6 @@
   .message-meta { @apply mt-1 flex justify-end gap-[6px] text-[11px]; color: rgba(255,255,255,0.58); }
   .message-actions-popover {
     @apply fixed z-[1202] flex flex-col items-stretch gap-[8px];
-    width: min(292px, calc(100vw - 16px));
     filter: drop-shadow(0 18px 38px rgba(0,0,0,0.48));
     animation: message-menu-in 0.14s ease-out;
     transform-origin: top center;
@@ -924,8 +923,8 @@
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
     & button {
-      width: 40px;
-      height: 40px;
+      width: 36px;
+      height: 36px;
       padding: 0;
       border-radius: 14px;
       background: transparent;
@@ -940,7 +939,7 @@
     }
   }
   .message-text-actions {
-    @apply flex flex-col items-stretch rounded-[18px] overflow-hidden;
+    @apply flex flex-col items-stretch self-center rounded-[18px] max-w-50 w-full overflow-hidden;
     padding: 5px;
     background: rgba(20,20,24,0.96);
     border: 1px solid rgba(255,255,255,0.12);

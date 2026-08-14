@@ -1,14 +1,16 @@
-import type { TMediaMessageType, TMessageType } from '@/types';
+import type { TMediaMessageType, TMessageType, TReactionsList } from '@/types';
 
 export type TChatType = 'private' | 'group';
 
 export type TChatRole = 'member' | 'admin' | 'owner';
 
 export interface ILastMessageDto {
+  id: string;
   content: string;
   type: TMessageType;
   senderId: string;
   senderName: string;
+  reactions: TReactionsList
 }
 
 export interface IChatDto {

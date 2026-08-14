@@ -184,7 +184,6 @@ export interface IWsEventMap {
   [WS_EVENTS.MESSAGE.NEW]: IMessageNewEvent;
   [WS_EVENTS.MESSAGE.PINNED]: IMessagePinEvent;
   [WS_EVENTS.MESSAGE.UNPINNED]: IMessageUnpinEvent;
-  // [WS_EVENTS.MESSAGE.LOCAL]: ,
 
   [WS_EVENTS.OTHER.PING]: IPingEvent;
   [WS_EVENTS.OTHER.PONG]: IPongEvent;

@@ -115,10 +115,6 @@ export function ChatThreadPage() {
     handleForward,
     handleCloseForwardModal,
   } = useMessageActions({
-    currentUser,
-    chatId,
-    chatType: chat?.type,
-    chatRole: chat?.role,
     draftRef,
     setIsForwardModalOpen,
     updateMessage,
@@ -420,7 +416,6 @@ export function ChatThreadPage() {
           onSelection={toggleMessageSelection}
           actionMenu={actionMenu}
           setIsForwardModalOpen={setIsForwardModalOpen}
-          ref={draftRef}
           updateMessage={updateMessage}
           setPinnedMessagesOpen={setPinnedMessagesOpen}
         />
@@ -451,11 +446,7 @@ export function ChatThreadPage() {
               <MessageActionsPopover
                 message={selectedActionMessage}
                 onSelection={toggleMessageSelection}
-                currentUser={currentUser}
                 draftRef={draftRef}
-                chatId={chatId}
-                chatType={chat?.type}
-                chatRole={chat?.role}
                 updateMessage={updateMessage}
                 setIsForwardModalOpen={setIsForwardModalOpen}
               />

@@ -159,3 +159,15 @@ export interface IPinMessagePayload {
   chatId: string;
   messageId: string;
 }
+
+export interface IEmojiDto {
+  emoji: string
+  count: number
+  myReaction: boolean
+}
+
+export type TEmojisList = IEmojiDto[]
+
+export interface IEmojisResponse {
+  reactions: TEmojisList
+}
