@@ -487,7 +487,6 @@
 	    position: fixed;
 	    inset: 0;
 	    width: 100%;
-	    height: 100vh;
 	    height: 100dvh;
 	    min-height: 0;
 	  }
@@ -593,21 +592,7 @@
   }
 
   /* Group info modal */
-  .group-info-modal-overlay {
-    @apply fixed inset-0 z-[1000] flex justify-center items-end;
-    background: rgba(0,0,0,0.4); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-    animation: fadeIn 0.2s ease-out;
-  }
-  .group-info-modal-content {
-    @apply w-full flex flex-col overflow-hidden;
-    max-width: 500px; max-height: 85vh;
-    border-top-left-radius: 24px; border-top-right-radius: 24px;
-    background: rgba(20,20,22,0.85); border: 1px solid rgba(255,255,255,0.1); border-bottom: none;
-    animation: slideUp 0.3s cubic-bezier(0.2,0.8,0.2,1); box-shadow: 0 -10px 40px rgba(0,0,0,0.5);
-  }
   .group-info-header {
-    @apply flex justify-between items-center;
-    padding: 20px 24px; border-bottom: 1px solid rgba(255,255,255,0.05);
     & h2 { @apply text-[1.2rem] font-semibold m-0; background: linear-gradient(135deg,#fff 0%,#aaa 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
   }
   .close-btn {
@@ -716,9 +701,8 @@
 @layer components {
 
   .thread-page {
-    @apply relative max-w-[920px] mx-auto grid;
-    min-height: 100vh; min-height: 100dvh;
-    grid-template-rows: auto minmax(0,1fr) auto;
+    @apply flex flex-col relative max-w-[920px] mx-auto;
+    min-height: 100dvh;
     background: rgba(10,10,10,0.72);
   }
 	  .thread-header {
@@ -775,7 +759,7 @@
   .thread-call-button:focus-visible { outline: 2px solid rgba(42,171,238,0.72); outline-offset: 2px; }
   .thread-call-icon { @apply block w-6 h-6; }
   .thread-call-icon-video { width: 31px; height: 31px; opacity: 0.9; }
-  .thread-messages { @apply min-h-0 overflow-y-auto flex flex-col gap-[10px]; padding: 18px 12px; }
+  .thread-messages { @apply min-h-0 h-full overflow-y-auto flex flex-col gap-[10px]; padding: 18px 12px; }
 
   .message-bubble {
     @apply relative w-fit text-white;
