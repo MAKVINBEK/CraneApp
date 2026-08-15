@@ -25,8 +25,8 @@ export interface ISearchUserDto {
   avatarUrl: string;
 }
 
-export type ISearchUsersList = ISearchUserDto[];
+export type TSearchUsersList = ISearchUserDto[];
 
 export interface ISearchUsersResponse {
-  users: ISearchUsersList;
+  users: TSearchUsersList;
 }

@@ -56,13 +56,13 @@ export class MessageService {
     });
 
     const chatContext = await this.getChatContext(chatId, 'decryption');
-    const messages = sortMessagesChronologically(
+    const messages = response.data.messages ? sortMessagesChronologically(
       await Promise.all(
         response.data.messages.map(async (item: IMessageDto) => {
           return this.processMessageForDisplay(chatId, item, chatContext);
         })
       )
-    );
+    )  : [];
 
     if (offset === 0) {
       this.messages.set(chatId, messages);
@@ -71,6 +71,7 @@ export class MessageService {
     if (offset > 0 && cached) {
       this.messages.set(chatId, sortMessagesChronologically([...cached, ...messages]));
     }
+
     return messages;
   }
 

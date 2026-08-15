@@ -48,10 +48,10 @@ export type {
   TPinnedList,
   TReactionsList,
 } from './message.types';
-export type { ISuccessResponse } from './response.types';
+export type { ISuccessResponse, ICreateGroupChatResponse } from './response.types';
 export type {
   ISearchUserDto,
-  ISearchUsersList,
+  TSearchUsersList,
   ISearchUsersResponse,
   ISettingsDto,
   IUserDto,

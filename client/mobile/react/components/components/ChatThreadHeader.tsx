@@ -2,7 +2,7 @@ import { useCall } from '@/hooks';
 import type { IProfileModal } from '@/pages';
 import { services } from '@/services';
 import { useChatStore } from '@/store';
-import { getChatSubtitle } from '@/utils';
+import { cn, getChatSubtitle } from '@/utils';
 import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router-dom';
@@ -144,7 +144,7 @@ export const ChatThreadHeader = ({
           >
             <button
               aria-label={chat.title}
-              className={`thread-avatar ${isPeerOnline ? 'is-online' : ''}`}
+              className={cn("thread-avatar", isPeerOnline && 'is-online')}
               tabIndex={-1}
               type="button"
             >
