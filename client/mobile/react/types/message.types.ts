@@ -1,3 +1,5 @@
+import type { IEncryptedMedia } from "./encryption.types";
+
 export type TMessageType =
   | "text"
   | "image"
@@ -26,15 +28,7 @@ interface IMediaMetadata {
   fileName: string;
   isEncrypted: boolean;
   mediaEncrypted: boolean;
-  mediaEncryption: {
-    algorithm: "AES-GCM";
-    encrypted: boolean;
-    fileName: string;
-    iv: string;
-    mimeType: string;
-    sizeBytes: number;
-    version: number;
-  };
+  mediaEncryption: IEncryptedMedia
   mediaType: TMediaMessageType;
   mediaUrl: string;
   sizeBytes: number;
@@ -106,22 +100,12 @@ export interface IPinnedListResponse {
   pins: TPinnedList;
 }
 
-export interface IMediaEncryption {
-  algorithm: "AES-GCM";
-  encrypted: boolean;
-  fileName: string;
-  iv: string;
-  mimeType: string;
-  sizeBytes: number;
-  version: number;
-}
-
 export interface IMediaPayload {
   ciphertext?: unknown;
   fileName?: string;
   isEncrypted?: boolean;
   mediaEncrypted?: boolean;
-  mediaEncryption?: IMediaEncryption;
+  mediaEncryption?: IEncryptedMedia;
   mediaType?: TMediaMessageType;
   mediaUrl?: string;
   sizeBytes?: number;
@@ -129,20 +113,17 @@ export interface IMediaPayload {
 }
 export interface IMediaItem extends IMessageDto {
   mediaUrl?: string | null;
-  media_url?: string | null;
   mediaEncrypted?: boolean;
-  media_encrypted?: boolean;
-  mediaEncryption?: IMediaEncryption | null;
-  media_encryption?: IMediaEncryption | null;
+  mediaEncryption?: IEncryptedMedia | null;
   mediaUnavailable?: boolean;
   mediaUnavailableReason?: string;
-  media_type?: TMediaMessageType;
+  mediaType?: TMediaMessageType;
 }
 export interface IMediaDisplayPatch {
   mediaUrl?: string | null;
   mediaOriginalUrl?: string;
   mediaEncrypted?: boolean;
-  mediaEncryption?: IMediaEncryption | null;
+  mediaEncryption?: IEncryptedMedia | null;
   mediaUnavailable?: boolean;
   mediaUnavailableReason?: string;
 }

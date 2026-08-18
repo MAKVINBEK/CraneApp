@@ -23,11 +23,11 @@ export type {
   TMembersList,
 } from './chat.types';
 export type { IEncryptedMedia } from './encryption.types';
+export type { TIconTypes } from './icons';
 export type {
   IEmojiDto,
   IEmojisResponse,
   IMediaDisplayPatch,
-  IMediaEncryption,
   IMediaItem,
   IMediaPayload,
   IMessageApiResponse,
@@ -48,13 +48,17 @@ export type {
   TPinnedList,
   TReactionsList,
 } from './message.types';
-export type { ISuccessResponse, ICreateGroupChatResponse } from './response.types';
+export type {
+  ICreateGroupChatResponse,
+  IMlsStateResponse,
+  ISuccessResponse,
+} from './response.types';
 export type {
   ISearchUserDto,
-  TSearchUsersList,
   ISearchUsersResponse,
   ISettingsDto,
   IUserDto,
+  TSearchUsersList,
 } from './user.types';
 export type {
   ICallAnswerEvent,

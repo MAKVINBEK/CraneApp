@@ -1,7 +1,7 @@
 import { Icon } from '@/components/ui';
 import { useMessageActions } from '@/hooks';
 import { useChatStore, useProfileStore } from '@/store';
-import type { IMessageDto, TMessagesList } from '@/types';
+import type { IMessageDto, TIconTypes, TMessagesList } from '@/types';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -17,6 +17,15 @@ interface Props {
     messageId: string,
     data: Partial<Omit<IMessageDto, 'id'>>
   ) => TMessagesList;
+}
+
+interface IActionButton {
+  show: boolean;
+  icon: TIconTypes;
+  key: string;
+  def: string;
+  action: () => void;
+  className?: string;
 }
 
 export const MessageActionsPopover = ({
@@ -39,7 +48,7 @@ export const MessageActionsPopover = ({
   const isPinned = pinnedMessages.some((p) => p.messageId === message.id);
   const isSelected = selectedMessages.some((m) => m.id === message.id);
 
-  const buttons = [
+  const buttons: IActionButton[] = [
     {
       show: !selectionMode,
       icon: 'reply',
@@ -155,7 +164,7 @@ export const MessageActionsPopover = ({
           }
           type="button"
         >
-          <Icon name="check-circle" className="fill-transparent" />
+          <Icon name="checkCircle" className="fill-transparent" />
           <span>
             {isSelected ? t('uncheckMessage', 'Снять выбор') : t('checkMessage', 'Выбрать')}
           </span>
