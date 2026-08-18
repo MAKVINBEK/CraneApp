@@ -1,6 +1,6 @@
 import type { TMediaMessageType, TMessageType, TReactionsList } from '@/types';
 
-export type TChatType = 'private' | 'group';
+export type TChatType = 'private' | 'group' | 'channel';
 
 export type TChatRole = 'member' | 'admin' | 'owner';
 
@@ -10,7 +10,7 @@ export interface ILastMessageDto {
   type: TMessageType;
   senderId: string;
   senderName: string;
-  reactions: TReactionsList
+  reactions: TReactionsList;
 }
 
 export interface IChatDto {
@@ -45,7 +45,7 @@ export interface IChatsResponse {
 }
 
 export interface IChatContext {
-  type: string;
+  type: TChatType;
   peerPublicKey: string | null;
   [key: string]: unknown;
 }

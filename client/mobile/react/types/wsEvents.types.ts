@@ -182,6 +182,7 @@ export interface IWsEventMap {
   [WS_EVENTS.MESSAGE.DELETED]: IMessageDeletedEvent;
   [WS_EVENTS.MESSAGE.EDITED]: IMessageEditedEvent;
   [WS_EVENTS.MESSAGE.NEW]: IMessageNewEvent;
+  [WS_EVENTS.MESSAGE.LOCAL.SENT]: IMessageNewEvent;
   [WS_EVENTS.MESSAGE.PINNED]: IMessagePinEvent;
   [WS_EVENTS.MESSAGE.UNPINNED]: IMessageUnpinEvent;
 

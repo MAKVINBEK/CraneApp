@@ -53,7 +53,7 @@ export const PinnedMessagesPage = ({
   const selectedActionMessage = actionMenu
     ? pinnedMessages.find((message: IPinnedDto) => message.messageId === actionMenu.messageId)
     : null;
-  console.log(selectedActionMessage);
+
   return (
     <main className="thread-page">
       <ChatThreadHeader locationPage="pinned-messages" onClosePinnedMessagePage={onClose} />

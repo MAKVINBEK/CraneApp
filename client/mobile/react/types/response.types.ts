@@ -6,3 +6,7 @@ export interface ICreateGroupChatResponse {
   chatId: string
   title: string
 }
+
+export interface IMlsStateResponse {
+  state: any;
+}

@@ -254,7 +254,6 @@ export function ChatThreadPage() {
 
   useEffect(() => {
     const unsubscribeNew = eventBus.on(WS_EVENTS.MESSAGE.NEW, async (event) => {
-      console.log(event, 'event');
       if (event.chatId !== chatId || !event.message) return;
       const nextMessage = await services.messageService.processMessageForDisplay(
         chatId,

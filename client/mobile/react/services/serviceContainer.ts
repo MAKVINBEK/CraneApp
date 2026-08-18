@@ -2,14 +2,14 @@ import { apiClient } from "@/api";
 import { STORAGE_KEYS } from "@/consts";
 import { useProfileStore } from "@/store";
 
-import { MessageService } from "./MessageService";
 import { AdminService } from "./AdminService";
 import { AuthService } from "./AuthService";
-import { CryptoService } from "./CryptoService";
 import { CallService } from "./CallService";
 import { ChatService } from "./ChatService";
+import { CryptoService } from "./CryptoService";
 import { EmojiService } from "./EmojiService";
 import { MediaService } from "./MediaService";
+import { MessageService } from "./MessageService";
 import { UserService } from "./UserService";
 
 const cryptoService = new CryptoService(apiClient);

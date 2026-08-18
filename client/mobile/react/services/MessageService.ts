@@ -116,7 +116,7 @@ export class MessageService {
     const message: IMessageDto = { ...messageObj, content: content.trim() };
 
     this.addMessageToCache(chatId, message);
-    // eventBus.emit(WS_EVENTS.MESSAGE.LOCAL.SENT, { message, chatId });
+    eventBus.emit(WS_EVENTS.MESSAGE.LOCAL.SENT, { message, chatId, type: WS_EVENTS.MESSAGE.NEW });
 
     return message;
   }
@@ -254,7 +254,7 @@ export class MessageService {
     if (chatContext.type === 'group') {
       return this.cryptoService.encryptGroup(chatId, content);
     }
-    return this.cryptoService.encryptDM(content, chatContext.peerPublicKey);
+    return this.cryptoService.encryptDM(content, chatContext.peerPublicKey!);
   }
 
   async decryptContent(
@@ -268,7 +268,7 @@ export class MessageService {
       return this.cryptoService.decryptGroup(chatId, content);
     }
     const isOwnMessage = senderId && senderId === this.getMeId();
-    return this.cryptoService.decryptDM(content, chatContext.peerPublicKey, {
+    return this.cryptoService.decryptDM(content, chatContext.peerPublicKey!, {
       preferEmbeddedSenderKey: !isOwnMessage,
     });
   }
