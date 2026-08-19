@@ -439,3 +439,4 @@ Release не является Sprint.
 Правила выполнения и завершения задач вынесены в отдельный документ:
 
 * [Ветки, коммиты, Pull Request, тестирование и Definition of Done](02-task-development-workflow.md)
+* [Оформление Pull Request и правила Code Review](code-review.md)
