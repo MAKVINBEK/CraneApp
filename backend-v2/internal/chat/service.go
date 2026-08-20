@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"path"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/lib/pq"
@@ -1449,15 +1450,22 @@ func (s *Service) EditMessage(ctx context.Context, userID, messageID, content st
 
 func (s *Service) DeleteMessage(ctx context.Context, userID, messageID string) error {
 	var chatID string
+	var createdAt time.Time
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
 	// Require sender to be a current member to prevent deletion after being kicked.
-	err := s.db.QueryRowContext(ctx, `
+	err = tx.QueryRowContext(ctx, `
 		UPDATE messages.messages AS m
 		SET deleted_at = NOW()
 		FROM chats.members AS cm
 		WHERE m.id = $1 AND (m.sender_id = $2 OR cm.role = 'owner' OR (cm.role = 'admin' AND cm.permissions->>'can_delete_messages' = 'true')) AND m.deleted_at IS NULL
 		  AND cm.chat_id = m.chat_id AND cm.user_id = $2
-		RETURNING m.chat_id::text
-	`, messageID, userID).Scan(&chatID)
+		RETURNING m.chat_id::text, m.created_at
+	`, messageID, userID).Scan(&chatID, &createdAt)
 
 	if err == sql.ErrNoRows {
 		return ErrNotFound
@@ -1466,11 +1474,60 @@ func (s *Service) DeleteMessage(ctx context.Context, userID, messageID string) e
 		return err
 	}
 
+	var previousMessage *Message
+	var previous Message
+	var replyTo sql.NullString
+	var metadataBytes []byte
+	var deletedAt sql.NullString
+	err = tx.QueryRowContext(ctx, `
+		SELECT m.id::text, m.chat_id::text, m.sender_id::text,
+		       COALESCE(up.first_name, au.first_name, au.username, ''), COALESCE(up.avatar_url, ''),
+		       m.content, m.type, m.reply_to::text, m.metadata,
+		       (p.message_id IS NOT NULL), m.updated_at > m.created_at,
+		       m.created_at::text, m.updated_at::text, m.deleted_at::text
+		FROM messages.messages m
+		LEFT JOIN auth.users au ON au.id = m.sender_id
+		LEFT JOIN users.profiles up ON up.user_id = m.sender_id
+		LEFT JOIN messages.pins p ON p.message_id = m.id
+		WHERE m.chat_id = $1
+		  AND m.deleted_at IS NULL
+		  AND (m.created_at, m.id) < ($2, $3::uuid)
+		ORDER BY m.created_at DESC, m.id DESC
+		LIMIT 1
+	`, chatID, createdAt, messageID).Scan(
+		&previous.ID, &previous.ChatID, &previous.SenderID,
+		&previous.SenderName, &previous.SenderAvatar,
+		&previous.Content, &previous.Type, &replyTo, &metadataBytes,
+		&previous.IsPinned, &previous.IsEdited,
+		&previous.CreatedAt, &previous.UpdatedAt, &deletedAt,
+	)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if err == nil {
+		if replyTo.Valid {
+			previous.ReplyTo = &replyTo.String
+			previous.ReplyToMessageID = previous.ReplyTo
+		}
+		if metadataBytes != nil {
+			if err := json.Unmarshal(metadataBytes, &previous.Metadata); err != nil {
+				return err
+			}
+		}
+		previous.SenderFirstName = previous.SenderName
+		previousMessage = &previous
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
 	if s.ws != nil {
 		payload, _ := json.Marshal(map[string]any{
-			"type":      "message_deleted",
-			"chatId":    chatID,
-			"messageId": messageID,
+			"type":            "message_deleted",
+			"chatId":          chatID,
+			"messageId":       messageID,
+			"previousMessage": previousMessage,
 		})
 		s.ws.BroadcastToChat(chatID, payload, userID)
 	}
