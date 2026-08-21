@@ -42,10 +42,6 @@ export interface IReaction {
 
 export type TReactionsList = IReaction[];
 
-export interface IReactionsResponse {
-  reactions: TReactionsList;
-}
-
 export interface IMessageDto {
   id: string;
   chatId: string;
@@ -70,13 +66,7 @@ export interface IMessageDto {
 
 export type TMessagesList = IMessageDto[];
 
-export interface IMessageResponse {
-  message: IMessageDto;
-}
 
-export interface IMessagesResponse {
-  messages: TMessagesList;
-}
 
 export interface IPinnedMessageDto {
   id: string;
@@ -95,10 +85,6 @@ export interface IPinnedDto {
 }
 
 export type TPinnedList = IPinnedDto[];
-
-export interface IPinnedListResponse {
-  pins: TPinnedList;
-}
 
 export interface IMediaPayload {
   ciphertext?: unknown;
@@ -127,14 +113,7 @@ export interface IMediaDisplayPatch {
   mediaUnavailable?: boolean;
   mediaUnavailableReason?: string;
 }
-export interface IUploadResponse {
-  url?: string;
-  [key: string]: unknown;
-}
-export interface IMessageApiResponse {
-  message?: IMessageDto;
-  [key: string]: unknown;
-}
+
 
 export interface IPinMessagePayload {
   chatId: string;
@@ -149,6 +128,3 @@ export interface IEmojiDto {
 
 export type TEmojisList = IEmojiDto[]
 
-export interface IEmojisResponse {
-  reactions: TEmojisList
-}
