@@ -26,7 +26,3 @@ export interface ISearchUserDto {
 }
 
 export type TSearchUsersList = ISearchUserDto[];
-
-export interface ISearchUsersResponse {
-  users: TSearchUsersList;
-}

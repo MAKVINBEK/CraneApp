@@ -530,7 +530,6 @@ export class CryptoService {
 
     const material = JSON.stringify({
       purpose: 'craneapp-media-v1',
-      accountId: this.accountId,
       chatId,
       state,
     });
