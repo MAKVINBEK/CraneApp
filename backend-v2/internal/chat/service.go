@@ -1448,12 +1448,16 @@ func (s *Service) EditMessage(ctx context.Context, userID, messageID, content st
 	return msg, nil
 }
 
-func (s *Service) DeleteMessage(ctx context.Context, userID, messageID string) error {
+func (s *Service) DeleteMessage(ctx context.Context, userID, messageID string) (*Message, error) {
+	if err := validate.Var(messageID, "required,uuid"); err != nil {
+		return nil, ErrInvalidInput
+	}
+
 	var chatID string
 	var createdAt time.Time
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer tx.Rollback()
 
@@ -1468,58 +1472,23 @@ func (s *Service) DeleteMessage(ctx context.Context, userID, messageID string) e
 	`, messageID, userID).Scan(&chatID, &createdAt)
 
 	if err == sql.ErrNoRows {
-		return ErrNotFound
+		return nil, ErrNotFound
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	var previousMessage *Message
-	var previous Message
-	var replyTo sql.NullString
-	var metadataBytes []byte
-	var deletedAt sql.NullString
-	err = tx.QueryRowContext(ctx, `
-		SELECT m.id::text, m.chat_id::text, m.sender_id::text,
-		       COALESCE(up.first_name, au.first_name, au.username, ''), COALESCE(up.avatar_url, ''),
-		       m.content, m.type, m.reply_to::text, m.metadata,
-		       (p.message_id IS NOT NULL), m.updated_at > m.created_at,
-		       m.created_at::text, m.updated_at::text, m.deleted_at::text
-		FROM messages.messages m
-		LEFT JOIN auth.users au ON au.id = m.sender_id
-		LEFT JOIN users.profiles up ON up.user_id = m.sender_id
-		LEFT JOIN messages.pins p ON p.message_id = m.id
-		WHERE m.chat_id = $1
-		  AND m.deleted_at IS NULL
-		  AND (m.created_at, m.id) < ($2, $3::uuid)
-		ORDER BY m.created_at DESC, m.id DESC
-		LIMIT 1
-	`, chatID, createdAt, messageID).Scan(
-		&previous.ID, &previous.ChatID, &previous.SenderID,
-		&previous.SenderName, &previous.SenderAvatar,
-		&previous.Content, &previous.Type, &replyTo, &metadataBytes,
-		&previous.IsPinned, &previous.IsEdited,
-		&previous.CreatedAt, &previous.UpdatedAt, &deletedAt,
-	)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return err
+	previousMessage, err := s.loadMessageAfterDelete(ctx, tx, userID, chatID, &createdAt, messageID)
+	if err != nil {
+		return nil, err
 	}
-	if err == nil {
-		if replyTo.Valid {
-			previous.ReplyTo = &replyTo.String
-			previous.ReplyToMessageID = previous.ReplyTo
-		}
-		if metadataBytes != nil {
-			if err := json.Unmarshal(metadataBytes, &previous.Metadata); err != nil {
-				return err
-			}
-		}
-		previous.SenderFirstName = previous.SenderName
-		previousMessage = &previous
+	lastMessage, err := s.loadMessageAfterDelete(ctx, tx, userID, chatID, nil, messageID)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := tx.Commit(); err != nil {
-		return err
+		return nil, err
 	}
 
 	if s.ws != nil {
@@ -1532,6 +1501,106 @@ func (s *Service) DeleteMessage(ctx context.Context, userID, messageID string) e
 		s.ws.BroadcastToChat(chatID, payload, userID)
 	}
 
+	return lastMessage, nil
+}
+
+// loadMessageAfterDelete returns either the newest message before the deleted
+// message (when before is non-nil), or the newest remaining message in the chat.
+func (s *Service) loadMessageAfterDelete(ctx context.Context, tx *sql.Tx, userID, chatID string, before *time.Time, messageID string) (*Message, error) {
+	var msg Message
+	var replyTo sql.NullString
+	var metadataBytes, reactionsBytes []byte
+	var deletedAt sql.NullString
+	err := tx.QueryRowContext(ctx, `
+		SELECT m.id::text, m.chat_id::text, m.sender_id::text,
+		       COALESCE(up.first_name, au.first_name, au.username, ''), COALESCE(up.avatar_url, ''),
+		       m.content, m.type, m.reply_to::text, m.metadata,
+		       (p.message_id IS NOT NULL), m.updated_at > m.created_at,
+		       m.created_at::text, m.updated_at::text, m.deleted_at::text,
+		       COALESCE((
+		           SELECT jsonb_agg(jsonb_build_object(
+		               'emoji', grouped.emoji,
+		               'count', grouped.reaction_count,
+		               'myReaction', grouped.my_reaction
+		           ) ORDER BY grouped.reaction_count DESC, grouped.emoji)
+		           FROM (
+		               SELECT r.emoji, COUNT(*) AS reaction_count,
+		                      BOOL_OR(r.user_id = $4) AS my_reaction
+		               FROM messages.reactions r
+		               WHERE r.message_id = m.id
+		               GROUP BY r.emoji
+		           ) grouped
+		       ), '[]'::jsonb)
+		FROM messages.messages m
+		LEFT JOIN auth.users au ON au.id = m.sender_id
+		LEFT JOIN users.profiles up ON up.user_id = m.sender_id
+		LEFT JOIN messages.pins p ON p.message_id = m.id
+		WHERE m.chat_id = $1
+		  AND m.deleted_at IS NULL
+		  AND ($2::timestamptz IS NULL OR (m.created_at, m.id) < ($2, $3::uuid))
+		ORDER BY m.created_at DESC, m.id DESC
+		LIMIT 1
+	`, chatID, before, messageID, userID).Scan(
+		&msg.ID, &msg.ChatID, &msg.SenderID,
+		&msg.SenderName, &msg.SenderAvatar,
+		&msg.Content, &msg.Type, &replyTo, &metadataBytes,
+		&msg.IsPinned, &msg.IsEdited,
+		&msg.CreatedAt, &msg.UpdatedAt, &deletedAt, &reactionsBytes,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if replyTo.Valid {
+		msg.ReplyTo = &replyTo.String
+		msg.ReplyToMessageID = msg.ReplyTo
+	}
+	if err := json.Unmarshal(metadataBytes, &msg.Metadata); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(reactionsBytes, &msg.Reactions); err != nil {
+		return nil, err
+	}
+	msg.SenderFirstName = msg.SenderName
+	if err := s.hydrateDeleteMessageFields(ctx, tx, &msg); err != nil {
+		return nil, err
+	}
+	return &msg, nil
+}
+
+func (s *Service) hydrateDeleteMessageFields(ctx context.Context, tx *sql.Tx, msg *Message) error {
+	if msg.ReplyTo != nil {
+		var name string
+		err := tx.QueryRowContext(ctx, `
+			SELECT COALESCE(up.first_name, au.first_name, au.username, '')
+			FROM messages.messages m
+			LEFT JOIN auth.users au ON au.id = m.sender_id
+			LEFT JOIN users.profiles up ON up.user_id = m.sender_id
+			WHERE m.id = $1
+		`, *msg.ReplyTo).Scan(&name)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		msg.ReplySenderName = name
+		msg.ReplyToSenderName = name
+	}
+	if forwardedFrom, ok := msg.Metadata["forwardedFrom"].(string); ok && forwardedFrom != "" {
+		msg.IsForwarded = true
+		if name, ok := msg.Metadata["forwardedSenderName"].(string); ok {
+			msg.ForwardedSenderName = name
+		}
+		if msg.ForwardedSenderName == "" {
+			_ = tx.QueryRowContext(ctx, `
+				SELECT COALESCE(up.first_name, au.first_name, au.username, '')
+				FROM messages.messages m
+				LEFT JOIN auth.users au ON au.id = m.sender_id
+				LEFT JOIN users.profiles up ON up.user_id = m.sender_id
+				WHERE m.id::text = $1
+			`, forwardedFrom).Scan(&msg.ForwardedSenderName)
+		}
+	}
 	return nil
 }
 
