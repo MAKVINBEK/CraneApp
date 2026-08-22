@@ -74,8 +74,10 @@ export const useMessageActions = ({ setIsForwardModalOpen, draftRef }: Props) =>
   const handleDelete = async (message: IMessageDto) => {
     try {
       if (selectionMode) {
+        // исравить тут, либо сортировка в хронологии, либо асинхронный цикл
+        const sortedMessages = sortMessagesChronologically(selectedMessages)
         await Promise.all(
-          selectedMessages.map((selectedMessage) => {
+          sortedMessages.map((selectedMessage) => {
             if (selectedMessage.senderId !== currentUser?.id) return;
 
             services.messageService.deleteMessage(chatId, selectedMessage.id);
