@@ -58,7 +58,7 @@ export class MessageService {
 
     const chatContext = await this.getChatContext(chatId, 'decryption');
     const messages = response.data.messages
-      ? sortMessagesChronologically(
+      ? sortMessagesChronologically<IMessageDto>(
           await Promise.all(
             response.data.messages.map(async (item: IMessageDto) => {
               return this.processMessageForDisplay(chatId, item, chatContext);
@@ -72,7 +72,7 @@ export class MessageService {
     }
 
     if (offset > 0 && cached) {
-      this.messages.set(chatId, sortMessagesChronologically([...cached, ...messages]));
+      this.messages.set(chatId, sortMessagesChronologically<IMessageDto>([...cached, ...messages]));
     }
 
     return messages;
@@ -386,16 +386,16 @@ export class MessageService {
       { targetChatId }
     );
 
-    const message = sortMessagesChronologically(
+    const processedMessage = await this.processMessageForDisplay(targetChatId, response.data.message);;
+    const message = sortMessagesChronologically<IMessageDto>(
       await Promise.all(
-        [response.data.message].map(async (item: IMessageDto) => {
+        [processedMessage].map(async (item: IMessageDto) => {
           return this.processMessageForDisplay(targetChatId, item);
         })
       )
     )[0];
 
     this.addMessageToCache(targetChatId, message);
-    // eventBus.emit("message:sent", { message, chatId: targetChatId });
 
     return message;
   }
@@ -418,7 +418,7 @@ export class MessageService {
 
     const chatContext = await this.getChatContext(chatId, 'decryption');
 
-    const messages = sortMessagesChronologically(
+    const messages = sortMessagesChronologically<IPinnedDto>(
       await Promise.all(
         response.map(async (item: IPinnedDto) => {
           return {
@@ -482,7 +482,7 @@ export class MessageService {
     }
     this.pinnedMessages.set(
       chatId,
-      sortMessagesChronologically([...this.getOrCreatePinnedMessages(chatId), message])
+      sortMessagesChronologically<IPinnedDto>([...this.getOrCreatePinnedMessages(chatId), message])
     );
   }
 
@@ -501,7 +501,7 @@ export class MessageService {
     }
     this.messages.set(
       chatId,
-      sortMessagesChronologically([...this.getOrCreateMessages(chatId), message])
+      sortMessagesChronologically<IMessageDto>([...this.getOrCreateMessages(chatId), message])
     );
   }
 
